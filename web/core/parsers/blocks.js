@@ -6,7 +6,8 @@
 
 import { decodeEntities } from '../text.js';
 
-const TOKEN = /<!--[\s\S]*?-->|<(\/?)([A-Za-z][\w:.-]*)((?:[^>"']|"[^"]*"|'[^']*')*?)(\/?)>|([^<]+)/g;
+// <!DOCTYPE …> や <?xml …?> は読み飛ばす（本文の文字にしない）
+const TOKEN = /<!--[\s\S]*?-->|<![^>]*>|<\?[^>]*>|<(\/?)([A-Za-z][\w:.-]*)((?:[^>"']|"[^"]*"|'[^']*')*?)(\/?)>|([^<]+)/g;
 
 function attr(attrs, name) {
   const m = attrs.match(new RegExp(`(?:^|\\s)${name.replace(/[:.]/g, '\\$&')}\\s*=\\s*("([^"]*)"|'([^']*)'|([^\\s>]+))`, 'i'));
@@ -231,7 +232,9 @@ export function blocksToText(blocks) {
 
 /** 16 進の色 → 色名（色相で判定） */
 export function colorName(hex) {
-  const h = String(hex || '').replace('#', '');
+  let h = String(hex || '').replace('#', '');
+  // CSS の 3 桁の書き方（#fd0）は 6 桁にする
+  if (/^[0-9a-f]{3}$/i.test(h)) h = h.replace(/./g, '$&$&');
   if (!/^[0-9a-f]{6}$/i.test(h)) return /^[a-z]+$/i.test(h) ? h.toLowerCase() : '';
   const [r, g, b] = [0, 2, 4].map((i) => parseInt(h.slice(i, i + 2), 16) / 255);
   const max = Math.max(r, g, b);
