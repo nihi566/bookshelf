@@ -550,12 +550,15 @@ export function addHighlight(library, bookId, { text, page = '', chapter = '', n
   return { highlight: library.highlights[id], added: true };
 }
 
-/** 日付をシードにした「今日の点」。同じ日には同じ結果になる */
-export function dailyPicks(library, count = 3, date = new Date()) {
+/**
+ * 日付をシードにした「今日の点」。同じ日には同じ結果になる
+ * seed を渡すと日付の代わりにそれで選ぶ（「別の点」用。日付をずらすと翌日以降の今日の点と同じ組になる）
+ */
+export function dailyPicks(library, count = 3, date = new Date(), seed = '') {
   const hs = pointHighlights(library).sort((a, b) => a.id.localeCompare(b.id));
   if (!hs.length) return [];
-  const day = `${date.getFullYear()}-${date.getMonth() + 1}-${date.getDate()}`;
-  const scored = hs.map((h) => ({ h, s: hash(day + h.id) }));
+  const key = seed ? `seed:${seed}` : `${date.getFullYear()}-${date.getMonth() + 1}-${date.getDate()}`;
+  const scored = hs.map((h) => ({ h, s: hash(key + h.id) }));
   scored.sort((a, b) => a.s.localeCompare(b.s));
   return scored.slice(0, count).map((x) => x.h);
 }
