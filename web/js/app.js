@@ -116,6 +116,9 @@ function render({ keepScroll = false } = {}) {
   // 別の画面に移ったとき、押したリンクは描き直しで消えてフォーカスが行方不明になる。
   // キーボード・読み上げで使う人が新しい画面の先頭から読めるよう、本文にフォーカスを移す
   if (path !== currentPath && !view.contains(document.activeElement)) view.focus({ preventScroll: true });
+  // 知識マップは横にスクロールする枠より広く描くので、最初は中心（核）を見せる
+  const mapWrap = document.getElementById('map-wrap');
+  if (mapWrap) mapWrap.scrollLeft = (mapWrap.scrollWidth - mapWrap.clientWidth) / 2;
   if (keepScroll || path === currentPath) window.scrollTo(0, y);
   else window.scrollTo(0, 0);
   currentPath = path;
@@ -507,7 +510,7 @@ function technicalField(b) {
   const guess = b ? (guessTechnical(b.title) ? '技術書' : '技術書ではない') : '';
   const opt = (v, label) => html`<option value="${v}" ${v === value ? 'selected' : ''}>${label}</option>`;
   return html`<label class="field"><span>技術書（IT の教科書）か</span>
-    <select name="technical">${opt('auto', `書名から自動で判断${guess ? `（今は「${guess}」）` : ''}`)}${opt('yes', '技術書（線を点に数えない）')}${opt('no', '技術書ではない')}</select></label>`;
+    <select name="technical">${opt('auto', `自動${guess ? `（今: ${guess}）` : '（書名から判断）'}`)}${opt('yes', '技術書（線を点に数えない）')}${opt('no', '技術書ではない')}</select></label>`;
 }
 
 const TECHNICAL_VALUES = { auto: null, yes: true, no: false };
@@ -579,8 +582,8 @@ const actions = {
           location.hash = `#/book/${b.id}`;
           autoSyncAfterChange();
         } catch (e) {
-          toast(e.message, 5000);
-          return true;
+          // シートの上ではトーストが隠れて見えないので、投げてシートの中に出す
+          throw e;
         }
       },
     );
@@ -610,8 +613,8 @@ const actions = {
           render({ keepScroll: true });
           autoSyncAfterChange();
         } catch (e) {
-          toast(e.message, 5000);
-          return true;
+          // シートの上ではトーストが隠れて見えないので、投げてシートの中に出す
+          throw e;
         }
       },
     );
@@ -755,10 +758,19 @@ const actions = {
     autoSyncAfterChange();
   },
   'map-zoom'(el) {
+    // いま見えている大きさから拡大・縮小し、見ていた中心を保つ（CSS の最小幅があるので % ではなく px で決める）
     const svg = document.getElementById('knowledge-map');
-    const w = parseFloat(svg.getAttribute('width')) || 100;
-    const next = Math.max(100, Math.min(400, w * (el.dataset.dir === '1' ? 1.5 : 1 / 1.5)));
-    svg.setAttribute('width', `${next}%`);
+    const wrap = document.getElementById('map-wrap');
+    const box = svg.getBoundingClientRect();
+    const fx = (wrap.scrollLeft + wrap.clientWidth / 2) / box.width;
+    const fy = (wrap.scrollTop + wrap.clientHeight / 2) / box.height;
+    const base = Math.max(600, wrap.clientWidth);
+    const next = Math.max(base, Math.min(base * 4, box.width * (el.dataset.dir === '1' ? 1.5 : 1 / 1.5)));
+    svg.style.width = `${next}px`;
+    const after = svg.getBoundingClientRect();
+    wrap.scrollLeft = fx * after.width - wrap.clientWidth / 2;
+    wrap.scrollTop = fy * after.height - wrap.clientHeight / 2;
+    for (const b of wrap.querySelectorAll('[data-action="map-zoom"]')) b.disabled = b.dataset.dir === '1' ? next >= base * 4 - 1 : next <= base + 1;
   },
   sync: () => sync(),
   async 'toggle-autosync'(el) {
@@ -896,6 +908,9 @@ document.addEventListener('submit', (e) => {
   Promise.resolve(forms[form.dataset.form]?.(form, e.submitter)).catch((err) => toast(err.message, 5000));
 });
 
+// 上のバーの高さ（状況の表示で変わることがある）を、その下に貼りつく検索欄の位置に使う
+const topbar = document.querySelector('.topbar');
+if (topbar && 'ResizeObserver' in window) new ResizeObserver(() => document.documentElement.style.setProperty('--topbar-h', `${topbar.offsetHeight}px`)).observe(topbar);
 window.addEventListener('hashchange', () => render());
 
 document.addEventListener('visibilitychange', () => {

@@ -92,18 +92,19 @@ export const settingsView = {
     const s = libraryStats(state.library);
     return html`<div class="page-head"><h1>設定</h1></div>
       <div class="card stack">
-        <a class="row spread" href="#/import"><b>取り込み</b><span class="muted">Kindle・Play ブックス・読書メモ ›</span></a>
+        <a class="row spread" href="#/import"><b>取り込み</b><span class="muted">Kindle・Play ブックス・<span class="nowrap">読書メモ ›</span></span></a>
       </div>
 
       <div class="section"><h2>AI（ローカル LLM）</h2></div>
       <form class="card" data-form="ai-settings">
         <fieldset style="border:none;padding:0;margin:0">
           <legend class="small muted">分析を動かす場所</legend>
-          <label class="check" style="margin:8px 0"><input type="radio" name="mode" value="companion" ${ai.mode === 'companion' ? 'checked' : ''}> <span><b>PC のコンパニオンサーバ</b>（おすすめ・スマホからも可）</span></label>
+          <label class="check" style="margin:8px 0"><input type="radio" name="mode" value="companion" ${ai.mode === 'companion' ? 'checked' : ''}> <span><b>PC のコンパニオンサーバ</b><span class="nowrap">（おすすめ・</span><span class="nowrap">スマホからも可）</span></span></label>
           <label class="check" style="margin:8px 0"><input type="radio" name="mode" value="direct" ${ai.mode === 'direct' ? 'checked' : ''}> <span><b>このブラウザから LLM に直接</b>（PC のみ）</span></label>
         </fieldset>
         <div data-show="companion" ${ai.mode === 'companion' ? '' : 'hidden'}>
-          <label class="field"><span>コンパニオンサーバの URL</span><input type="url" name="companionUrl" value="${ai.companionUrl}" placeholder="${state.servedByCompanion ? location.origin : 'http://localhost:8787 または https://<PC名>.<tailnet>.ts.net'}"></label>
+          <label class="field"><span>コンパニオンサーバの URL</span><input type="url" name="companionUrl" value="${ai.companionUrl}" placeholder="${state.servedByCompanion ? location.origin : 'http://localhost:8787'}"></label>
+          ${state.servedByCompanion ? '' : html`<p class="help">例: <span class="code">http://localhost:8787</span> または <span class="code">https://&lt;PC名&gt;.&lt;tailnet&gt;.ts.net</span></p>`}
           <label class="field"><span>トークン（設定した場合のみ）</span><input type="password" name="token" value="${ai.token}" autocomplete="off"></label>
           <p class="help">PC で <span class="code">node cli/bh.js serve</span>（<span class="code">npm link</span> 済みなら <span class="code">bh serve</span>）を起動します。スマホからは <span class="code">tailscale serve --bg 8787</span> で表示される https の URL を入れます。モデルは PC 側で <span class="code">bh config model …</span> で設定します。</p>
         </div>

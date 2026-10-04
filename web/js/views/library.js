@@ -55,7 +55,7 @@ export const home = {
         <a class="stat plane" href="#/knowledge"><b>${a ? a.planes.length : '–'}</b><span>面</span></a>
         <a class="stat solid" href="#/knowledge"><b>${a ? 1 : '–'}</b><span>立体</span></a>
       </div>
-      <p class="small muted" style="margin-top:8px">本 ${s.books} 冊 ・ ${bySource.join(' ・ ')} ・ ★ ${s.favorites}${s.technical ? ` ・ 技術書の線 ${s.technical} 件は点に数えていません` : ''}</p>
+      <p class="small muted" style="margin-top:8px">${[`本 ${s.books} 冊`, ...bySource, `★ ${s.favorites}`].map((x, i) => html`${i ? ' ・ ' : ''}<span class="nowrap">${x}</span>`)}${s.technical ? ` ・ 技術書の線 ${s.technical} 件は点に数えていません` : ''}</p>
 
       ${discoveriesBlock(state)}
 
@@ -155,8 +155,8 @@ export const book = {
           <h2 style="font-size:1rem;margin:0">線を引いた文を足す</h2>
           <label class="field"><span>文</span><textarea name="text" rows="3" required placeholder="本で線を引いた箇所を書き写す"></textarea></label>
           <div class="row" style="flex-wrap:nowrap;gap:8px">
-            <label class="field" style="flex:0 0 6.5em"><span>ページ</span><input type="text" name="page" inputmode="numeric" autocomplete="off"></label>
-            <label class="field grow"><span>章（任意）</span><input type="text" name="chapter" list="chapter-list" autocomplete="off"></label>
+            <label class="field" style="flex:0 0 6.5em;margin:0"><span>ページ</span><input type="text" name="page" inputmode="numeric" autocomplete="off"></label>
+            <label class="field grow" style="margin:0"><span>章（任意）</span><input type="text" name="chapter" list="chapter-list" autocomplete="off"></label>
           </div>
           <datalist id="chapter-list">${chapters.map((c) => html`<option value="${c}">`)}</datalist>
           <div class="row" style="justify-content:flex-end"><button class="btn primary" type="submit">追加</button></div>
@@ -166,7 +166,7 @@ export const book = {
       <div class="page-head">
         <div class="row" style="flex-wrap:nowrap;align-items:flex-start;gap:12px">
           ${bookSpine(b)}
-          <div><h1>${b.title}</h1><div class="sub">${b.author || '著者不明'} ${b.sources.map(sourceBadge)} ・ ${hs.length} ${technical ? '件' : '点'}${technical ? html` <span class="badge tech">技術書</span>` : ''}</div>
+          <div><h1>${b.title}</h1><div class="sub">${b.author || '著者不明'} ${b.sources.map(sourceBadge)} <span class="nowrap">・ ${hs.length} ${technical ? '件' : '点'}</span>${technical ? html` <span class="badge tech">技術書</span>` : ''}</div>
             ${technical ? html`<p class="small muted" style="margin:4px 0 0">技術書の線は点に数えません（点の数・今日の点・AI 分析から外します）</p>` : ''}</div>
         </div>
       </div>

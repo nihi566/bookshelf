@@ -98,7 +98,7 @@ function mountList(root, body, items, store, lastScraped) {
     <p class="small muted">フィードで受け取る: <a href="${FEED_URL}" target="_blank" rel="noopener noreferrer" type="application/atom+xml">すべての知らせ</a> / <a href="${FEED_WANTED_URL}" target="_blank" rel="noopener noreferrer" type="application/atom+xml">読みたい本・希望価格・大きな値下がりだけ</a></p>
     <div class="chips" role="group" aria-label="表示する分類">${Object.entries(SHELVES).map(([k, label]) => html`<button type="button" class="chip" data-wl-shelf="${k}" aria-pressed="${String(filters.shelf === k)}">${shelfLabel(k, shelfCount[k])}</button>`)}</div>
     <div class="chips" role="group" aria-label="購入済みの内訳" id="wl-reading" ${filters.shelf === 'purchased' ? '' : 'hidden'}>${Object.keys(READINGS).map((k) => html`<button type="button" class="chip" data-wl-reading="${k}" aria-pressed="${String(filters.reading === k)}"></button>`)}</div>
-    <div class="search-box wl-search" role="search"><input type="search" id="wl-q" value="${filters.q}" placeholder="書名・ASIN で絞り込む（空白で AND）" aria-label="書名・ASIN で絞り込む" autocomplete="off"></div>
+    <div class="search-box wl-search" role="search"><input type="search" id="wl-q" value="${filters.q}" placeholder="書名・ASIN で絞り込む" aria-label="書名・ASIN で絞り込む（空白で区切ると全部を含むもの）" autocomplete="off"></div>
     <div class="wl-controls">
       <label class="wl-field"><span>並べ替え</span><select id="wl-sort">${Object.entries(SORTS).map(([k, label]) => html`<option value="${k}" ${filters.sort === k ? 'selected' : ''}>${label}</option>`)}</select></label>
       <label class="wl-field"><span>タグ</span><select id="wl-tag">${Object.entries(TAG_FILTER_LABELS).map(([k, label]) => html`<option value="${k}" ${filters.tag === k ? 'selected' : ''}>${label}</option>`)}</select></label>
