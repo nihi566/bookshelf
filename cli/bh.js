@@ -19,7 +19,11 @@ import { applyImport } from '../web/core/importing.js';
 import { ACCEPT, parseFiles } from '../web/core/parsers/index.js';
 import { createLlmClient } from '../web/core/analysis/llm.js';
 import { TFIDF_HINT, analyzeLibrary, recommendBooks, recommendationNote } from '../web/core/analysis/pipeline.js';
+import { autoConfig } from '../web/core/auto-analysis.js';
 import { truncate } from '../web/core/text.js';
+
+// bh serve が自動の分析の条件を確かめる間隔（点が増えるたびではなく、間隔を空けてまとめて分析する）
+const AUTO_CHECK_MS = 60_000;
 
 const HELP = `使い方: bh <コマンド> [オプション]
 
@@ -29,9 +33,11 @@ const HELP = `使い方: bh <コマンド> [オプション]
                                       自分で書いた読書メモ .md）。フォルダは中のファイルをすべて（入れ子も）読むので、
                                       ノートアプリの保管場所全体ではなく、読書メモのフォルダを指定する。
                                       --dry-run は保存せずに結果だけ表示する
-  analyze [--no-recommend]            ローカル LLM で 点→線→面→立体 を分析
+  analyze [--no-recommend] [--full]   ローカル LLM で 点→線→面→立体 を分析（前回の線・面を引き継ぎ、変わったところだけ
+                                      AI を呼ぶ。--full は最初から作り直す）
   recommend                           おすすめの本を選び直す
-  serve [--port 8787] [--host 127.0.0.1]  コンパニオンサーバを起動（Google にログイン済みなら Play ブックスの線を自動で取り込む）
+  serve [--port 8787] [--host 127.0.0.1]  コンパニオンサーバを起動（Google にログイン済みなら Play ブックスの線を自動で取り込む。
+                                      点が増えたら自動で分析し直す）
   google login                        Google にログインする（ドライブの読み取りだけを許可）
   google sync                         Play ブックスのメモを今すぐ取り込む
   google logout                       ログアウトする（Google 側の許可も取り消す）
@@ -46,6 +52,9 @@ const HELP = `使い方: bh <コマンド> [オプション]
   config google-client <ID> <シークレット>  Google Cloud で作った OAuth クライアント（種類: デスクトップ アプリ）
   config google-folder <フォルダ ID>  「Play ブックスのメモ」フォルダを名前で探せないときに指定（空で自動に戻す）
   config google-interval <秒>         ドライブを確認する間隔（既定: 60、最短 ${MIN_INTERVAL_SEC}）
+  config auto on|off                  bh serve の自動の分析を入れる・切る（既定: on）
+  config auto-points <件数>           前回の分析のあとに点がこの件数増えたら自動で分析する（既定: 10）
+  config auto-hours <時間>            前回からこの時間たち、点が 1 件以上増えていたら自動で分析する（既定: 24）
 
 環境変数 BH_DATA でデータの保存先（既定: リポジトリの data/）を変えられます。`;
 
@@ -129,15 +138,21 @@ async function main() {
         printRecommendations(analysis);
       } else {
         const cache = await store.cache();
+        const previous = await store.analysis();
         let analysis;
         try {
-          ({ analysis } = await analyzeLibrary({ library, llm, cache, onProgress, options: { recommend: !args['no-recommend'] } }));
+          ({ analysis } = await analyzeLibrary({ library, llm, cache, previous, onProgress, options: { recommend: !args['no-recommend'], full: Boolean(args.full) } }));
         } finally {
           // 途中で失敗しても、済んだ部分の LLM の結果は次回に使えるよう保存する
           await store.saveCache(cache);
         }
         await store.saveAnalysis(analysis);
+        // 知識の画面の「最後に成功」と失敗の表示を、bh analyze で分析したときも合わせる
+        const st = await store.state();
+        await store.saveState({ ...st, autoAnalysis: { ...(st.autoAnalysis || {}), lastRunAt: analysis.createdAt, lastSuccessAt: new Date().toISOString(), lastError: '', lastErrorAt: null, lastTrigger: 'manual' } });
         process.stdout.write('\n');
+        const { chat, embed } = analysis.stats.calls;
+        console.log(`${analysis.incremental ? '前回の線・面を引き継ぎました' : '最初から作り直しました'}（AI を呼んだ回数: チャット ${chat}・埋め込み ${embed}。おすすめの本は除く）`);
         if (analysis.model.embed === 'tfidf') console.log(`\n! ${TFIDF_HINT}（bh config embed bge-m3）`);
         console.log(`\n■ 立体: ${analysis.solid.title}\n${analysis.solid.core}\n`);
         for (const p of analysis.planes) {
@@ -156,11 +171,13 @@ async function main() {
       const port = Number(args.port || cfg.port);
       const host = args.host || cfg.host;
       const drive = startDriveWatcher({ store, client: createGoogleClient({ store }) });
-      const server = createCompanionServer({ store, drive });
+      const server = createCompanionServer({ store, drive, auto: { intervalMs: AUTO_CHECK_MS } });
+      const auto = autoConfig(cfg.autoAnalyze);
       server.listen(port, host, () => {
         console.log(`コンパニオンサーバ: http://${host === '0.0.0.0' ? 'localhost' : host}:${port}`);
         console.log(`  LLM: ${cfg.llm.baseUrl}（チャット: ${cfg.llm.chatModel || '未設定'} / 埋め込み: ${cfg.llm.embedModel || '文字 n-gram'}）`);
         console.log(`  Play ブックス: ${cfg.google.clientId ? `${Math.max(MIN_INTERVAL_SEC, cfg.google.intervalSec)} 秒ごとに Google ドライブを確認` : '未設定（docs/setup.md の「Play ブックスの自動取り込み」）'}`);
+        console.log(`  自動の分析: ${auto.enabled ? `前回のあとに点が ${auto.minPoints} 件増えるか、${auto.maxHours} 時間たって 1 件以上増えたら分析（bh config auto off で止める）` : '切ってあります（bh config auto on）'}`);
         console.log(`  スマホから使うには: tailscale serve --bg ${port}`);
       });
       break;
@@ -227,6 +244,20 @@ async function main() {
           const sec = Number(value);
           if (!Number.isFinite(sec) || sec < MIN_INTERVAL_SEC) throw new Error(`${MIN_INTERVAL_SEC} 秒以上を指定してください`);
           cfg.google.intervalSec = sec;
+        },
+        auto: () => {
+          if (!['on', 'off'].includes(value)) throw new Error('使い方: bh config auto on | off');
+          cfg.autoAnalyze = { ...cfg.autoAnalyze, enabled: value === 'on' };
+        },
+        'auto-points': () => {
+          const n = Number(value);
+          if (!Number.isInteger(n) || n < 1) throw new Error('1 以上の整数を指定してください');
+          cfg.autoAnalyze = { ...cfg.autoAnalyze, minPoints: n };
+        },
+        'auto-hours': () => {
+          const h = Number(value);
+          if (!Number.isFinite(h) || h <= 0) throw new Error('0 より大きい時間を指定してください');
+          cfg.autoAnalyze = { ...cfg.autoAnalyze, maxHours: h };
         },
       };
       if (!setters[key]) throw new Error(`不明な設定: ${key}`);

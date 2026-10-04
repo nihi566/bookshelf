@@ -109,8 +109,9 @@ test('バックアップの取り込み: ライブラリと分析結果の扱い
   const { applyImport } = await import('../web/core/importing.js');
   const { parseFiles } = await import('../web/core/parsers/index.js');
   const lib = sampleLibrary();
-  const older = { createdAt: '2025-01-01T00:00:00.000Z', lines: [], planes: [] };
-  const newer = { createdAt: '2025-06-01T00:00:00.000Z', lines: [{ id: 'x' }], planes: [] };
+  // 分析結果の形（線・面・立体）を持つもの（形の壊れた分析は採らない: test/auto-analysis-review.test.js）
+  const older = { createdAt: '2025-01-01T00:00:00.000Z', lines: [], planes: [], solid: {} };
+  const newer = { createdAt: '2025-06-01T00:00:00.000Z', lines: [{ id: 'x', highlightIds: [] }], planes: [], solid: {} };
   const enc = (o) => new TextEncoder().encode(JSON.stringify(o));
   // 旧形式（ライブラリに analysis を足したもの）と新形式（format 付き）の両方を読む
   const { books, backups } = await parseFiles([

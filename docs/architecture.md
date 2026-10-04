@@ -55,21 +55,34 @@ Thought   = { id: 't'+時刻+乱数, text, status: 'inbox'|'done'|'discarded', a
 ## 分析結果（`web/core/analysis/pipeline.js`）
 
 ```
-Analysis = { createdAt, model: { chat, embed }, stats,
-  lines:  [{ id, name, summary, insight, keywords, highlightIds, bookIds }],   // 線
-  planes: [{ id, name, summary, lineIds }],                                     // 面
-  solid:  { title, core, relations: [{ from, to, type, description }], principles, questions },  // 立体
-  isolated: [highlightId],                                                      // まだつながらない点
+Analysis = { version: 2, createdAt, model: { chat, embed }, incremental, stats: { points, thoughts, lines, planes, isolated, calls: { chat, embed } },
+  lines:  [{ id, name, summary, insight, keywords, highlightIds, bookIds, sig }],   // 線
+  planes: [{ id, name, summary, lineIds, sig }],                                     // 面
+  solid:  { title, core, relations: [{ from, to, type, description }], principles, questions, sig },  // 立体
+  isolated: [highlightId],                                                           // まだつながらない点
+  changes?: { previousAt, rebuilt?, addedLines, grownLines, removedLines, connectedPoints },  // 前回からの変化
   recommendations: [{ title, author, kind, planeId, reason, verified }] }
 ```
 
-- 点 → 線：球面 k-means（k ≒ 点の数 / 5、上限 40）。中心から外れすぎた点（類似度が平均 − 1.5σ 未満）と 1 点だけの束は「まだつながらない点」にする
-- 線 → 面：線の中心ベクトル + 線の説明文の埋め込みで k-means（k ≒ √線の数、2〜8）
-- LLM への依頼は線 1 本・面 1 つずつに分け、プロンプトには中心に近い点から最大 12 件だけ入れる（★の点は優先して入れる）
+- 点 → 線：球面 k-means（k ≒ 点の数 / 8、上限 400。1 本の線は目安の 2.5 倍まで）。中心から外れすぎた点（類似度が平均 − 1.5σ 未満）と 1 点だけの束は「まだつながらない点」にする。点 1,000 件で線 1 本の点の数の中央値は 7 前後（前の版の「点 5 件で 1 本・上限 40 本」では 22。大きすぎる線は AI が中心の 12 点しか見ず、ぼやけた概念になった）
+- 線 → 面：線の中心ベクトル + 線の説明文の埋め込みで k-means（k ≒ √線の数、2〜12）
+- LLM への依頼は線 1 本・面 1 つずつに分け、プロンプトには中心に近い点から最大 12 件だけ入れる（★の点は優先して入れる）。面には中心に近い線を最大 12 本、立体には面ごとに線の名前を最大 12 本だけ見せる（小さなモデルの読める長さを超えないように）
+- **増分の分析**（`web/core/analysis/incremental.js`）: 前回の分析を渡すと、線・面を ID ごと引き継ぐ
+  - 前回の線は残っている点だけで残す（2 点未満ならほどく）。増えた点（前回の線にも「まだつながらない点」にも無い点）は、いちばん近い線の中心に十分近ければその線に加える（上限に達した線には加えない）。「十分近い」= 引き継いだ点が「自分を除いた線の中心」にどれだけ近いかの平均 − 1.5σ 以上（自分を含めた中心で測ると線の点だけが近く出て、増えた点が入りにくい）
+  - 前回の「まだつながらない点」は、今回点が加わった線（中心が動いた線）に十分近ければ加える。残った点で新しい線を作るのは、増えた点を 1 つ以上含み、十分近い点だけでできる組に限る（何も増えていなければ何も変えない。線の数は上限まで）
+  - 前回作り直したときから点が 1.5 倍（かつ 40 件以上）に増えたら、引き継がずに作り直す（`pointsAtFull`。小さいうちの線・面の形に縛られ続けない。新しい話題は既存の面に入るので、面は作り直すときに整う）
+  - 今回使わなかった線・面・立体の AI の結果はキャッシュから外す
+  - 自動の分析（`recommend: 'keep'`）では、立体が変わってもおすすめは前回のものを残す（欲しい本の印は画面の側にあるため）
+  - 新しい線はいちばん近い面に入る。線 1 本だけになった面は近い面にまとめる
+  - 線・面・立体の `sig`（指紋）が前回と同じなら AI を呼ばずに前回の結果を使う。線の指紋 = 点の顔ぶれと文・AI に見せた点・モデル・プロンプトの版。面の指紋 = 線の顔ぶれ（線の名前が少し変わっただけでは作り直さない）。立体の指紋 = 面の ID と名前。立体が同じならおすすめも前回のものを使う
+  - 点を 1 件足した再分析で AI を呼ぶのは多くて 5 回（点の埋め込み・線・線の説明文の埋め込み・面・立体）。`stats.calls` に回数を残す
+  - 前回と分析の版（`version`）か埋め込みの方法が違うとき・`full` を指定したときは最初から作り直す（`changes.rebuilt`）
+- **自動の分析**（`bh serve`。判断は `web/core/auto-analysis.js`）: 1 分ごとに確かめ、前回の分析のあとに点（思いつきを含む）が 10 件以上増えたか、24 時間以上たって 1 件以上増えたら、増分の分析を始める。手動の分析中・取り込みの最中（`/api/import` を受けている間・Google ドライブの確認中）は始めない。失敗しても `analysis.json` は書き換えず、`state.json` の `autoAnalysis` に理由と時刻を残し、30 分あけて試し直す。`bh config auto on|off` / `auto-points` / `auto-hours` で変えられる
+- **履歴**: PC の `data/history/<分析した時刻>.json` に直近 12 回分を残す（`history/index.json` は要約）。`GET /api/history` で一覧、`GET /api/history/<id>` で 1 回分。スマホには最新の結果（`changes` 入り）だけを同期し、過去の分析は開いたときに PC から取る
 - **自分の言葉**: 埋め込みの文は「線を引いた文 + 取り込んだメモ + 自分のメモ + タグ」（`embedText`。印は付けない）。線を作る AI への入力では、取り込んだメモと分けて自分のメモ・タグを「読者自身の言葉」と示す。思いつきは書名の代わりに「思いつき」と示す
 - `response_format` は `json_schema` → `json_object` → なし の順に自動で緩める（LM Studio は `json_object` 非対応、古いサーバは `json_schema` 非対応）。壊れた JSON は 1 回だけ言い直させる
 - LLM の結果は「メンバー構成（点の ID + 点の文のハッシュ）+ モデル + プロンプト版」のハッシュでキャッシュ。自分のメモ・タグを書き換えた点を含む線は作り直す
-- 埋め込みは点ごとにキャッシュし、埋め込んだ文のハッシュ（`cache.embeddings.keys`）も持つ。文が変わった点だけ埋め込み直す（ハッシュを持たない前の版のキャッシュは、前の版と同じ文なら使い続ける）
+- 埋め込みは点ごとにキャッシュし、埋め込んだ文のハッシュ（`cache.embeddings.keys`）も持つ。文が変わった点だけ埋め込み直す（ハッシュを持たない前の版のキャッシュは、前の版と同じ文なら使い続ける）。線の説明文の埋め込みも文のハッシュ（`s…`）でキャッシュする。消えた点・使わなくなった説明文の埋め込みは分析のたびに外す
 - `stats.thoughts` は点のうち思いつきの数
 
 ## おすすめの本（`web/core/analysis/recommend.js`）
