@@ -8,7 +8,7 @@
 //
 // LLM の結果はメンバー構成のハッシュでキャッシュするので、再分析は変わった部分だけで済む。
 
-import { feedbackByStatus, liveHighlights } from '../model.js';
+import { feedbackByStatus, pointHighlights } from '../model.js';
 import { bookKey, hash } from '../text.js';
 import { PROMPT_VERSION, RECOMMEND_KINDS, RELATION_TYPES, linePrompt, pickPrompt, planePrompt, recommendPrompt, searchPrompt, solidPrompt } from './prompts.js';
 import { centroid, dot, groupLines, groupPoints, l2normalize, tfidfEmbed } from './vectors.js';
@@ -39,7 +39,8 @@ export function emptyCache() {
  */
 export async function analyzeLibrary({ library, llm, cache = emptyCache(), onProgress = () => {}, signal, options = {} }) {
   const { granularity = 5, maxLines = 40, recommend = true, verify = true, recommendCount = 6, fetchImpl, wishlist } = options;
-  const points = liveHighlights(library).sort((a, b) => a.id.localeCompare(b.id));
+  // 技術書の線は点に数えない（知識の立体の材料にしない）
+  const points = pointHighlights(library).sort((a, b) => a.id.localeCompare(b.id));
   if (points.length < 4) throw new Error(`点（ハイライト）が ${points.length} 件しかありません。4 件以上取り込んでから分析してください。`);
   const check = () => {
     if (signal?.aborted) throw new Error('分析を中止しました');

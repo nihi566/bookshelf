@@ -30,6 +30,7 @@ const SHELL = [
   'core/parsers/kindle-clippings.js',
   'core/parsers/kindle-notebook.js',
   'core/parsers/playbooks.js',
+  'core/parsers/reading-notes.js',
   'core/analysis/llm.js',
   'core/analysis/pipeline.js',
   'core/analysis/prompts.js',
