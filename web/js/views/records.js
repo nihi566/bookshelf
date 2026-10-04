@@ -211,8 +211,7 @@ function openRecordSheet(state, { bookId = '', onSaved }) {
 
 export const records = {
   render() {
-    return html`<a class="back" href="#/books">‹ 読んだ本</a>
-      <div class="page-head"><div><h1>読書記録</h1><div class="sub">読み終えた本の冊数とページ数（年・月・日）</div></div></div>
+    return html`<div class="page-head"><div><h1>読書記録</h1><div class="sub">読み終えた本の冊数とページ数（年・月・日）</div></div></div>
       <div id="records-page"><div id="records-body"></div></div>`;
   },
   mount(root, ctx) {
