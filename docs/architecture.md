@@ -25,7 +25,7 @@
 
 ```
 Library = { version, books: { [id]: Book }, highlights: { [id]: Highlight }, feedback, thoughts: { [id]: Thought }, discoveryReads: { [id]: readAt },
-            farReactions: { [id]: FarReaction }, notes: { [id]: Note }, links: { [id]: Link }, updatedAt }
+            farReactions: { [id]: FarReaction }, notes: { [id]: Note }, links: { [id]: Link }, outlines: { [id]: Outline }, updatedAt }
 Book      = { id: 'b'+hash(書名の正規化), title, author, sources: ['kindle'|'playbooks'|'paper'|'memo'], asin?, volumeId?, cover?（アップロードした表紙の data URL）, technical?（技術書か。無ければ書名から推定）, updatedAt, deleted? }
 Highlight = { id: 'h'+hash(bookId+本文の正規化), bookId, source, kind: 'highlight'|'note',
               text, note, chapter, location, locationEnd, page, color, createdAt,
@@ -37,6 +37,9 @@ Note      = { id: 'n'+時刻+乱数, title, body, pointIds: [点の ID], from?: 
             // 永久ノート。消したものは { id, deleted: true, createdAt, updatedAt } だけ残す
 Link      = { id: 'k'+hash(2 つの端の ID), a, b, reason, createdAt, updatedAt, deleted? }
             // リンク（点・メモ・永久ノートどうし。a < b）。外したものは deleted: true で残す（理由は消す）
+Outline   = { id: 'o'+時刻+乱数, title, sources: [{ kind: 'plane'|'line'|'note', id, name }],
+              sections: [{ heading, points: [要点], quotes: [点の ID] }], createdAt, updatedAt }
+            // 文章の骨組み。引用は点の ID だけ（文は持たない）。消したものは { id, deleted: true, createdAt, updatedAt } だけ残す
 ```
 
 - **思いつき（Thought）**は本に属さないメモ（フリートノート。`web/core/thoughts.js`）。「メモ」と呼ぶものが他にもある（読書メモ = source `memo` の点 / 取り込んだメモ = `note` / 自分のメモ = `userNote`）ので、コードでは thought と呼ぶ。本文を直しても ID は変わらない
@@ -144,6 +147,16 @@ Analysis = { version: 2, createdAt, model: { chat, embed }, incremental,
   - 根拠は `used` と文中の `[n]` のうち、渡した番号だけ。番号が無ければ渡した点をすべて並べ、`cited: false` を付ける（画面は「AI に渡した点」と出す）
 - しきい値は bge-m3 と実データ（点 1,811 件）で決めた: 本の内容を聞いた 12 問のうち 11 問で 1 位が 0.64〜0.86、本に無いこと（天気・料理など）を聞いた 8 問はすべて 0.55 以下。**埋め込みモデルを変えたら測り直す**
 - 答えは「メモとして保存」で受け箱のメモ（`answerTo: { kind: 'ask', question }`。根拠の書名・位置を添える）になり、次の分析で点になる（G8-4）
+
+## 文章の骨組み（`web/core/outlines.js`・`web/core/outline-draft.js`・`cli/server.js`）
+
+- 作るのは PC のローカル LLM（`POST /api/outline { sources: [{ kind, id }] }`。材料は 8 つまで。チャットモデルが無ければ 409、材料が 1 つでも PC に無ければ 409（同期を促す。抜けたまま作らない）、AI が失敗したら 502）。同時に受ける数・相手が切ったら止めるは、意味で探す・問いかけると同じ（`aiJob`）
+- 材料（`outlineMaterials`）: 材料 1 つにつき説明 1 つ（面は説明と線の名前、線は名前と説明＝ AI がまとめたもの、永久ノートは題と本文＝読者の言葉）。点は、面の中では線ごとに（線の点は中心に近い順）、材料どうしも交互に取り（どの材料の点も入るように）、重ねずに最大 20 件、[1] から番号を付けて依頼文に入れる。前に問いかけた答えのメモは入れない（AI の文を引用にしない）。依頼文は上限の材料でも 6,000 字まで（実データの面 1 つで 2,200〜2,500 字。Ollama の読める長さを超えないように）
+- AI には題・各節の見出し・要点・引用の番号だけを JSON で出させ（`outlinePrompt`）、引用の文は書かせない。番号は渡した範囲だけを点の ID に直す（`readOutline`。数でない番号・範囲外は捨てる。見出し・要点の中の [n] も引用に移して文から消す）。節が 1 つも無ければ作れない（502）
+- PC が返すのは保存前の下書き。画面が ID を 1 回だけ作って `library.outlines` に保存する（押し直しても 1 件）。同期では直した時刻が新しい方を採り、消したものはどちらから来ても消えたまま（`mergeCollections` の `stickyDelete`）。外から来た骨組みは形と長さを確かめる（題 100 字・節 12・見出し 80 字・要点 8 件×200 字・引用 8 件で点の ID の形）
+- 直すとき、上限（題 100 字・節 12・見出し 80 字・要点 8 つ×200 字）を超えたら黙って切らずに理由を返す（直すシートに出る）
+- 引用は画面と Markdown で、点の今の文をそのまま（Kindle で伸ばしたハイライトは置き換わった先）、書名と位置を付けて出す（`quoteOf`）。消えた点は「消えた点」、この端末にまだ届いていない点は「まだ無い点（同期すると出る）」と出し、Markdown には書かない（コピーしたときに数を知らせる）
+- Markdown は `# 題` / `## 見出し` / `- 要点` / `> 引用の文` と `> — 『書名』位置`（`outlineMarkdown`）。題・見出し・要点・書名は AI の文や同期で届いた文なので、Markdown の記号を打ち消す（画像・リンク・HTML・偽の引用として働かせない。表示は同じ）。引用の文は点の文そのまま
 
 ## 画面の安全性
 

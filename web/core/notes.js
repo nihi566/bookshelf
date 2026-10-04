@@ -134,12 +134,15 @@ export function liveNotes(library) {
     .sort(newestFirst);
 }
 
+/** 線から作って一度も直していないノートか（中身は AI の線のまま。読者の言葉として扱わない） */
+export const isUneditedLineDraft = (n) => n?.from?.kind === 'line' && n.updatedAt === n.createdAt;
+
 /**
  * 分析に渡す永久ノート（直した順）。線から作って一度も直していないノートは渡さない
  * （中身は AI の線のままなので、「人間がまとめた線」として AI に戻すと AI の考えを重ねて強めてしまう）
  */
 export function notesForAnalysis(library) {
-  return liveNotes(library).filter((n) => !(n.from?.kind === 'line' && n.updatedAt === n.createdAt));
+  return liveNotes(library).filter((n) => !isUneditedLineDraft(n));
 }
 
 /** 永久ノートを探す（題・本文。空白区切りの AND）。直した順 */

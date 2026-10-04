@@ -2,9 +2,8 @@
 // 意味で探す・問いかけるは PC（bh serve）の埋め込みモデルとローカル LLM を使う（スマホからも PC を通す）
 import { html } from '../html.js';
 import { truncate } from '../../core/text.js';
-import { analysisPointById, pointById, pointLabel } from '../../core/points.js';
+import { analysisPointById, pointArrived, pointById, pointLabel } from '../../core/points.js';
 import { notesOf } from '../../core/notes.js';
-import { thoughtsOf } from '../../core/thoughts.js';
 import { isTechnicalBook } from '../../core/model.js';
 import { NO_ANSWER, QUESTION_MAX, placeText } from '../../core/ask.js';
 import { lineIndex, pointCard } from '../ui.js';
@@ -53,16 +52,10 @@ export function meaningResults(state, results) {
     ${rows.length ? rows : html`<p class="empty">見つかりませんでした</p>`}`;
 }
 
-/** この端末にまだ届いていない点か（PC で取り込んだ直後など。消した点は墓標があるので届いている） */
-function notYetHere(library, id) {
-  const all = id.startsWith('t') ? thoughtsOf(library) : library.highlights || {};
-  return !Object.hasOwn(all, id);
-}
-
-/** 根拠の点の 1 行（番号・点の文・書名と位置。押すとその点へ） */
+/** 根拠の点の 1 行（番号・点の文・書名と位置。押すとその点へ）。PC で取り込んだ直後の点は、この端末にまだ無いことがある */
 function citationRow(library, { n, id }) {
   const p = pointById(library, id);
-  if (!p) return html`<li class="link-row gone"><span class="link-target"><span class="link-title">[${n}] ${notYetHere(library, id) ? '（この端末にまだ無い点。PC と同期すると出ます）' : '（消えた点）'}</span></span></li>`;
+  if (!p) return html`<li class="link-row gone"><span class="link-target"><span class="link-title">[${n}] ${pointArrived(library, id) ? '（消えた点）' : '（この端末にまだ無い点。PC と同期すると出ます）'}</span></span></li>`;
   const where = [pointLabel(library, p), placeText(p)].filter(Boolean).join('・');
   return html`<li class="link-row"><a class="link-target" href="#/point/${p.id}"><span class="link-title">[${n}] ${truncate(p.text.replace(/\s+/g, ' '), 80)}</span>${where ? html`<span class="link-sub">${where}</span>` : ''}</a></li>`;
 }

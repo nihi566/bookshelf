@@ -15,6 +15,7 @@ import { companion } from '../services.js';
 import { answerBlock } from './thoughts.js';
 import { farBlock } from './far.js';
 import { citingNotesBlock, notesSummaryBlock } from './notes.js';
+import { outlinesSummaryBlock } from './outlines.js';
 
 const STAGES = [
   ['embed', '点'],
@@ -133,7 +134,8 @@ export const knowledge = {
           <li><b style="color:var(--layer-solid)">立体</b> — 面どうしの関係から、知識の核・行動の原則・まだ答えの無い問いを組み立てます。</li>
           <li><b>本</b> — 立体と「問い」から次に読む本を選び、書誌データベースで実在を確認します。</li>
         </ol>
-        ${notesSummaryBlock(state)}`;
+        ${notesSummaryBlock(state)}
+        ${outlinesSummaryBlock(state)}`;
     }
     const recs = a.recommendations || [];
     return html`${head}
@@ -148,6 +150,8 @@ export const knowledge = {
       </section>
 
       ${notesSummaryBlock(state)}
+
+      ${outlinesSummaryBlock(state)}
 
       <div class="section"><h2>知識マップ</h2><span class="small muted">面と線をタップ</span></div>
       ${mapSvg(a)}
@@ -383,6 +387,7 @@ export const lineView = {
         ${l.insight ? html`<p class="notice ok">問い: ${l.insight}</p>${answerBlock(state.library, { question: l.insight, kind: 'line', ref: l.id })}` : ''}
         ${l.keywords?.length ? html`<div class="chips">${l.keywords.map((k) => html`<a class="chip" href="#/search?q=${encodeURIComponent(k)}">${k}</a>`)}</div>` : ''}
         <div class="row"><button type="button" class="btn small primary" data-action="line-to-note" data-id="${l.id}">この線を永久ノートにする</button><span class="small muted">AI の線を下書きにして、自分の言葉に直せます</span></div>
+        <div class="row"><a class="btn small" href="#/outline/new?line=${l.id}">文章の骨組みを作る</a></div>
       </section>
       ${citingNotesBlock(state.library, new Set(l.highlightIds), 'この線の点を根拠にしている永久ノート')}
       <div class="section"><h2>つながっている点</h2><span class="small muted">${hs.length}</span></div>
@@ -407,7 +412,9 @@ export const planeView = {
     return html`<a class="back" href="#/knowledge">‹ 知識</a>
       <div class="layer-label plane">面</div>
       <h1 style="margin:4px 0 12px">${p.name}</h1>
-      <section class="card"><p style="font-family:var(--serif);line-height:1.9">${p.summary}</p></section>
+      <section class="card stack"><p style="font-family:var(--serif);line-height:1.9">${p.summary}</p>
+        <div class="row"><a class="btn small" href="#/outline/new?plane=${p.id}">文章の骨組みを作る</a><span class="small muted">この面から、人に読ませる文章の見出し・要点・引用を作ります</span></div>
+      </section>
       <div class="section"><h2>線</h2><span class="small muted">${lines.length}</span></div>
       <div class="lines-of-plane">${lines.map((l) => html`<a class="line-row" href="#/knowledge/line/${l.id}"><b>${l.name}</b><span>${l.summary}</span><em>点 ${l.highlightIds.length}</em></a>`)}</div>
       ${citingNotesBlock(state.library, new Set(lines.flatMap((l) => l.highlightIds)), 'この面の点を根拠にしている永久ノート')}

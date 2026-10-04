@@ -15,6 +15,7 @@ import { mergeReads } from './discovery-reads.js';
 import { mergeFarReactions } from './far-reactions.js';
 import { normalizeNote } from './notes.js';
 import { mergeLinks } from './links.js';
+import { normalizeOutline } from './outlines.js';
 
 export const SOURCES = {
   kindle: 'Kindle',
@@ -406,6 +407,8 @@ export function mergeLibraries(base, incoming) {
   out.notes = mergeCollections(base.notes, incoming.notes, { stickyDelete: true, normalize: (n) => normalizeNote(n, now) });
   // リンクは張った・外した・理由を直した時刻が新しい方（外したリンクも、もう一度張れば戻る）
   out.links = mergeLinks(base.links, incoming.links, now);
+  // 文章の骨組みは直した時刻が新しい方。消したものはどちらから来ても消えたまま
+  out.outlines = mergeCollections(base.outlines, incoming.outlines, { stickyDelete: true, normalize: (o) => normalizeOutline(o, now) });
   out.updatedAt = later(base.updatedAt, incoming.updatedAt);
   return out;
 }
