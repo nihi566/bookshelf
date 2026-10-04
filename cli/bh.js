@@ -1,30 +1,33 @@
 #!/usr/bin/env node
 // bookshelf の PC 用コマンド
 //
-//   bh import <ファイル...>        Kindle / Play Books のハイライトを取り込む
-//   bh analyze                     ローカル LLM で 点→線→面→立体 を分析し、おすすめの本を選ぶ
+//   bh import <ファイル|フォルダ...>  Kindle / Play Books のハイライト・読書メモ（.md）を取り込む
+//   bh analyze                    ローカル LLM で 点→線→面→立体 を分析し、おすすめの本を選ぶ
 //   bh recommend                   おすすめの本だけ選び直す
 //   bh serve                       コンパニオンサーバを起動（Web アプリ + 同期 + LLM 中継 + Play ブックスの自動取り込み）
 //   bh google login|sync|logout    Play ブックスのメモ（Google ドライブ）との連携
 //   bh list / bh search <語>       一覧・検索
 //   bh config [キー 値]            設定の表示・変更
 
-import { readFile } from 'node:fs/promises';
+import { readdir, readFile, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { createStore } from './store.js';
 import { createCompanionServer } from './server.js';
 import { createGoogleClient, describeSync, isFolderId, MIN_INTERVAL_SEC, startDriveWatcher } from './google.js';
 import { SOURCES, listBooks, libraryStats, searchHighlights } from '../web/core/model.js';
 import { applyImport } from '../web/core/importing.js';
-import { parseFiles } from '../web/core/parsers/index.js';
+import { ACCEPT, parseFiles } from '../web/core/parsers/index.js';
 import { createLlmClient } from '../web/core/analysis/llm.js';
 import { TFIDF_HINT, analyzeLibrary, recommendBooks, recommendationNote } from '../web/core/analysis/pipeline.js';
 import { truncate } from '../web/core/text.js';
 
 const HELP = `使い方: bh <コマンド> [オプション]
 
-  import <ファイル...>                ハイライトを取り込む（My Clippings.txt / Kindle のエクスポート HTML /
-                                      ブックマークレットの JSON / Play Books のメモ .docx .html .md / それらの .zip）
+  import <ファイル|フォルダ...> [--dry-run]
+                                      ハイライトを取り込む（My Clippings.txt / Kindle のエクスポート HTML /
+                                      ブックマークレットの JSON / Play Books のメモ .docx .html .md / それらの .zip /
+                                      Obsidian などの読書メモ .md）。フォルダは中のファイルをすべて（入れ子も）読む。
+                                      --dry-run は保存せずに結果だけ表示する
   analyze [--no-recommend]            ローカル LLM で 点→線→面→立体 を分析
   recommend                           おすすめの本を選び直す
   serve [--port 8787] [--host 127.0.0.1]  コンパニオンサーバを起動（Google にログイン済みなら Play ブックスの線を自動で取り込む）
@@ -44,6 +47,27 @@ const HELP = `使い方: bh <コマンド> [オプション]
   config google-interval <秒>         ドライブを確認する間隔（既定: 60、最短 ${MIN_INTERVAL_SEC}）
 
 環境変数 BH_DATA でデータの保存先（既定: リポジトリの data/）を変えられます。`;
+
+const IMPORT_EXTENSIONS = new Set(ACCEPT.split(','));
+
+/**
+ * 取り込むファイルを集める。フォルダなら中の取り込める形式のファイルをすべて（入れ子も・名前順）。
+ * name はフォルダからの相対パス（同じ名前のメモが別のフォルダにあっても見分けられるように）
+ */
+async function collectImportFiles(target, base = target) {
+  if (!(await stat(target)).isDirectory()) {
+    const name = target === base ? path.basename(target) : path.relative(base, target).split(path.sep).join('/');
+    return [{ name, bytes: new Uint8Array(await readFile(target)) }];
+  }
+  const out = [];
+  const entries = (await readdir(target, { withFileTypes: true })).sort((a, b) => a.name.localeCompare(b.name));
+  for (const e of entries) {
+    if (e.name.startsWith('.')) continue;
+    const p = path.join(target, e.name);
+    if (e.isDirectory() || IMPORT_EXTENSIONS.has(path.extname(e.name).toLowerCase())) out.push(...(await collectImportFiles(p, base)));
+  }
+  return out;
+}
 
 function parseArgs(argv) {
   const args = { _: [] };
@@ -66,18 +90,23 @@ async function main() {
 
   switch (cmd) {
     case 'import': {
-      if (!rest.length) throw new Error('取り込むファイルを指定してください');
-      const files = await Promise.all(rest.map(async (p) => ({ name: path.basename(p), bytes: new Uint8Array(await readFile(p)) })));
+      if (!rest.length) throw new Error('取り込むファイルかフォルダを指定してください');
+      const files = [];
+      for (const p of rest) files.push(...(await collectImportFiles(p)));
+      if (!files.length) throw new Error('取り込めるファイルがありませんでした');
       const parsed = await parseFiles(files);
       for (const r of parsed.results) {
         if (r.error) console.log(`✗ ${r.name}: ${r.error}`);
-        else console.log(`✓ ${r.name}: ${r.formatLabel} — 本 ${r.books} 冊 / 点 ${r.highlights} 件`);
+        else console.log(`✓ ${r.name}: ${r.formatLabel} — 本 ${r.books} 冊 / 点 ${r.highlights} 件${r.images ? `（画像 ${r.images} 枚は取り込めません）` : ''}`);
       }
       const r = applyImport({ library: await store.library(), analysis: await store.analysis() }, parsed);
-      await store.saveLibrary(r.library);
-      if (r.analysisChanged) await store.saveAnalysis(r.analysis);
+      const dryRun = Boolean(args['dry-run']);
+      if (!dryRun) {
+        await store.saveLibrary(r.library);
+        if (r.analysisChanged) await store.saveAnalysis(r.analysis);
+      }
       const s = r.stats;
-      console.log(`取り込み: 新しい点 ${s.added} 件、更新 ${s.updated} 件、既存 ${s.unchanged} 件（新しい本 ${s.booksAdded} 冊）${r.analysisChanged ? '。バックアップの新しい分析結果も反映しました' : ''}`);
+      console.log(`${dryRun ? '（試し・保存していません）' : ''}取り込み: 新しい点 ${s.added} 件、更新 ${s.updated} 件、既存 ${s.unchanged} 件（新しい本 ${s.booksAdded} 冊）${r.analysisChanged ? '。バックアップの新しい分析結果も反映しました' : ''}`);
       break;
     }
     case 'analyze':

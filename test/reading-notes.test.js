@@ -154,3 +154,31 @@ test('mergeParsed（読書メモ）: 書名の一部が一致する既存の本�
   assert.equal(stats.unchanged, 1);
   assert.equal(libraryStats(lib).highlights, 5);
 });
+
+test('bh import <フォルダ>: 入れ子のフォルダの .md を読み、--dry-run では保存しない', async () => {
+  const { execFile } = await import('node:child_process');
+  const { promisify } = await import('node:util');
+  const { mkdtempSync, mkdirSync, writeFileSync, existsSync, readFileSync } = await import('node:fs');
+  const { tmpdir } = await import('node:os');
+  const path = await import('node:path');
+  const run = promisify(execFile);
+  const root = mkdtempSync(path.join(tmpdir(), 'bh-notes-'));
+  const notes = path.join(root, 'Books');
+  mkdirSync(path.join(notes, '01_哲学'), { recursive: true });
+  writeFileSync(path.join(notes, '01_哲学', 'パンセ.md'), '# 第1章\n\n人間は考える葦である。\n\n- 気晴らし\n\t- 退屈から逃げる\n');
+  writeFileSync(path.join(notes, '耳読書.md'), '![[a.png]]\n');
+  writeFileSync(path.join(notes, 'a.png'), 'not an image');
+  const dataDir = path.join(root, 'data');
+  const bh = new URL('../cli/bh.js', import.meta.url);
+  const env = { ...process.env, BH_DATA: dataDir };
+  const dry = await run('node', [bh.pathname.replace(/^\/([A-Za-z]:)/, '$1'), 'import', notes, '--dry-run'], { env });
+  assert.match(dry.stdout, /01_哲学\/パンセ\.md: 読書メモ（Markdown） — 本 1 冊 \/ 点 2 件/);
+  assert.match(dry.stdout, /耳読書\.md: 本文が無く、画像 1 枚だけのメモです/);
+  assert.doesNotMatch(dry.stdout, /a\.png/);
+  assert.match(dry.stdout, /（試し・保存していません）取り込み: 新しい点 2 件/);
+  assert.equal(existsSync(path.join(dataDir, 'library.json')), false);
+  await run('node', [bh.pathname.replace(/^\/([A-Za-z]:)/, '$1'), 'import', notes], { env });
+  const lib = JSON.parse(readFileSync(path.join(dataDir, 'library.json'), 'utf8'));
+  assert.deepEqual(Object.values(lib.books).map((b) => [b.title, b.sources]), [['パンセ', ['memo']]]);
+  assert.deepEqual(Object.values(lib.highlights).map((h) => h.text).sort(), ['人間は考える葦である。', '気晴らし\n・退屈から逃げる'].sort());
+});

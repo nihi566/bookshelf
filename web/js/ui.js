@@ -72,9 +72,9 @@ export function bookRow(b) {
     ${bookSpine(b)}
     <span class="grow">
       <span class="title">${b.title}</span>
-      <span class="meta">${b.author || '著者不明'} ${b.sources.map(sourceBadge)}</span>
+      <span class="meta">${b.author || '著者不明'} ${b.sources.map(sourceBadge)}${b.isTechnical ? html` <span class="badge tech">技術書</span>` : ''}</span>
     </span>
-    <span class="count">${b.count}<span class="unit"> 点</span><small>${isoDate(b.lastHighlightedAt) || '-'}</small></span>
+    <span class="count">${b.count}<span class="unit"> ${b.isTechnical ? '件' : '点'}</span><small>${isoDate(b.lastHighlightedAt) || '-'}</small></span>
   </a></li>`;
 }
 
