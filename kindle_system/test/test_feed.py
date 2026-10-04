@@ -87,11 +87,45 @@ class BuildFeedTest(unittest.TestCase):
         self.assertIn("読み放題", entry["title"])
         self.assertTrue(entry["updated"].startswith("2026-10-02T09:00:00"), "取得に失敗した回（価格なし・KU でない）は飛ばして、入った回の時刻")
 
-    def test_book_that_was_always_ku_or_left_ku_is_not_an_entry(self):
+    def test_book_that_was_always_ku_is_not_an_entry(self):
         always = [{"at": "2026-10-01T09:00:00", "price": None, "ku": True}, {"at": "2026-10-02T09:00:00", "price": None, "ku": True}]
-        left = [{"at": "2026-10-01T09:00:00", "price": 1000, "ku": False}, {"at": "2026-10-02T09:00:00", "price": None, "ku": True}, {"at": "2026-10-03T09:00:00", "price": 1000, "ku": False}]
-        books = [_book(asin="B0FEED0005", price=None, ku=True, price_history=always), _book(asin="B0FEED0006", price=1000, price_history=left)]
+        books = [_book(asin="B0FEED0005", price=None, ku=True, price_history=always)]
         self.assertEqual(_entries(report.build_feed(_wishlist(*books), SITE)), [])
+
+    def test_leaving_kindle_unlimited_becomes_an_entry(self):
+        history = [
+            {"at": "2026-09-30T09:00:00", "price": None, "ku": True},
+            {"at": "2026-10-01T09:00:00", "price": None, "ku": False},
+            {"at": "2026-10-02T09:00:00", "price": 1000, "ku": False},
+            {"at": "2026-10-03T09:00:00", "price": 1000, "ku": False},
+        ]
+        [entry] = _entries(report.build_feed(_wishlist(_book(price=1000, ku=False, price_history=history)), SITE))
+        self.assertIn("読み放題が終わりました", entry["title"])
+        self.assertIn("欲しい本", entry["title"])
+        self.assertTrue(entry["updated"].startswith("2026-10-02T09:00:00"), "取得に失敗した回（価格なし・KU でない）は飛ばして、外れた回の時刻")
+        self.assertIn("ku-ended:B0FEED0001:", entry["id"])
+
+    def test_left_ku_entries_match_books_derived_from_history(self):
+        """wishlist.json の履歴だけから「読み放題が終わった本」の集合を導き、フィードのエントリと一致すること。"""
+        def h(*states):
+            return [{"at": f"2026-10-0{i + 1}T09:00:00", "price": None if ku else 1000, "ku": ku} for i, ku in enumerate(states)]
+        books = [
+            _book(asin="B0FEED0011", price_history=h(True, False)),
+            _book(asin="B0FEED0012", price_history=h(False, True, False)),
+            _book(asin="B0FEED0013", price_history=h(False, False)),
+            _book(asin="B0FEED0014", price=None, ku=True, price_history=h(True, False, True)),
+            _book(asin="B0FEED0015", price_history=h(True, False), purchased=True),
+        ]
+        wl = _wishlist(*books)
+
+        def left_ku(book):
+            rows = [r for r in book["price_history"] if r["ku"] or r["price"] is not None]
+            return any(a["ku"] and not b["ku"] for a, b in zip(rows, rows[1:])) and not rows[-1]["ku"]
+
+        expected = {b["asin"] for b in wl["books"] if not b["purchased"] and left_ku(b)}
+        got = {e["id"].split("#", 1)[1].split(":")[1] for e in _entries(report.build_feed(wl, SITE)) if "#ku-ended:" in e["id"]}
+        self.assertEqual(got, expected)
+        self.assertEqual(expected, {"B0FEED0011", "B0FEED0012"})
 
     def test_new_campaign_becomes_an_entry(self):
         history = [
