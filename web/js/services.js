@@ -5,22 +5,33 @@ import { analysisStamp } from '../core/importing.js';
 
 // ---- コンパニオンサーバ ----
 
+// 意味で探す・問いかける・骨組みを作るを待つ長さ（問いかけ・骨組みは PC の AI が文を書くので長め。切れると PC 側の処理も止まる）
+const SEARCH_TIMEOUT_MS = 30 * 1000;
+const ASK_TIMEOUT_MS = 3 * 60 * 1000;
+
 export function companionBase() {
   const url = state.settings.ai.companionUrl.trim().replace(/\/+$/, '');
   if (url) return url;
   return state.servedByCompanion ? location.origin : 'http://localhost:8787';
 }
 
-async function call(path, { method = 'GET', body, base = companionBase() } = {}) {
+/** timeoutMs: その時間のうちに返事が来なければあきらめる（PC の AI が止まっていても待ち続けない。0 なら待ち続ける） */
+async function call(path, { method = 'GET', body, base = companionBase(), timeoutMs = 0 } = {}) {
   const headers = { 'Content-Type': 'application/json' };
   if (state.settings.ai.token) headers['X-BH-Token'] = state.settings.ai.token;
+  const ctrl = timeoutMs ? new AbortController() : null;
+  const timer = ctrl ? setTimeout(() => ctrl.abort(), timeoutMs) : null;
   let res;
+  let text;
   try {
-    res = await fetch(base + path, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) });
+    res = await fetch(base + path, { method, headers, body: body === undefined ? undefined : JSON.stringify(body), signal: ctrl?.signal });
+    text = await res.text();
   } catch (e) {
+    if (ctrl?.signal.aborted) throw new Error(`PC から ${Math.round(timeoutMs / 1000)} 秒たっても返事がありませんでした。PC の AI が忙しいか、止まっているかもしれません。少し待ってから、もう一度押してください。`);
     throw new Error(`PC（${base}）に接続できません。コンパニオンサーバ（bh serve）が起動しているか確認してください。`);
+  } finally {
+    clearTimeout(timer);
   }
-  const text = await res.text();
   let data;
   try {
     data = text ? JSON.parse(text) : null;
@@ -30,6 +41,8 @@ async function call(path, { method = 'GET', body, base = companionBase() } = {})
   if (!res.ok) {
     const err = new Error(data?.error || `HTTP ${res.status}`);
     err.status = res.status;
+    // 断った理由の種類（no-embed-model など。画面が出す説明を選ぶ）
+    if (typeof data?.code === 'string') err.code = data.code;
     throw err;
   }
   return data;
@@ -44,6 +57,11 @@ export const companion = {
   startAnalyze: (mode = 'analyze', wishlist = []) => call('/api/analyze', { method: 'POST', body: { mode, wishlist } }),
   job: () => call('/api/analyze'),
   cancel: () => call('/api/analyze', { method: 'DELETE' }),
+  // 意味で探す・問いかける（PC の埋め込みモデルとローカル LLM。本文は送り返さず、点・ノートの ID が返る）
+  search: (q) => call('/api/search', { method: 'POST', body: { q }, timeoutMs: SEARCH_TIMEOUT_MS }),
+  ask: (question) => call('/api/ask', { method: 'POST', body: { question }, timeoutMs: ASK_TIMEOUT_MS }),
+  // 文章の骨組みを作る（材料の面・線・永久ノートの ID を送り、保存前の下書きが返る）
+  outline: (sources) => call('/api/outline', { method: 'POST', body: { sources }, timeoutMs: ASK_TIMEOUT_MS }),
   // 分析の履歴は PC にだけ置く（一覧は要約だけ。開いたときに 1 回分を取りに行く）
   history: () => call('/api/history').then((r) => r?.items || []),
   historyEntry: (id) => call(`/api/history/${encodeURIComponent(id)}`),

@@ -61,13 +61,28 @@ export function createStore(dataDir = process.env.BH_DATA || path.join(REPO_ROOT
     }
   }
 
+  /**
+   * 一時ファイルで置き換える。Windows では、同じファイルへの置き換えが重なると rename が一時的に
+   * EPERM・EBUSY・EACCES になるので、少し待って試し直す（合わせて最大 0.5 秒ほど。ほかの失敗はそのまま投げる）
+   */
+  async function replaceFile(from, to) {
+    for (let i = 0; ; i++) {
+      try {
+        return await rename(from, to);
+      } catch (e) {
+        if (i >= 9 || !['EPERM', 'EBUSY', 'EACCES'].includes(e?.code)) throw e;
+        await new Promise((r) => setTimeout(r, 10 * (i + 1)));
+      }
+    }
+  }
+
   async function writeJson(name, data, { mode } = {}) {
     // 履歴は history/ の下に置く
     await mkdir(path.dirname(file(name)), { recursive: true });
     const tmp = file(`${name}.${process.pid}.${Math.random().toString(36).slice(2)}.tmp`);
     try {
       await writeFile(tmp, JSON.stringify(data, null, 1), { mode });
-      await rename(tmp, file(name));
+      await replaceFile(tmp, file(name));
     } catch (e) {
       // 書けなかった一時ファイルを残さない
       await rm(tmp, { force: true }).catch(() => {});

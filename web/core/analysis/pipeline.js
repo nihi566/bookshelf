@@ -11,11 +11,13 @@
 // LLM の結果は指紋でキャッシュもするので、前回の結果が無くても同じ顔ぶれなら呼び直さない。
 
 import { feedbackByStatus } from '../model.js';
-import { analysisPoints, embedText, isThought, legacyEmbedText, pointLabel } from '../points.js';
+import { analysisPoints, currentPointId, embedText, isThought, legacyEmbedText, pointLabel } from '../points.js';
+import { notesForAnalysis } from '../notes.js';
 import { bookKey, hash, maskSecrets, truncate } from '../text.js';
-import { PROMPT_VERSION, RECOMMEND_KINDS, RELATION_TYPES, farPrompt, linePrompt, pickPrompt, planePrompt, recommendPrompt, searchPrompt, solidPrompt } from './prompts.js';
+import { PROMPT_VERSION, RECOMMEND_KINDS, RELATION_TYPES, farPrompt, humanLine, linePrompt, pickPrompt, planePrompt, recommendPrompt, searchPrompt, solidPrompt } from './prompts.js';
 import { centroid, dot, l2normalize, tfidfEmbed } from './vectors.js';
 import { carryLines, carryPlanes } from './incremental.js';
+import { nearPoints } from './neighbors.js';
 import { diffAnalyses } from './changes.js';
 import { farDiscovery, findDiscoveries, mergeDiscoveries } from './discoveries.js';
 import { FAR_MAX_UNREADABLE, farCandidates, farId, judgeFarPairs, mergeFarConnections, pickReps } from './far.js';
@@ -42,6 +44,9 @@ export const MAX_LINES = 400;
 // 面の数の上限と、面を作る AI に見せる線の数（面の中心に近い線から）
 export const MAX_PLANES = 12;
 export const PLANE_SAMPLE_SIZE = 12;
+// 面・立体を作る AI に見せる永久ノートの数（新しく直したものから。多すぎると小さなモデルの読める長さを超える）
+const NOTES_PER_PLANE = 6;
+const NOTES_FOR_SOLID = 12;
 // 1 本の線に入れる点の上限（目安の 2.5 倍。増えた点を加えるときもこれを超えない）
 const lineMaxSize = (target) => Math.ceil(target * 2.5);
 // 前回最初から作り直したときから点がこれだけ増えたら、引き継がずに作り直す（小さいうちの線・面の形に縛られ続けないように）
@@ -74,7 +79,8 @@ export function lineSample(ordered, isFavorite, max = LINE_SAMPLE_SIZE) {
 
 /** AI に渡す点の形（prompts.js の pointLine） */
 function promptPoint(library, p) {
-  return { text: p.text, label: pointLabel(library, p), thought: isThought(p), note: p.note || '', userNote: p.userNote || '', tags: p.tags || [] };
+  // 問いかけの答えを保存したメモは AI が書いた文（読者自身の言葉として重く見させない）
+  return { text: p.text, label: pointLabel(library, p), thought: isThought(p), aiAnswer: p.answerTo?.kind === 'ask', note: p.note || '', userNote: p.userNote || '', tags: p.tags || [] };
 }
 
 /**
@@ -190,6 +196,8 @@ export async function analyzeLibrary({ library, llm: rawLlm, cache = emptyCache(
   onProgress({ stage: 'lines', done: groups.length, total: groups.length, message: `線を ${lines.length} 本引きました` });
   if (!lines.length) throw new Error('点どうしのつながりが見つかりませんでした。ハイライトを増やしてから試してください。');
   dedupeNames(lines);
+  // 線の点の中心（面を作るときは線の説明文の埋め込みを混ぜるので、その前に取っておく。意味の近い点・関わる点に使う）
+  const lineCentroids = lines.map((l) => l.vector);
 
   // 3. 線 → 面（線の説明文の埋め込みがあればそれも使う。説明文が変わった線だけ埋め込む）
   const summaryKeys = lines.map((l) => 's' + hash(`${l.name}\n${l.summary}`));
@@ -203,13 +211,20 @@ export async function analyzeLibrary({ library, llm: rawLlm, cache = emptyCache(
     lines.forEach((l, i) => (l.vector = l2normalize(l.vector.map((x, j) => x + emb.vectors[summaryKeys[i]][j]))));
   }
   const planeGroups = carryPlanes({ lineIds: lines.map((l) => l.id), vectors: lines.map((l) => l.vector), previousPlanes: base?.planes || [], maxPlanes });
+  // 永久ノート（人間がまとめた線）。根拠の点が入っている面と、立体を作る AI に見せる（G3-5。線から作って直していない下書きは除く）。
+  // AI に見せる文を指紋にも入れて、ノートを書き直したら面・立体を作り直す（ノートが無ければ指紋は前と同じ）
+  const notes = notesForAnalysis(library);
+  const lineOfPoint = new Map(lines.flatMap((l) => l.highlightIds.map((id) => [id, l.id])));
+  const linesOfNote = new Map(notes.map((n) => [n.id, new Set(n.pointIds.map((id) => lineOfPoint.get(currentPointId(library, id))).filter(Boolean))]));
+  const noteKeys = (ns) => (ns.length ? ['|人間がまとめた線|', ...ns.map((n) => `${n.id}:${hash(humanLine(n))}`).sort()] : []);
   const planes = [];
   for (let pi = 0; pi < planeGroups.length; pi++) {
     check();
     const ls = planeGroups[pi].members.map((i) => lines[i]);
     const lineIds = ls.map((l) => l.id);
-    // 面は線の顔ぶれが変わったときだけ作り直す（線の名前が少し変わっただけでは呼び直さない）
-    const sig = 'plane:' + hash([PROMPT_VERSION, rawLlm.chatModel, ...[...lineIds].sort()].join('|'));
+    const planeNotes = notes.filter((n) => lineIds.some((id) => linesOfNote.get(n.id).has(id))).slice(0, NOTES_PER_PLANE);
+    // 面は線の顔ぶれ（と、その面の永久ノート）が変わったときだけ作り直す（線の名前が少し変わっただけでは呼び直さない）
+    const sig = 'plane:' + hash([PROMPT_VERSION, rawLlm.chatModel, ...[...lineIds].sort(), ...noteKeys(planeNotes)].join('|'));
     const id = planeGroups[pi].id || 'p' + hash([...lineIds].sort().join('|'));
     onProgress({ stage: 'planes', done: pi, total: planeGroups.length, message: `線を束ねて面を作っています（${pi + 1}/${planeGroups.length}）` });
     const before = prevPlanes.get(planeGroups[pi].id);
@@ -218,24 +233,25 @@ export async function analyzeLibrary({ library, llm: rawLlm, cache = emptyCache(
       // 面の中心に近い線から最大 12 本だけ見せる（多すぎると小さなモデルの読める長さを超える）
       const c = centroid(ls.map((l) => l.vector));
       const shown = [...ls].sort((a, b) => dot(b.vector, c) - dot(a.vector, c)).slice(0, PLANE_SAMPLE_SIZE);
-      r = await llm.chatJson({ ...planePrompt(shown, { more: ls.length - shown.length }), signal });
+      r = await llm.chatJson({ ...planePrompt(shown, { more: ls.length - shown.length, notes: planeNotes }), signal });
       cache.llm[sig] = r;
     }
     planes.push({ id, name: clean(r.name, 40) || `面 ${pi + 1}`, summary: clean(r.summary, 800), lineIds, sig });
   }
   dedupeNames(planes);
 
-  // 4. 面 → 立体（面の名前と顔ぶれが前回と同じなら、前回の立体をそのまま使う）
+  // 4. 面 → 立体（面の名前と顔ぶれ・永久ノートが前回と同じなら、前回の立体をそのまま使う）
   check();
   onProgress({ stage: 'solid', done: 0, total: 1, message: '面の関係から立体を組み立てています' });
-  const solidSig = 'solid:' + hash([PROMPT_VERSION, rawLlm.chatModel, ...planes.map((p) => p.id + p.name)].join('|'));
+  const solidNotes = notes.slice(0, NOTES_FOR_SOLID);
+  const solidSig = 'solid:' + hash([PROMPT_VERSION, rawLlm.chatModel, ...planes.map((p) => p.id + p.name), ...noteKeys(solidNotes)].join('|'));
   let solid;
   if (base?.solid?.sig === solidSig) solid = structuredClone(base.solid);
   else {
     const planeInput = planes.map((p) => ({ ...p, lines: p.lineIds.map((id) => lines.find((l) => l.id === id)) }));
     let s = cache.llm[solidSig];
     if (!s) {
-      s = await llm.chatJson({ ...solidPrompt(planeInput), signal });
+      s = await llm.chatJson({ ...solidPrompt(planeInput, { notes: solidNotes }), signal });
       cache.llm[solidSig] = s;
     }
     const planeRef = (ref) => planes[parseInt(String(ref).replace(/[^\d]/g, ''), 10) - 1]?.id;
@@ -285,6 +301,20 @@ export async function analyzeLibrary({ library, llm: rawLlm, cache = emptyCache(
   const alive = (id) => indexOf.has(id);
   // 点の出どころ（本の ID。思いつきは 1 つずつ別の出どころ）
   const sourceOf = (id) => (isThought(points[indexOf.get(id)]) ? id : points[indexOf.get(id)]?.bookId || id);
+
+  // 意味の近い点（G4-2。点の画面からリンクにできる）と、2 番目に近い線にも十分近い点（G4-3。その線の「関わる点」）
+  const near = nearPoints({
+    ids: points.map((p) => p.id),
+    vectors,
+    lines: groups.map((g, j) => ({ id: lines[j].id, members: g.members, centroid: lineCentroids[j] })),
+    isolated,
+    sourceOf: (i) => sourceOf(points[i].id),
+  });
+  analysis.neighbors = near.neighbors;
+  for (const l of analysis.lines) {
+    const related = near.related.get(l.id);
+    if (related?.length) l.relatedIds = related;
+  }
 
   // 4.5 遠いつながり（別の本・別の面にある、近さが低めの点の組を AI に判定させる。おすすめの本と同じく、線・面・立体の回数には数えない）
   check();

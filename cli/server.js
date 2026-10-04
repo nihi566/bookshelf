@@ -22,6 +22,13 @@ import { wishlistForRecommend } from '../web/core/wishlist.js';
 import { parseFiles } from '../web/core/parsers/index.js';
 // 画面に出すエラーの文から、URL に書いたパスワード（http://user:pass@…）を伏せる
 import { maskSecrets } from '../web/core/text.js';
+import { askLibrary, cleanQuery, createSemanticIndex, searchTargets, semanticSearch } from '../web/core/ask.js';
+import { cleanPicks, outlineMaterials, outlinePrompt, readOutline } from '../web/core/outline-draft.js';
+
+// 埋め込みモデルが無いときの説明（意味で探す・問いかけるは使えない。画面は言葉の一致の検索に戻る）
+const NO_EMBED_MODEL = 'PC に埋め込みモデルが設定されていないので、意味で探す・問いかけるは使えません（PC で bh config embed bge-m3 を実行してください）';
+// チャットモデルが無いときの説明（問いかける・骨組みを作るは使えない）
+const NO_CHAT_MODEL = 'PC のチャットモデルが設定されていないので、AI に頼めません（PC で bh config model qwen2.5:7b などを実行してください）';
 
 const WEB_ROOT = path.join(REPO_ROOT, 'web');
 const MIME = {
@@ -36,6 +43,9 @@ const MIME = {
   '.md': 'text/markdown; charset=utf-8',
 };
 const MAX_BODY = 50 * 1024 * 1024;
+// 意味で探す・問いかける・骨組みを作るの本文（質問は 300 字まで）と、同時に受ける数（PC の AI を使い切らせない。分析も同じ AI を使う）
+const AI_BODY_MAX = 64 * 1024;
+const AI_CONCURRENCY = 2;
 
 // catalogFetch: おすすめの本を探す書誌 DB への fetch（テストで差し替える）
 // drive: Play ブックスのメモ（Google ドライブ）の見張り役（startDriveWatcher の戻り値。無ければ null）
@@ -47,6 +57,50 @@ export function createCompanionServer({ store, log = console.log, catalogFetch, 
   let activeImports = 0;
   // 最後に失敗・中止した時刻（state.json に書けないときも、試し直すまで待てるよう手元にも持つ）
   const lastStop = { failure: null, cancel: null };
+  // 意味で探す・問いかけるのベクトル（LLM の場所と埋め込みモデルごとに 1 つ。cache.json は分析と書き合いになるので書かない）
+  let semantic = null;
+  // 意味で探す・問いかける・骨組みを作るの、いま答えている数
+  let aiActive = 0;
+
+  /**
+   * 意味で探す・問いかける・骨組みを作るを、同時に受ける数を守って動かす（超えたら 429）。相手が接続を切ったら AI の処理も止める
+   * @param {(signal: AbortSignal) => Promise<unknown>} fn
+   */
+  async function aiJob(res, fn) {
+    if (aiActive >= AI_CONCURRENCY) return send(res, 429, { error: 'PC がほかの問い合わせに答えています。少し待ってから、もう一度押してください', code: 'busy' });
+    aiActive++;
+    const ctrl = new AbortController();
+    const onClose = () => {
+      if (!res.writableFinished) ctrl.abort();
+    };
+    res.on('close', onClose);
+    try {
+      return await fn(ctrl.signal);
+    } finally {
+      aiActive--;
+      res.off('close', onClose);
+    }
+  }
+
+  /** 意味で探す・問いかけるの失敗の返し方（相手が切ったなら返さない。先に分析が要るなら 409。それ以外は 502 で、URL の秘密は伏せる） */
+  function semanticError(res, e, signal, what) {
+    if (signal.aborted) return;
+    if (e.code === 'needs-analysis') return send(res, 409, { error: e.message, code: e.code });
+    return send(res, 502, { error: `${what}（${maskSecrets(e.message)}）` });
+  }
+
+  /** 意味で探す・問いかけるの準備（分析のキャッシュが新しくなっていたら、そのベクトルを使い直す） */
+  async function semanticIndex(cfg, library) {
+    const llm = createLlmClient(cfg.llm);
+    const key = `${normalizeBaseUrl(cfg.llm.baseUrl)}|${cfg.llm.embedModel}`;
+    if (semantic?.key !== key) semantic = { key, index: createSemanticIndex({ embed: llm.embed, model: cfg.llm.embedModel }), cacheAt: null };
+    const cacheAt = await stat(path.join(store.dataDir, 'cache.json')).then((s) => s.mtimeMs, () => 0);
+    if (cacheAt !== semantic.cacheAt) {
+      semantic.index.seed((await store.cache()).embeddings, searchTargets(library));
+      semantic.cacheAt = cacheAt;
+    }
+    return { index: semantic.index, llm };
+  }
 
   function isAllowedOrigin(origin, host, cfg) {
     if (!origin) return true;
@@ -194,6 +248,59 @@ export function createCompanionServer({ store, log = console.log, catalogFetch, 
       case 'DELETE /api/analyze':
         job.controller?.abort();
         return send(res, 200, publicJob());
+      case 'POST /api/search': {
+        // 意味で探す（G8-1）。返すのは点・永久ノートの ID と近さだけ（本文は画面の側が自分のライブラリから出す）
+        const q = cleanQuery((await readBody(req, AI_BODY_MAX)).q);
+        if (!q) return send(res, 400, { error: '探す言葉を入れてください' });
+        if (!cfg.llm.embedModel) return send(res, 409, { error: NO_EMBED_MODEL, code: 'no-embed-model' });
+        return aiJob(res, async (signal) => {
+          const library = await store.library();
+          try {
+            const { index } = await semanticIndex(cfg, library);
+            return send(res, 200, { model: cfg.llm.embedModel, results: await semanticSearch({ library, query: q, index, signal }) });
+          } catch (e) {
+            return semanticError(res, e, signal, '意味で探せませんでした');
+          }
+        });
+      }
+      case 'POST /api/ask': {
+        // 問いかける（G8-2・G8-3）。関連する点を最大 8 件集め、ローカル LLM が点だけを根拠に答える。関係する点が無ければ AI を呼ばない
+        const question = cleanQuery((await readBody(req, AI_BODY_MAX)).question);
+        if (!question) return send(res, 400, { error: '質問を入れてください' });
+        if (!cfg.llm.embedModel) return send(res, 409, { error: NO_EMBED_MODEL, code: 'no-embed-model' });
+        if (!cfg.llm.chatModel) return send(res, 409, { error: NO_CHAT_MODEL, code: 'no-chat-model' });
+        return aiJob(res, async (signal) => {
+          const library = await store.library();
+          try {
+            const { index, llm } = await semanticIndex(cfg, library);
+            return send(res, 200, await askLibrary({ library, question, index, chatJson: llm.chatJson, signal }));
+          } catch (e) {
+            return semanticError(res, e, signal, '問いかけに答えられませんでした');
+          }
+        });
+      }
+      case 'POST /api/outline': {
+        // 文章の骨組みを作る（G9-1）。PC が自分のライブラリ・分析から材料を集め、ローカル LLM が見出し・要点・引用の番号を作る。
+        // 返すのは保存前の下書き（引用は点の ID。保存と手直しは画面の側）
+        const picks = cleanPicks((await readBody(req, AI_BODY_MAX)).sources);
+        if (!picks.length) return send(res, 400, { error: '面・線・永久ノートを 1 つ以上選んでください' });
+        if (!cfg.llm.chatModel) return send(res, 409, { error: NO_CHAT_MODEL, code: 'no-chat-model' });
+        return aiJob(res, async (signal) => {
+          const library = await store.library();
+          const materials = outlineMaterials(library, await store.analysis(), picks);
+          // 1 つでも見つからなければ作らない（抜けたまま作らない。スマホで書いたノートがまだ PC に無い・PC で分析し直して面・線が変わった）
+          if (materials.missing.length) {
+            return send(res, 409, { error: `選んだ材料のうち ${materials.missing.length} 件が PC に見つかりません。PC と同期してから、もう一度押してください（分析し直して面・線が変わったときは、選び直してください）`, code: 'missing-sources' });
+          }
+          try {
+            const r = await createLlmClient(cfg.llm).chatJson({ ...outlinePrompt(library, materials), signal });
+            return send(res, 200, readOutline(r, materials));
+          } catch (e) {
+            if (signal.aborted) return;
+            return send(res, 502, { error: e.code === 'empty-outline' ? e.message : `骨組みを作れませんでした（${maskSecrets(e.message)}）` });
+          }
+        });
+      }
       default:
         return send(res, 404, { error: `不明な API: ${route}` });
     }
@@ -377,19 +484,19 @@ function send(res, status, data) {
   res.end(JSON.stringify(data));
 }
 
-async function readRaw(req) {
+async function readRaw(req, max = MAX_BODY) {
   const chunks = [];
   let size = 0;
   for await (const c of req) {
     size += c.length;
-    if (size > MAX_BODY) throw Object.assign(new Error('リクエストが大きすぎます'), { status: 413 });
+    if (size > max) throw Object.assign(new Error('リクエストが大きすぎます'), { status: 413 });
     chunks.push(c);
   }
   return Buffer.concat(chunks);
 }
 
-async function readBody(req) {
-  const raw = await readRaw(req);
+async function readBody(req, max = MAX_BODY) {
+  const raw = await readRaw(req, max);
   let body;
   try {
     body = JSON.parse(raw.toString('utf8') || '{}');

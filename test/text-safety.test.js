@@ -1,7 +1,7 @@
 // 文の整え方・エスケープ・エラー文の伏せ字（同期やほかの端末から届いた壊れた値で、サーバや画面を止めない）
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { cleanText, maskSecrets } from '../web/core/text.js';
+import { cleanText, isoStamp, maskSecrets, sliceChars, truncate } from '../web/core/text.js';
 import { esc } from '../web/js/html.js';
 
 test('空白だけの長い文が届いても、文を整える処理は長さに比例する時間で終わる（前と同じ整え方）', () => {
@@ -25,8 +25,37 @@ test('エスケープ: 文字にできない値は空にする（壊れたデー
   assert.equal(esc(`<a href="x">'</a>`), '&lt;a href=&quot;x&quot;&gt;&#39;&lt;/a&gt;');
 });
 
+test('同期で届いた時刻: 実在する ISO 形式の時刻だけを通し、壊れた時刻は空文字、未来すぎる時刻は今の時刻に直す', () => {
+  const now = '2026-10-04T12:00:00.000Z';
+  assert.equal(isoStamp('2026-10-04T10:00:00.000Z', now), '2026-10-04T10:00:00.000Z');
+  assert.equal(isoStamp('2026-10-04T10:00:00Z', now), '2026-10-04T10:00:00Z');
+  assert.equal(isoStamp('2026-10-05T11:00:00.000Z', now), '2026-10-05T11:00:00.000Z', '24 時間までは端末の時計のずれとして受け入れる');
+  for (const bad of ['zzzz', '9999-99-99T99:99:99Z', '2026-02-30T10:00:00.000Z', '2026-10-04 10:00', 5, null, 'x'.repeat(50)]) assert.equal(isoStamp(bad, now), '', String(bad).slice(0, 20));
+  assert.equal(isoStamp('9999-12-31T23:59:59.999Z', now), now, '未来すぎる時刻は今の時刻に直す（勝ち続けない）');
+});
+
+test('文字数で切る: 2 つで 1 文字の文字（絵文字・一部の漢字）を半分にしない。truncate は長い文を先に切ってから 1 文字ずつに分ける', () => {
+  assert.equal(sliceChars('ab𠮟', 3), 'ab', '𠮟 の途中では切らない');
+  assert.equal(sliceChars('abc', 5), 'abc');
+  assert.equal(truncate('𠮟'.repeat(5), 3), '𠮟𠮟…');
+  // 1 文字ずつに分ける長さが、切る長さに見合っているか（文の長さに比例して時間・メモリを使わない）
+  const orig = Array.from;
+  let longest = 0;
+  Array.from = function (x, ...rest) {
+    if (typeof x === 'string') longest = Math.max(longest, x.length);
+    return orig.call(this, x, ...rest);
+  };
+  try {
+    assert.equal(truncate('あ'.repeat(1_000_000), 10), `${'あ'.repeat(9)}…`);
+  } finally {
+    Array.from = orig;
+  }
+  assert.ok(longest <= 22, `1 文字ずつに分けた長さ ${longest}`);
+});
+
 test('エラー文から、URL に書いた利用者名・パスワードを伏せる', () => {
   assert.equal(maskSecrets('接続できません (http://user:secret@127.0.0.1:9): x'), '接続できません (http://***@127.0.0.1:9): x');
+  assert.equal(maskSecrets('接続できません (https://tok3n@pc.example.ts.net/llm): x'), '接続できません (https://***@pc.example.ts.net/llm): x', 'トークンだけの利用者名も伏せる');
   assert.equal(maskSecrets('http://127.0.0.1:9 と https://a.example/b@c'), 'http://127.0.0.1:9 と https://a.example/b@c');
   assert.equal(maskSecrets(undefined), '');
 });

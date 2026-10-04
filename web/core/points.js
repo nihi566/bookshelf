@@ -6,9 +6,21 @@
 import { pointHighlights, searchHighlights } from './model.js';
 import { THOUGHT_LABEL, isThoughtId, pointThoughts, searchThoughts, thoughtsOf } from './thoughts.js';
 
+// Kindle で伸ばしたハイライトの置き換え先をたどる（永久ノートの根拠・リンクに書いた点を見失わない）
+export { currentPointId } from './point-ids.js';
+
 /** 分析の点（技術書の線・捨てた思いつきを除く）。ID 順 */
 export function analysisPoints(library) {
   return [...pointHighlights(library), ...pointThoughts(library)].sort((a, b) => a.id.localeCompare(b.id));
+}
+
+/**
+ * この端末に届いている点か（消した点は墓標があるので届いている）。PC で取り込んだ直後の点はまだ無いことがある。
+ * 引くことのできない点を「消えた」と「まだ無い（同期すると出る）」に分けるために使う
+ */
+export function pointArrived(library, id) {
+  const all = isThoughtId(id) ? thoughtsOf(library) : library.highlights || {};
+  return Object.hasOwn(all, id);
 }
 
 /** ID から点を引く（消したもの・無いものは null。捨てた思いつきは返す: コピー・戻すなどの操作のため） */

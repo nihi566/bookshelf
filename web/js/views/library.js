@@ -9,6 +9,10 @@ import { loadWishlist } from '../wishlist-data.js';
 import { bookRow, bookSpine, emptyBooksBlock, highlightCard, kindleAlertBlock, lineIndex, pointCard, sourceBadge } from '../ui.js';
 import { inboxBlock } from './thoughts.js';
 import { discoveriesBlock, partnerBlock } from './discoveries.js';
+import { noteRow } from './notes.js';
+import { searchNotes } from '../../core/notes.js';
+import { meaningResults, semanticAvailability, unavailableNotice } from './ask.js';
+import { companion } from '../services.js';
 
 const flow = html`<div class="flow" aria-label="点から立体へ">
   <div class="f-point"><b>点</b>線を引いた一文</div>
@@ -178,36 +182,108 @@ export const book = {
   },
 };
 
+/** 探し方の切り替え先（今の言葉・絞り込みをそのまま持っていく） */
+function modeHref(query, value) {
+  const p = new URLSearchParams(query);
+  if (value) p.set('mode', value);
+  else p.delete('mode');
+  return `#/search${p.toString() ? `?${p}` : ''}`;
+}
+
 export const search = {
-  render({ state, query }) {
+  render({ query }) {
     const q = query.get('q') || '';
+    const meaning = query.get('mode') === 'meaning';
+    // 探し方の切り替え（言葉の一致 / 意味の近さ。意味で探すときは PC の AI を使う）
+    const mode = (on, label, value) => html`<a class="chip ${on ? 'on' : ''}" data-mode="${value}" href="${modeHref(query, value)}" ${on ? html`aria-current="true"` : ''}>${label}</a>`;
     return html`<a class="back" href="#/books">‹ 読んだ本</a>
-      <div class="page-head"><h1>点を検索</h1></div>
+      <div class="page-head"><h1>点を検索</h1><a class="btn small" id="search-ask" href="${askHref(q)}">問いかける</a></div>
       <form class="search-box" data-form="search" role="search">
-        <input type="search" name="q" value="${q}" placeholder="言葉・書名・#タグ（空白で AND）" aria-label="ハイライトと思いつきを検索" autocomplete="off" ${q ? '' : 'autofocus'}>
+        <input type="search" name="q" value="${q}" placeholder="${meaning ? '探したいこと（言葉が一致しなくても探します）' : '言葉・書名・#タグ（空白で AND）'}" aria-label="ハイライトと思いつきを検索" autocomplete="off" ${q ? '' : 'autofocus'}>
       </form>
+      <div class="chips search-modes" role="group" aria-label="探し方">${mode(!meaning, '言葉で探す', '')}${mode(meaning, '意味で探す', 'meaning')}</div>
       <div class="chips" id="search-filters" role="group" aria-label="絞り込み"></div>
       <div id="search-wishlist"></div>
       <div id="search-results"></div>`;
   },
   mount(root, ctx) {
     const input = root.querySelector('input[name="q"]');
-    const update = () => renderResults(root, ctx, input.value);
+    const meaning = ctx.query.get('mode') === 'meaning';
+    // 描くたびに番号を進める（待っている間に打ち直した・切り替えた・描き直したときの、古い意味で探すの結果を出さない）
+    const update = () => {
+      const token = ++searchToken;
+      return meaning ? renderMeaning(root, ctx, input.value, token) : renderResults(root, ctx, input.value);
+    };
     let t;
     input.addEventListener('input', () => {
       clearTimeout(t);
-      t = setTimeout(() => {
-        const params = new URLSearchParams(ctx.query);
-        if (input.value) params.set('q', input.value);
-        else params.delete('q');
-        history.replaceState(null, '', `#/search${params.toString() ? '?' + params : ''}`);
-        ctx.query = params;
-        update();
-      }, 150);
+      t = setTimeout(
+        () => {
+          // 待つ間に画面を移っていたら何もしない（URL を書き換えない）
+          if (!input.isConnected) return;
+          const params = new URLSearchParams(ctx.query);
+          if (input.value) params.set('q', input.value);
+          else params.delete('q');
+          history.replaceState(null, '', `#/search${params.toString() ? '?' + params : ''}`);
+          ctx.query = params;
+          // 「問いかける」と探し方の切り替えにも、今の言葉を引き継ぐ
+          root.querySelector('#search-ask')?.setAttribute('href', askHref(input.value));
+          for (const a of root.querySelectorAll('.search-modes a[data-mode]')) a.setAttribute('href', modeHref(params, a.dataset.mode));
+          update();
+        },
+        // 意味で探すときは PC に問い合わせるので、打ち終わるのを少し長く待つ
+        meaning ? 500 : 150,
+      );
     });
     update();
   },
 };
+
+/** 問いかける画面へ（探している言葉を質問に引き継ぐ） */
+const askHref = (q) => `#/ask${q.trim() ? `?q=${encodeURIComponent(q.trim())}` : ''}`;
+
+let searchToken = 0;
+// 直前に意味で探した結果（メモの保存・同期で描き直すたびに PC へ問い合わせ直さない。スクロールの位置も保てる）
+let lastMeaning = { q: '', at: 0, results: [] };
+const MEANING_REUSE_MS = 5 * 60 * 1000;
+
+/** 意味で探す（PC が近い順の ID を返す）。PC とつながっていない・埋め込みモデルが無いときは理由を出して言葉の一致の検索に戻る */
+async function renderMeaning(root, ctx, q, token) {
+  const box = root.querySelector('#search-results');
+  const filters = root.querySelector('#search-filters');
+  const wishlist = root.querySelector('#search-wishlist');
+  if (!box || !filters || !wishlist) return;
+  // 絞り込み（Kindle・★など）と欲しい本は、言葉で探すときだけ
+  filters.innerHTML = '';
+  wishlist.innerHTML = '';
+  const query = q.trim();
+  if (!query) {
+    box.innerHTML = String(html`<p class="help">言葉が一致しなくても、意味の近い点・メモ・永久ノートを探します（PC の AI を使います）。</p>`);
+    return;
+  }
+  const why = semanticAvailability(ctx.state);
+  if (why !== 'ok') return wordsInstead(root, ctx, q, unavailableNotice(why));
+  if (lastMeaning.q === query && Date.now() - lastMeaning.at < MEANING_REUSE_MS) {
+    box.innerHTML = String(meaningResults(ctx.state, lastMeaning.results));
+    return;
+  }
+  box.innerHTML = String(html`<p class="small muted" role="status">PC で意味の近い点を探しています…</p>`);
+  let found;
+  try {
+    found = await companion.search(query);
+  } catch (e) {
+    // 待っている間に打ち直した・切り替えた・画面を移ったときは、何も書かない
+    if (token === searchToken && box.isConnected) wordsInstead(root, ctx, q, unavailableNotice(e.code === 'no-embed-model' ? 'no-embed' : '', e.message));
+    return;
+  }
+  lastMeaning = { q: query, at: Date.now(), results: found?.results || [] };
+  if (token === searchToken && box.isConnected) box.innerHTML = String(meaningResults(ctx.state, lastMeaning.results));
+}
+
+function wordsInstead(root, ctx, q, notice) {
+  renderResults(root, ctx, q);
+  root.querySelector('#search-results').insertAdjacentHTML('afterbegin', String(notice));
+}
 
 function renderResults(root, ctx, q) {
   const { state, query } = ctx;
@@ -223,7 +299,12 @@ function renderResults(root, ctx, q) {
   };
   root.querySelector('#search-filters').innerHTML = String(html`${link({ source: '' }, 'すべて', !source)}${link({ source: 'kindle' }, 'Kindle', source === 'kindle')}${link({ source: 'playbooks' }, 'Play Books', source === 'playbooks')}${link({ source: 'paper' }, '紙の本', source === 'paper')}${link({ source: 'memo' }, '読書メモ', source === 'memo')}${link({ source: 'thought' }, THOUGHT_LABEL, source === 'thought')}${link({ fav: fav ? '' : '1' }, '★ お気に入り', fav)}`);
   const shown = results.slice(0, 200);
-  root.querySelector('#search-results').innerHTML = String(html`<p class="small muted">${results.length} 件${results.length > shown.length ? `（先頭 ${shown.length} 件を表示）` : ''}</p>
+  // 検索語に当たる永久ノート（先頭 5 件。ノートは点ではないので、点の件数とは分けて出す）
+  const notes = q.trim() ? searchNotes(state.library, q) : [];
+  root.querySelector('#search-results').innerHTML = String(html`${notes.length
+      ? html`<section class="note-hits"><div class="section"><h2>永久ノート</h2><a class="small" href="#/notes?q=${encodeURIComponent(q)}">永久ノートで見る（${notes.length} 件）</a></div><ul class="note-list">${notes.slice(0, 5).map((n) => noteRow(state.library, n))}</ul></section>`
+      : ''}
+    <p class="small muted">${results.length} 件${results.length > shown.length ? `（先頭 ${shown.length} 件を表示）` : ''}</p>
     ${shown.map((p) => pointCard(p, { library: state.library, lines: idx.get(p.id), query: q }))}
     ${!results.length ? html`<p class="empty">見つかりませんでした</p>` : ''}`);
   renderWishlistHits(root, q);

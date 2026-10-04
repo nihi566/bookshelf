@@ -13,6 +13,9 @@ import { mergeCollections } from './collections.js';
 import { mergeThought, normalizeThought, pointThoughts } from './thoughts.js';
 import { mergeReads } from './discovery-reads.js';
 import { mergeFarReactions } from './far-reactions.js';
+import { normalizeNote } from './notes.js';
+import { mergeLinks } from './links.js';
+import { normalizeOutline } from './outlines.js';
 
 export const SOURCES = {
   kindle: 'Kindle',
@@ -392,12 +395,20 @@ export function mergeLibraries(base, incoming) {
     const cur = Object.hasOwn(out.feedback, key) ? out.feedback[key] : null;
     out.feedback[key] = structuredClone(cur ? order(cur, f, cur.updatedAt || '', f.updatedAt || '')[1] : f);
   }
+  // 利用者が作る項目の時刻を整えるときの「今」（1 回の統合で同じ値にして、どちら向きに統合しても同じ結果にする）
+  const now = new Date().toISOString();
   // 思いつきは書き直した時刻が新しい方（状態は状態を変えた時刻が新しい方）。消したものはどちらから来ても消えたまま
-  out.thoughts = mergeCollections(base.thoughts, incoming.thoughts, { stickyDelete: true, normalize: normalizeThought, mergeItem: mergeThought });
+  out.thoughts = mergeCollections(base.thoughts, incoming.thoughts, { stickyDelete: true, normalize: (t) => normalizeThought(t, now), mergeItem: mergeThought });
   // 発見の既読は、どちらかで読んでいれば既読（読んだ時刻は早い方）
   out.discoveryReads = mergeReads(base.discoveryReads, incoming.discoveryReads);
   // 遠いつながりへの反応（面白い・ちがう）は、付けた時刻が新しい方
-  out.farReactions = mergeFarReactions(base.farReactions, incoming.farReactions);
+  out.farReactions = mergeFarReactions(base.farReactions, incoming.farReactions, now);
+  // 永久ノートは書き直した時刻が新しい方。消したものはどちらから来ても消えたまま
+  out.notes = mergeCollections(base.notes, incoming.notes, { stickyDelete: true, normalize: (n) => normalizeNote(n, now) });
+  // リンクは張った・外した・理由を直した時刻が新しい方（外したリンクも、もう一度張れば戻る）
+  out.links = mergeLinks(base.links, incoming.links, now);
+  // 文章の骨組みは直した時刻が新しい方。消したものはどちらから来ても消えたまま
+  out.outlines = mergeCollections(base.outlines, incoming.outlines, { stickyDelete: true, normalize: (o) => normalizeOutline(o, now) });
   out.updatedAt = later(base.updatedAt, incoming.updatedAt);
   return out;
 }

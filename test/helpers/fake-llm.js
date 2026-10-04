@@ -33,8 +33,25 @@ function answer(name, prompt) {
 /**
  * options.rejectJsonSchema: json_schema を 400 で拒否（LM Studio 以外の古いサーバの再現）
  * options.far: 遠い組み合わせの判定（G6）の答え（prompt → JSON）。既定は「共通する考えは無い」
+ * options.ask: 問いかけ（G8）の答え（prompt → JSON）。既定は 1 番の点を根拠にした答え
+ * options.embedDelayMs: 埋め込みの返事を遅らせる（同時に来た問い合わせの確かめ用）
+ * options.outline: 文章の骨組み（G9）の答え（prompt → JSON）。既定は 3 節で、1〜3 番の点を引用に使う
  */
-export async function startFakeLlm({ rejectJsonSchema = false, wrapInThink = false, far = () => ({ shared: false, idea: '', explanation: '' }) } = {}) {
+export async function startFakeLlm({
+  rejectJsonSchema = false,
+  wrapInThink = false,
+  far = () => ({ shared: false, idea: '', explanation: '' }),
+  ask = () => ({ answerable: true, answer: '小さく始めると続きます [1]。', used: [1] }),
+  embedDelayMs = 0,
+  outline = () => ({
+    title: '小さな仕組みで続ける',
+    sections: [
+      { heading: '仕組みが先', points: ['意志より仕組みを整える'], quotes: [1] },
+      { heading: '小さく始める', points: ['始める手間を減らす', '毎日少しずつ'], quotes: [2, 3] },
+      { heading: 'ふり返る', points: ['記録して見直す'], quotes: [] },
+    ],
+  }),
+} = {}) {
   // embedInputs: 埋め込みに渡された文（どの点を埋め込み直したかを確かめる）
   const calls = { chat: 0, embed: 0, bodies: [], embedInputs: [] };
   const server = createServer(async (req, res) => {
@@ -47,6 +64,7 @@ export async function startFakeLlm({ rejectJsonSchema = false, wrapInThink = fal
     };
     if (req.url === '/v1/models') return send(200, { data: [{ id: 'fake-chat' }, { id: 'fake-embed' }] });
     if (req.url === '/v1/embeddings') {
+      if (embedDelayMs) await new Promise((r) => setTimeout(r, embedDelayMs));
       calls.embed++;
       calls.embedInputs.push(...json.input);
       return send(200, { data: json.input.map((t, index) => ({ index, embedding: embedText(t) })) });
@@ -58,7 +76,7 @@ export async function startFakeLlm({ rejectJsonSchema = false, wrapInThink = fal
       const prompt = json.messages.map((m) => m.content).join('\n');
       let name = json.response_format?.json_schema?.name;
       if (!name) name = /"searches"/.test(prompt) ? 'searches' : /"picks"/.test(prompt) ? 'picks' : /立体/.test(prompt) && /relations/.test(prompt) ? 'solid' : /"books"/.test(prompt) ? 'recommendations' : /面の名前/.test(prompt) ? 'plane' : 'line';
-      let content = JSON.stringify(name === 'far' ? far(prompt) : answer(name, prompt));
+      let content = JSON.stringify(name === 'far' ? far(prompt) : name === 'answer' ? ask(prompt) : name === 'outline' ? outline(prompt) : answer(name, prompt));
       if (wrapInThink) content = `<think>考え中</think>\n\`\`\`json\n${content}\n\`\`\``;
       return send(200, { choices: [{ message: { role: 'assistant', content } }] });
     }
