@@ -1,6 +1,6 @@
 // 依存ライブラリなしの最小 zip 実装
 // - 読み込み: 無圧縮 / deflate（DecompressionStream を使用。モダンブラウザと Node 18+ で動く）
-// - 書き出し: 無圧縮（Obsidian 用 Markdown を 1 ファイルにまとめてダウンロードするため）
+// - 書き出し: 無圧縮（テストで取り込み用の zip を作るため）
 
 const CRC_TABLE = (() => {
   const t = new Uint32Array(256);

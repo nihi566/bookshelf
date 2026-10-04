@@ -1,9 +1,7 @@
-// 外部とのやりとり: PC のコンパニオンサーバ、Obsidian の Vault フォルダ、ブックマークレット
-import { kv } from './db.js';
+// 外部とのやりとり: PC のコンパニオンサーバ、ブックマークレット
 import { state, save } from './state.js';
 import { mergeLibraries } from '../core/model.js';
 import { analysisStamp } from '../core/importing.js';
-import { loadVaultOwners, planVaultWrite } from '../core/obsidian.js';
 
 // ---- コンパニオンサーバ ----
 
@@ -43,11 +41,9 @@ export const companion = {
   merge: (library) => call('/api/library/merge', { method: 'POST', body: library }),
   analysis: () => call('/api/analysis').catch((e) => (e.status === 404 ? null : Promise.reject(e))),
   putAnalysis: (analysis) => call('/api/analysis', { method: 'PUT', body: analysis }),
-  // root: Vault 内のフォルダ名（PC 側の書き出し先をこの画面の設定に合わせる）
-  startAnalyze: (mode = 'analyze', root, wishlist = []) => call('/api/analyze', { method: 'POST', body: { mode, root, wishlist } }),
+  startAnalyze: (mode = 'analyze', wishlist = []) => call('/api/analyze', { method: 'POST', body: { mode, wishlist } }),
   job: () => call('/api/analyze'),
   cancel: () => call('/api/analyze', { method: 'DELETE' }),
-  exportVault: (root) => call('/api/obsidian/export', { method: 'POST', body: { root } }),
 };
 
 /** 同一オリジンでコンパニオンサーバが動いているか（http://localhost:8787 で開いた場合など） */
@@ -83,63 +79,6 @@ export async function syncWithPc() {
   state.lastSync = new Date().toISOString();
   await save.lastSync();
   return { analysisDir };
-}
-
-// ---- Obsidian の Vault に直接書き込む（PC の Chrome / Edge。File System Access API） ----
-
-export const fsSupported = typeof window !== 'undefined' && 'showDirectoryPicker' in window;
-
-export async function pickVault() {
-  const handle = await window.showDirectoryPicker({ id: 'bh-vault', mode: 'readwrite' });
-  await kv.set('vaultHandle', handle);
-  return handle;
-}
-
-export async function savedVault() {
-  const handle = await kv.get('vaultHandle');
-  return handle || null;
-}
-
-async function ensurePermission(handle) {
-  if ((await handle.queryPermission({ mode: 'readwrite' })) === 'granted') return true;
-  return (await handle.requestPermission({ mode: 'readwrite' })) === 'granted';
-}
-
-async function resolve(dir, path, create) {
-  const parts = path.split('/');
-  const name = parts.pop();
-  let d = dir;
-  for (const p of parts) d = await d.getDirectoryHandle(p, { create });
-  return { dir: d, name };
-}
-
-/** render(owners) は書き出すファイルの配列を返す関数（前回と同じファイルを同じ本に使い続けるため owners を渡す） */
-export async function writeVaultFs(handle, render, root) {
-  if (!(await ensurePermission(handle))) throw new Error('フォルダへの書き込みが許可されませんでした');
-  const read = async (p) => {
-    try {
-      const { dir, name } = await resolve(handle, p, false);
-      return await (await (await dir.getFileHandle(name)).getFile()).text();
-    } catch {
-      return null;
-    }
-  };
-  const plan = await planVaultWrite(render(await loadVaultOwners(read, root)), read, root);
-  for (const f of plan.writes) {
-    const { dir, name } = await resolve(handle, f.path, true);
-    const w = await (await dir.getFileHandle(name, { create: true })).createWritable();
-    await w.write(f.content);
-    await w.close();
-  }
-  for (const p of plan.deletes) {
-    try {
-      const { dir, name } = await resolve(handle, p, false);
-      await dir.removeEntry(name);
-    } catch {
-      /* 既に無い */
-    }
-  }
-  return plan;
 }
 
 // ---- ブックマークレット ----

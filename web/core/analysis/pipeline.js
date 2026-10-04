@@ -264,7 +264,7 @@ export async function recommendBooks({ library, analysis, llm, signal, onProgres
   return recs;
 }
 
-/** おすすめが選べなかったときの説明（画面と Obsidian に出す） */
+/** おすすめが選べなかったときの説明（画面に出す） */
 export function recommendationNote(recs) {
   if (!recs.length) return 'おすすめを選べませんでした。モデルが既に読んだ本しか挙げなかった可能性があります。より大きなモデル（7B 以上）で「おすすめを選び直す」を試してください。';
   if (recs.every((r) => r.verified === false)) return '挙がった本はどれも書誌データベースで見つかりませんでした。実在しない本の可能性が高いので、より大きなモデルで選び直してください。';

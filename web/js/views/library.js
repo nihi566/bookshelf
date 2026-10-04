@@ -1,7 +1,6 @@
 // ホーム・本・検索の画面
 import { html } from '../html.js';
 import { bookHighlights, dailyPicks, libraryStats, listBooks, searchHighlights, SOURCES } from '../../core/model.js';
-import { vaultPaths } from '../../core/obsidian.js';
 import { normalizeText } from '../../core/text.js';
 import { browserStore, formatPrice, loadMarks, searchWishlist, wishlistSummary } from '../../core/wishlist.js';
 import { loadWishlist } from '../wishlist-data.js';
@@ -24,7 +23,7 @@ export const home = {
     if (!s.highlights) {
       return html`${alert}<section class="card hero">
           <h1>本に引いた線を、<br>知識の立体へ。</h1>
-          <p class="help">Kindle と Play ブックスのハイライトを 1 か所に集め、Obsidian に写します。PC のローカル LLM が「点」をつないで「線」「面」「立体」に組み立て、次に読む本も提案します。</p>
+          <p class="help">Kindle と Play ブックスのハイライトを 1 か所に集めます。PC のローカル LLM が「点」をつないで「線」「面」「立体」に組み立て、次に読む本も提案します。</p>
           ${flow}
           <div class="row">
             <a class="btn primary" href="#/import">ハイライトを取り込む</a>
@@ -34,7 +33,6 @@ export const home = {
         <div class="section"><h2>使い方</h2></div>
         <ol class="card stack help" style="padding-left:2em">
           <li><b>取り込む</b> — Kindle（端末の My Clippings.txt・アプリのノートブック）と Play ブックス（ドライブのメモ）に対応。</li>
-          <li><b>Obsidian に写す</b> — 本ごとのノートにハイライトを書き出します。自分のメモは上書きされません。</li>
           <li><b>AI で立体にする</b> — PC のローカル LLM（Ollama など）が点を線・面・立体に組み立て、おすすめの本を選びます。</li>
         </ol>`;
     }
@@ -68,10 +66,7 @@ export const home = {
       <div id="home-wishlist"></div>
 
       <div class="section"><h2>最近の点</h2><a class="small" href="#/search">すべて見る</a></div>
-      ${recent.map((h) => highlightCard(h, { library: lib, lines: idx.get(h.id) }))}
-
-      <div class="section"><h2>Obsidian</h2></div>
-      <div class="card row spread"><span class="help grow">ハイライトと分析結果を Vault に写します。</span><a class="btn" href="#/export">書き出す</a></div>`;
+      ${recent.map((h) => highlightCard(h, { library: lib, lines: idx.get(h.id) }))}`;
   },
   mount(root) {
     renderHomeWishlist(root.querySelector('#home-wishlist'));
@@ -129,11 +124,6 @@ export const book = {
     if (!b || b.deleted) return html`<p class="empty">本が見つかりません。<a href="#/books">読んだ本の一覧へ</a></p>`;
     const hs = bookHighlights(state.library, b.id);
     const idx = lineIndex(state.analysis);
-    const { vaultName, root } = state.settings;
-    // 最後の書き出しと同じファイルを開く（PC が書き出していればその割り当て、このブラウザからならその割り当て）
-    const owners = (state.settings.ai.mode === 'companion' && state.pcInfo?.owners) || state.vaultOwners || {};
-    const notePath = vaultPaths(state.library, null, root, owners).books[b.id];
-    const obsidianUrl = vaultName && notePath ? `obsidian://open?vault=${encodeURIComponent(vaultName)}&file=${encodeURIComponent(notePath)}` : '';
     const linesHere = (state.analysis?.lines || []).filter((l) => l.bookIds?.includes(b.id));
     let chapter = null;
     const items = [];
@@ -152,7 +142,6 @@ export const book = {
         </div>
       </div>
       <div class="row">
-        ${obsidianUrl ? html`<a class="btn small" href="${obsidianUrl}">Obsidian で開く</a>` : html`<a class="btn small" href="#/export">Obsidian に写す</a>`}
         <button class="btn small danger" data-action="delete-book" data-id="${b.id}">この本を削除</button>
       </div>
       ${linesHere.length ? html`<div class="section"><h2>この本から伸びる線</h2></div><div class="hl-lines">${linesHere.map((l) => html`<a class="line-chip" href="#/knowledge/line/${l.id}">${l.name}</a>`)}</div>` : ''}

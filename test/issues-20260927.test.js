@@ -2,7 +2,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { bookHighlights, bookIdFor, deleteBook, emptyLibrary, highlightIdFor, listBooks, mergeLibraries, mergeParsed, updateHighlight } from '../web/core/model.js';
-import { mergeManaged, planVaultWrite, renderVault } from '../web/core/obsidian.js';
 import { SAMPLE_BOOKS } from '../web/core/sample.js';
 
 const T1 = '2025-01-01T00:00:00.000Z';
@@ -12,91 +11,6 @@ function sampleLibrary() {
   mergeParsed(lib, SAMPLE_BOOKS, { now: T1 });
   return lib;
 }
-
-function bookNote(lib, title = '小さな習慣の力') {
-  return renderVault(lib, null).find((f) => f.path === `Highlights/Books/${title}.md`).content;
-}
-
-// ---- 20260927-obsidian-spaced-property-lost ----
-
-test('空白を含む名前のプロパティ（date read）は書き出し直しても残る', () => {
-  const lib = sampleLibrary();
-  const generated = bookNote(lib);
-  const edited = generated.replace('tags: ["book-highlights/book"]\n', 'tags: ["book-highlights/book"]\ndate read: 2024-05-01\n"my rating": 5\n');
-  const merged = mergeManaged(edited, generated);
-  assert.match(merged, /^date read: 2024-05-01$/m);
-  assert.match(merged, /^"my rating": 5$/m);
-  assert.equal(merged.match(/^date read:/gm).length, 1);
-  // もう一度書き出しても増えも減りもしない
-  assert.equal(mergeManaged(merged, generated), merged);
-});
-
-test('生成キーの直後に足した複数行のプロパティ・コメントも残る', () => {
-  const lib = sampleLibrary();
-  const generated = bookNote(lib);
-  const edited = generated.replace('tags: ["book-highlights/book"]\n', 'tags: ["book-highlights/book"]\nread with:\n  - 友人A\n  - 友人B\n# 自分用のコメント\n');
-  const merged = mergeManaged(edited, generated);
-  assert.match(merged, /^read with:\n {2}- 友人A\n {2}- 友人B$/m);
-  assert.match(merged, /^# 自分用のコメント$/m);
-});
-
-test('tags に自分で足したタグは消えない（生成タグと合わせる）', () => {
-  const lib = sampleLibrary();
-  const generated = bookNote(lib);
-  const inline = mergeManaged(generated.replace('tags: ["book-highlights/book"]', 'tags: ["book-highlights/book", "名著"]'), generated);
-  assert.match(inline, /^tags: \["book-highlights\/book", "名著"\]$/m);
-  const block = mergeManaged(generated.replace('tags: ["book-highlights/book"]', 'tags:\n  - 再読したい\n  - book-highlights/book'), generated);
-  assert.match(block, /^tags: \["book-highlights\/book", "再読したい"\]$/m);
-});
-
-test('空白入りのプロパティを足したノートは、分析から外れても削除しない', async () => {
-  const lib = sampleLibrary();
-  const hs = Object.values(lib.highlights);
-  const analysis = {
-    createdAt: T1,
-    model: { chat: 'x' },
-    stats: { points: 2 },
-    lines: [{ id: 'l1', name: '線A', summary: 's', insight: '', keywords: [], highlightIds: [hs[0].id, hs[1].id], bookIds: [] }],
-    planes: [{ id: 'p1', name: '面A', summary: 's', lineIds: ['l1'] }],
-    solid: { title: 't', core: 'c', relations: [], principles: [], questions: [] },
-    isolated: [],
-    recommendations: [],
-  };
-  const disk = new Map();
-  const read = async (p) => disk.get(p) ?? null;
-  for (const w of (await planVaultWrite(renderVault(lib, analysis), read)).writes) disk.set(w.path, w.content);
-  const linePath = 'Highlights/Lines/線A.md';
-  disk.set(linePath, disk.get(linePath).replace('tags:', 'date read: 2024-05-01\ntags:'));
-  const plan = await planVaultWrite(renderVault(lib, null), read);
-  assert.ok(!plan.deletes.includes(linePath), '削除されない');
-  assert.ok(plan.orphaned.includes(linePath), '自分の書き込みがあるノートとして残す');
-});
-
-// ---- 20260927-crlf-note-duplicate-frontmatter ----
-
-test('改行コードが CRLF のノートでも frontmatter が二重にならず、CRLF のまま保たれる', async () => {
-  const lib = sampleLibrary();
-  const generated = bookNote(lib);
-  const crlf = generated.replace('\n## 自分のメモ\n', '\n## 自分のメモ\n\n読み終えた\n').replace(/\n/g, '\r\n');
-  const merged = mergeManaged(crlf, generated.replace('行動を変えたいなら', '行動を変えたいなら（更新）'));
-  assert.equal(merged.match(/^---\r?$/gm).length, 2, 'frontmatter の区切りは 2 本だけ');
-  assert.equal(merged.match(/^title:/gm).length, 1);
-  assert.ok(merged.includes('（更新）'));
-  assert.ok(merged.includes('読み終えた'));
-  assert.ok(!/[^\r]\n/.test(merged), '改行はすべて CRLF のまま');
-  // 変化が無ければ書き込まない
-  const disk = new Map([['Highlights/Books/小さな習慣の力.md', mergeManaged(crlf, generated)]]);
-  const plan = await planVaultWrite([{ path: 'Highlights/Books/小さな習慣の力.md', content: generated }], async (p) => disk.get(p) ?? null);
-  assert.equal(plan.unchanged, 1);
-});
-
-test('BOM 付きのノートでも frontmatter を正しく読む', () => {
-  const lib = sampleLibrary();
-  const generated = bookNote(lib);
-  const merged = mergeManaged('﻿' + generated.replace('tags:', 'date read: 2024-05-01\ntags:'), generated);
-  assert.equal(merged.match(/^﻿?---$/gm).length, 2);
-  assert.match(merged, /^date read: 2024-05-01$/m);
-});
 
 // ---- 20260927-sync-overwrites-unsynced-phone-edits ----
 
@@ -189,36 +103,6 @@ test('Kindle: 位置の無い（ページだけの）クリッピングは、別
   assert.deepEqual(bookHighlights(lib2, bookIdFor('PDF')).map((h) => h.text), ['短い文を伸ばした']);
 });
 
-// ---- 20260927-truncated-filename-collision-reassigns-note ----
-
-test('書名の先頭 80 文字が同じ本が後から増えても、既存のノート（と自分のメモ）は同じ本のまま', async () => {
-  const { loadVaultOwners } = await import('../web/core/obsidian.js');
-  const head = 'あ'.repeat(85);
-  const lib = emptyLibrary();
-  mergeParsed(lib, [{ title: head + '（上）', source: 'kindle', highlights: [{ text: '上巻の点', location: 1 }] }], { now: T1 });
-  const disk = new Map();
-  const read = async (p) => disk.get(p) ?? null;
-  const exportAll = async () => {
-    const files = renderVault(lib, null, { owners: await loadVaultOwners(read) });
-    const plan = await planVaultWrite(files, read);
-    for (const w of plan.writes) disk.set(w.path, w.content);
-    for (const d of plan.deletes) disk.delete(d);
-  };
-  await exportAll();
-  const [path] = [...disk.keys()].filter((p) => p.includes('/Books/'));
-  disk.set(path, disk.get(path) + '上巻の感想\n');
-  // ID の並びで前に来る別の巻を、何冊か足す
-  for (const vol of ['（中）', '（下）', '（外伝）', '（別巻）']) {
-    mergeParsed(lib, [{ title: head + vol, source: 'kindle', highlights: [{ text: vol + 'の点', location: 1 }] }], { now: '2025-02-01T00:00:00.000Z' });
-    await exportAll();
-    const note = disk.get(path);
-    assert.match(note, /上巻の点/, `${vol} を足しても、元のノートは上巻のまま`);
-    assert.match(note, /上巻の感想/);
-    assert.ok(!note.includes(vol + 'の点'), '他の巻の点が混ざらない');
-  }
-  assert.equal([...disk.keys()].filter((p) => p.includes('/Books/')).length, 5);
-});
-
 // ---- 20260927-import-merge-diverges-backup-analysis ----
 
 test('バックアップの取り込み: ライブラリと分析結果の扱いを 1 か所に統一（新しい分析だけ採用）', async () => {
@@ -254,99 +138,6 @@ test('PC の分析の待機: 通信が一時的に失敗しても待ち続け、
   assert.ok(updates.some((u) => u.reconnecting === 2), '再接続中であることを知らせる');
   const lost = await followJob({ fetchJob: async () => { throw new Error('offline'); }, onUpdate: () => {}, sleep: async () => {}, maxFailures: 3 });
   assert.equal(lost.lost, true);
-});
-
-// ---- 20260927-web-root-ignored-on-pc-export / 20260927-auto-vault-export-after-sync ----
-
-import { mkdtempSync, existsSync, readdirSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import path from 'node:path';
-import { execFile } from 'node:child_process';
-import { promisify } from 'node:util';
-import { fileURLToPath } from 'node:url';
-import { createStore } from '../cli/store.js';
-import { createCompanionServer } from '../cli/server.js';
-
-const tmp = (p) => mkdtempSync(path.join(tmpdir(), p));
-
-async function companionFor(config) {
-  const store = createStore(tmp('bh-issue-data-'));
-  const vault = tmp('bh-issue-vault-');
-  await store.saveConfig({ vault, ...config });
-  const server = createCompanionServer({ store, log: () => {}, autoExportDelay: 20, catalogFetch: async () => new Response('{}') });
-  await new Promise((r) => server.listen(0, '127.0.0.1', r));
-  const base = `http://127.0.0.1:${server.address().port}`;
-  const call = async (p, body, method = body ? 'POST' : 'GET') => (await fetch(base + p, { method, body: body && JSON.stringify(body) })).json();
-  return { store, vault, server, call };
-}
-
-const until = async (cond, ms = 3000) => {
-  const end = Date.now() + ms;
-  while (!(await cond())) {
-    if (Date.now() > end) throw new Error('timeout');
-    await new Promise((r) => setTimeout(r, 20));
-  }
-};
-
-test('「PC に書き出す」は Web で設定したフォルダ名を使い、PC の設定にも残す（画面の表示と出力先が一致）', async () => {
-  const { store, vault, server, call } = await companionFor({ root: 'Highlights' });
-  try {
-    await call('/api/library/merge', sampleLibrary());
-    const r = await call('/api/obsidian/export', { root: '読書ノート' });
-    assert.equal(r.root, '読書ノート');
-    assert.ok(existsSync(path.join(vault, '読書ノート/Books/小さな習慣の力.md')));
-    assert.equal((await store.config()).root, '読書ノート', '次からの自動書き出し・bh obsidian も同じ場所');
-    const info = await call('/api/info');
-    assert.equal(info.root, '読書ノート');
-    assert.equal(info.vaultPath, path.join(vault, '読書ノート'));
-    // フォルダ名に「..」や「/」を入れても Vault の外には出ない
-    const evil = await call('/api/obsidian/export', { root: '../../外' });
-    assert.ok(!evil.root.includes('/') && !evil.root.startsWith('.'));
-    assert.ok(existsSync(path.join(vault, evil.root)));
-  } finally {
-    server.close();
-  }
-});
-
-test('同期・取り込みのあと Vault を自動で書き出し、最後に書き出した時刻を返す（オフにもできる）', async () => {
-  const { vault, server, call } = await companionFor({});
-  try {
-    assert.equal((await call('/api/info')).lastExport, null);
-    await call('/api/library/merge', sampleLibrary());
-    await until(async () => (await call('/api/info')).lastExport);
-    const { lastExport } = await call('/api/info');
-    assert.equal(lastExport.trigger, 'sync');
-    assert.ok(lastExport.written > 0 && !lastExport.error);
-    assert.ok(Date.now() - new Date(lastExport.at).getTime() < 10000);
-    assert.ok(existsSync(path.join(vault, 'Highlights/Index.md')));
-  } finally {
-    server.close();
-  }
-  const off = await companionFor({ autoExport: false });
-  try {
-    await off.call('/api/library/merge', sampleLibrary());
-    await new Promise((r) => setTimeout(r, 150));
-    assert.equal((await off.call('/api/info')).lastExport, null);
-    assert.equal(readdirSync(off.vault).length, 0);
-  } finally {
-    off.server.close();
-  }
-});
-
-test('bh import は Vault を設定していれば続けて書き出し、bh config で最後の書き出し時刻が見える', async () => {
-  const run = promisify(execFile);
-  const BH = path.join(path.dirname(fileURLToPath(import.meta.url)), '../cli/bh.js');
-  const env = { ...process.env, BH_DATA: tmp('bh-issue-cli-') };
-  const vault = tmp('bh-issue-cli-vault-');
-  await run('node', [BH, 'config', 'vault', vault], { env });
-  const fixture = path.join(path.dirname(fileURLToPath(import.meta.url)), 'fixtures/kindle-export-ja.html');
-  const out = await run('node', [BH, 'import', fixture], { env });
-  assert.match(out.stdout, /Obsidian: 書き込み \d+/);
-  assert.ok(existsSync(path.join(vault, 'Highlights/Books/対人関係の地図.md')));
-  const cfg = await run('node', [BH, 'config'], { env });
-  assert.match(cfg.stdout, /最後に Vault に書き出した時刻: .*（import \/ 書き込み \d+ 件）/);
-  const skip = await run('node', [BH, 'import', fixture, '--no-obsidian'], { env });
-  assert.doesNotMatch(skip.stdout, /Obsidian:/);
 });
 
 // ---- 20260927-recommendation-feedback ----
@@ -399,75 +190,7 @@ test('おすすめの選定に反応を使う: 反応済みの本は候補から
   }
 });
 
-test('Obsidian のおすすめノートに反応と「読みたい本」が出る', () => {
-  const lib = sampleLibrary();
-  setFeedback(lib, { title: '次の本', author: '誰か' }, 'want');
-  const analysis = {
-    createdAt: T1, model: {}, stats: {},
-    lines: [{ id: 'l1', name: '線', summary: 's', highlightIds: [Object.keys(lib.highlights)[0]], bookIds: [] }],
-    planes: [{ id: 'p1', name: '面', summary: 's', lineIds: ['l1'] }],
-    solid: { title: 't', core: 'c', relations: [], principles: [], questions: [] },
-    isolated: [],
-    recommendations: [{ title: '次の本', author: '誰か', reason: 'r', kind: 'deepen', planeId: 'p1' }],
-  };
-  const note = renderVault(lib, analysis).find((f) => f.path.endsWith('Recommendations.md')).content;
-  assert.match(note, /- あなたの反応: 読みたい/);
-  assert.match(note, /## 読みたい本\n\n- 次の本 — 誰か/);
-});
-
 // ---- レビュー指摘（2 回目）の回帰テスト ----
-
-test('再分析で線・面の ID が変わっても、同じ名前のノート（と自分のメモ）を使い続ける', async () => {
-  const { loadVaultOwners } = await import('../web/core/obsidian.js');
-  const lib = sampleLibrary();
-  const hs = Object.values(lib.highlights);
-  const mk = (lineId, planeId) => ({
-    createdAt: T1, model: {}, stats: {},
-    lines: [{ id: lineId, name: '習慣の力', summary: 's', highlightIds: [hs[0].id, hs[1].id], bookIds: [] }],
-    planes: [{ id: planeId, name: '自己管理', summary: 's', lineIds: [lineId] }],
-    solid: { title: 't', core: 'c', relations: [], principles: [], questions: [] }, isolated: [], recommendations: [],
-  });
-  const disk = new Map();
-  const read = async (p) => disk.get(p) ?? null;
-  const exportWith = async (a) => {
-    const plan = await planVaultWrite(renderVault(lib, a, { owners: await loadVaultOwners(read) }), read);
-    for (const w of plan.writes) disk.set(w.path, w.content);
-    for (const d of plan.deletes) disk.delete(d);
-    return plan;
-  };
-  await exportWith(mk('l1', 'p1'));
-  const line = 'Highlights/Lines/習慣の力.md';
-  disk.set(line, disk.get(line) + '線についてのメモ\n');
-  for (const [l, p] of [['l2', 'p2'], ['l3', 'p3']]) {
-    const plan = await exportWith(mk(l, p));
-    assert.ok(disk.has(line) && disk.get(line).includes('線についてのメモ'));
-    assert.ok(!disk.has('Highlights/Lines/習慣の力 (2).md'), '(2) を作らない');
-    assert.ok(disk.has('Highlights/Planes/自己管理.md') && !disk.has('Highlights/Planes/自己管理 (2).md'));
-    assert.deepEqual(plan.orphaned, []);
-  }
-});
-
-test('削除した本の自分のメモ付きノートは、同名の別の本に使わない', async () => {
-  const { loadVaultOwners } = await import('../web/core/obsidian.js');
-  const head = 'い'.repeat(85);
-  const lib = emptyLibrary();
-  mergeParsed(lib, [{ title: head + 'A', source: 'kindle', highlights: [{ text: 'Aの点', location: 1 }] }], { now: T1 });
-  const disk = new Map();
-  const read = async (p) => disk.get(p) ?? null;
-  const exportAll = async () => {
-    const plan = await planVaultWrite(renderVault(lib, null, { owners: await loadVaultOwners(read) }), read);
-    for (const w of plan.writes) disk.set(w.path, w.content);
-    for (const d of plan.deletes) disk.delete(d);
-  };
-  await exportAll();
-  const [aPath] = [...disk.keys()].filter((p) => p.includes('/Books/'));
-  disk.set(aPath, disk.get(aPath) + 'Aのメモ\n');
-  deleteBook(lib, bookIdFor(head + 'A'), '2025-02-01T00:00:00.000Z');
-  mergeParsed(lib, [{ title: head + 'B', source: 'kindle', highlights: [{ text: 'Bの点', location: 1 }] }], { now: '2025-02-02T00:00:00.000Z' });
-  await exportAll();
-  assert.doesNotMatch(disk.get(aPath), /Bの点/, 'メモの残った A のノートに B を書かない');
-  assert.match(disk.get(aPath), /Aのメモ/);
-});
 
 test('同期: 未同期の編集をした短いハイライトが、もう一方の端末で伸ばした版に置き換わっても編集を引き継ぐ', () => {
   const { pc, phone, id } = twoDevices();
@@ -500,75 +223,4 @@ test('同期: ソースの並びと置き換え先は、どちら向きに統合
   const b = emptyLibrary();
   mergeParsed(b, [{ title: '本', source: 'kindle', highlights: [{ text: 'y', location: 1 }] }], { now: T1 });
   assert.deepEqual(mergeLibraries(a, b).books[bookIdFor('本')].sources, mergeLibraries(b, a).books[bookIdFor('本')].sources);
-});
-
-test('frontmatter: 空白の無いコロンを含むキー・カンマ区切りの tags・ノートの種類ごとの生成キー', async () => {
-  const lib = sampleLibrary();
-  const generated = bookNote(lib);
-  const a = mergeManaged(generated.replace('tags: ["book-highlights/book"]\n', 'tags: ["book-highlights/book"]\nref:1: x\n'), generated);
-  assert.match(a, /^ref:1: x$/m);
-  const once = mergeManaged(generated.replace('tags: ["book-highlights/book"]', 'tags: book-highlights/book, mytag'), generated);
-  assert.match(once, /^tags: \["book-highlights\/book", "mytag"\]$/m);
-  assert.equal(mergeManaged(once, generated), once, '2 回目も崩れない');
-  // 本のノートに自分で keywords を足していたら、本を消しても削除しない
-  const disk = new Map();
-  const read = async (p) => disk.get(p) ?? null;
-  for (const w of (await planVaultWrite(renderVault(lib, null), read)).writes) disk.set(w.path, w.content);
-  const p = 'Highlights/Books/小さな習慣の力.md';
-  disk.set(p, disk.get(p).replace('tags:', 'keywords: [習慣]\ntags:'));
-  deleteBook(lib, bookIdFor('小さな習慣の力'));
-  const plan = await planVaultWrite(renderVault(lib, null), read);
-  assert.ok(plan.orphaned.includes(p) && !plan.deletes.includes(p));
-});
-
-test('planVaultWrite は書き出したファイルの持ち主を返す（「Obsidian で開く」で使う）', async () => {
-  const lib = sampleLibrary();
-  const plan = await planVaultWrite(renderVault(lib, null), async () => null);
-  assert.equal(plan.owners['Highlights/Books/小さな習慣の力.md'], bookIdFor('小さな習慣の力'));
-});
-
-test('分析中に届いた同期の自動書き出しは、分析が失敗したあとで行う・/api/info は持ち主を返す', async () => {
-  const { store, server, call } = await companionFor({});
-  try {
-    server.job.running = true;
-    await call('/api/library/merge', sampleLibrary());
-    await new Promise((r) => setTimeout(r, 120));
-    assert.equal((await call('/api/info')).lastExport, null, '分析中は書き出さない');
-    server.job.running = false;
-    // チャットモデル未設定の分析はすぐ失敗する → 保留していた書き出しを行う
-    await call('/api/analyze', { mode: 'analyze' });
-    await until(async () => (await call('/api/info')).lastExport);
-    const info = await call('/api/info');
-    assert.equal(info.lastExport.trigger, 'sync');
-    assert.equal(info.owners['Highlights/Books/小さな習慣の力.md'], bookIdFor('小さな習慣の力'));
-    assert.ok(!(await store.state()).lastExport.error);
-  } finally {
-    server.close();
-  }
-});
-
-test('Web から既定のフォルダ名を送らなければ、PC の設定は変わらない', async () => {
-  const { store, vault, server, call } = await companionFor({ root: '読書' });
-  try {
-    await call('/api/library/merge', sampleLibrary());
-    const r = await call('/api/obsidian/export', {});
-    assert.equal(r.root, '読書');
-    assert.equal((await store.config()).root, '読書');
-    assert.ok(existsSync(path.join(vault, '読書/Index.md')));
-  } finally {
-    server.close();
-  }
-});
-
-test('bh import: Vault が見つからなくても取り込みは成功（書き出しの失敗は警告）', async () => {
-  const run = promisify(execFile);
-  const BH = path.join(path.dirname(fileURLToPath(import.meta.url)), '../cli/bh.js');
-  const env = { ...process.env, BH_DATA: tmp('bh-issue-cli2-') };
-  await run('node', [BH, 'config', 'vault', path.join(tmpdir(), 'no-such-vault-' + Date.now())], { env });
-  const fixture = path.join(path.dirname(fileURLToPath(import.meta.url)), 'fixtures/kindle-export-ja.html');
-  const out = await run('node', [BH, 'import', fixture], { env });
-  assert.match(out.stdout, /取り込み: 新しい点 2 件/);
-  assert.match(out.stdout, /取り込みは保存しましたが、Obsidian への書き出しに失敗しました/);
-  const list = await run('node', [BH, 'list'], { env });
-  assert.match(list.stdout, /本 1 冊/);
 });
