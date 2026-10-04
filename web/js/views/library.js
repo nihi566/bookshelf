@@ -39,8 +39,7 @@ export const home = {
           <li><b>AI で立体にする</b> — PC のローカル LLM（Ollama など）が点を線・面・立体に組み立て、おすすめの本を選びます。</li>
         </ol>`;
     }
-    const today = new Date(Date.now() + shuffle * 86400000);
-    const picks = dailyPicks(lib, 3, today);
+    const picks = dailyPicks(lib, 3, new Date(), shuffle);
     const idx = lineIndex(a);
     const recent = searchHighlights(lib, '').slice(0, 5);
     const bySource = [...Object.entries(s.bySource).map(([k, v]) => `${SOURCES[k] || k} ${v}`), ...(s.thoughts ? [`${THOUGHT_LABEL} ${s.thoughts}`] : [])];

@@ -1,10 +1,15 @@
 // 読書記録（GitHub の records ブランチにある records.json）を扱う純関数。ブラウザと Node で共用する。
 // 形: { version: 1, records: { "<本の ID>": {
 //   title, author, asin, volumeId（表紙に使う）, read_on: "YYYY-MM-DD"（読み終えた日）, pages: 整数|null（ページ数）, updated_at
-// } } }
+// } }, excluded: { "<本の ID>": 外した時刻 } }
 // 本の ID はライブラリの本の ID（線を引いた本）か、MANUAL_ID_PREFIX 付きの ID（ライブラリに無い本を手で足したもの）。
 // 1 冊 = 1 件。読んだ日に、その本の冊数とページ数を数える。
 // 読んだ日は 'YYYY-MM-DD' の文字列のまま扱い、Date に変換しない（UTC 解釈で日付がずれるため）。
+//
+// 自動の記録: 線が 1 本でもある本は読み終えたとみなす（autoRecords）。records.json には書かず、表示のたびにライブラリから作る。
+// 手で記録した本（records）と、利用者が記録から外した本（excluded）は自動にしない。
+
+import { listBooks } from './model.js';
 
 export const RECORDS_VERSION = 1;
 export const MANUAL_ID_PREFIX = 'manual-';
@@ -69,7 +74,9 @@ export function parseRecordsFile(json) {
       updated_at: typeof entry.updated_at === 'string' ? entry.updated_at : '',
     };
   }
-  return { version: RECORDS_VERSION, records };
+  const excluded = {};
+  if (isPlainObject(json.excluded)) for (const [bookId, at] of Object.entries(json.excluded)) if (typeof at === 'string') excluded[bookId] = at;
+  return { version: RECORDS_VERSION, records, excluded };
 }
 
 /** 入力欄のページ数（空なら null）。数でない・範囲外なら例外 */
@@ -85,14 +92,20 @@ export function parsePagesInput(value) {
  * 1 件の変更を当てた新しいファイルを返す（引数は変更しない）。
  * 変更する本以外の項目・未知のキーはそのまま残す（他端末や将来の版が書いた内容を消さないため）
  * change = { type: 'read', book_id, title, author?, asin?, volumeId?, read_on, pages? } | { type: 'remove', book_id }
+ *        | { type: 'exclude', book_id }（記録を消し、線があっても自動で記録しない本にする）
  */
 export function applyChange(file, change, now) {
   const bookId = String(change?.book_id ?? '');
   if (!bookId) throw new Error('book_id がありません');
   const records = { ...file.records };
+  const excluded = { ...(isPlainObject(file.excluded) ? file.excluded : {}) };
   if (change.type === 'remove') {
     delete records[bookId];
+  } else if (change.type === 'exclude') {
+    delete records[bookId];
+    excluded[bookId] = now;
   } else if (change.type === 'read') {
+    delete excluded[bookId];
     if (!isValidDate(change.read_on)) throw new Error('読んだ日が不正です');
     const pages = change.pages ?? null;
     if (!isValidPages(pages)) throw new Error('ページ数が不正です');
@@ -110,7 +123,52 @@ export function applyChange(file, change, now) {
   } else {
     throw new Error('未知の変更です');
   }
-  return { ...file, records };
+  return { ...file, records, excluded };
+}
+
+// 線を引いた時刻は日本時間の日付にする（Play ブックスのメモの日付は日本時間の 0 時で入るので、端末の時間帯で日付が変わらないように）
+const JST_DATE = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Tokyo', year: 'numeric', month: '2-digit', day: '2-digit' });
+
+/** 本ごとの最初の線の日（日本時間）。日付のある線だけを見る */
+function firstHighlightDates(library) {
+  const first = new Map();
+  for (const h of Object.values(library.highlights)) {
+    if (h.deleted || !h.createdAt) continue;
+    // 日付だけの値は Date に通すと UTC の 0 時として読まれてずれるので、そのまま使う
+    const time = isValidDate(h.createdAt) ? null : new Date(h.createdAt);
+    if (time && Number.isNaN(time.getTime())) continue;
+    const date = time ? JST_DATE.format(time) : h.createdAt;
+    if (!first.has(h.bookId) || date < first.get(h.bookId)) first.set(h.bookId, date);
+  }
+  return first;
+}
+
+/**
+ * 線が 1 本でもある本を、読み終えた本として自動で記録したもの（records.json には書かない）。
+ * 読んだ日は最初に線を引いた日。線に日付が無ければ Kindle の最終ハイライト日（Book.annotatedOn）。
+ * 手で記録した本・記録から外した本は除く。読んだ日が分からない本は undated に回す（月・日の集計に入れない）
+ * 戻り値: { dated: { "<本の ID>": 記録 }, undated: [記録] }。記録には auto: true が付く
+ */
+export function autoRecords(library, file) {
+  const dated = {};
+  const undated = [];
+  const firstDates = firstHighlightDates(library);
+  for (const book of listBooks(library)) {
+    if (Object.hasOwn(file.records, book.id) || Object.hasOwn(file.excluded ?? {}, book.id)) continue;
+    const entry = {
+      title: book.title,
+      author: book.author || '',
+      asin: ASIN.test(book.asin || '') ? book.asin : '',
+      volumeId: VOLUME_ID.test(book.volumeId || '') ? book.volumeId : '',
+      read_on: firstDates.get(book.id) || (isValidDate(book.annotatedOn) ? book.annotatedOn : ''),
+      pages: null,
+      auto: true,
+    };
+    if (entry.read_on) dated[book.id] = entry;
+    else undated.push({ book_id: book.id, ...entry });
+  }
+  undated.sort((a, b) => a.title.localeCompare(b.title, 'ja'));
+  return { dated, undated };
 }
 
 export function encodeBase64Utf8(s) {

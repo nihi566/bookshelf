@@ -1,8 +1,9 @@
 // 読書記録の画面（年・月・日ごとに、読み終えた本の冊数とページ数）。
 // 記録は GitHub の records ブランチの records.json に保存する（core/records-github.js）。どの端末からでも同じ記録を見られる。
 import { html } from '../html.js';
+// 線を 1 本でも引いた本は自動で記録する（core/records.js の autoRecords。records.json には書かない）。手で付けた記録が優先。
 import { listBooks } from '../../core/model.js';
-import { addMonths, newManualId, parsePagesInput, summarizeMonth, summarizeYear, todayLocal, weekdayLabel } from '../../core/records.js';
+import { addMonths, autoRecords, newManualId, parsePagesInput, summarizeMonth, summarizeYear, todayLocal, weekdayLabel } from '../../core/records.js';
 import { BRANCH, OWNER, REPO, fetchRecords, recordsErrorMessage, saveChange } from '../../core/records-github.js';
 import { bookSpine, openSheet, toast } from '../ui.js';
 
@@ -91,9 +92,15 @@ function monthBars(year, selectedMonth, lastMonth) {
   })}</div>`;
 }
 
+/** 手で付けた記録と、線から自動で付けた記録を合わせたもの（手で付けた記録が優先） */
+function allRecords(state) {
+  const auto = autoRecords(state.library, rec.file);
+  return { records: { ...auto.dated, ...rec.file.records }, undated: auto.undated };
+}
+
 function itemRow(item, canEdit) {
   const meta = item.pages != null ? `${item.pages.toLocaleString('ja-JP')} ページ` : 'ページ数未記入';
-  const inner = html`${bookSpine(item)}<span class="grow"><span class="title">${item.title}</span><span class="meta">${item.author ? `${item.author} ・ ` : ''}${meta}</span></span>`;
+  const inner = html`${bookSpine(item)}<span class="grow"><span class="title">${item.title}</span><span class="meta">${item.auto ? html`<span class="badge">自動</span> ` : ''}${item.author ? `${item.author} ・ ` : ''}${meta}</span></span>`;
   return html`<li class="rec-item">${canEdit
     ? html`<button type="button" class="book-item" data-rec="edit" data-id="${item.book_id}" aria-label="${item.title} の記録を編集">${inner}<span class="rec-edit" aria-hidden="true">✎</span></button>`
     : html`<span class="book-item">${inner}</span>`}</li>`;
@@ -124,7 +131,7 @@ function body(ctx) {
     return html`<p class="notice err">${recordsErrorMessage(rec.error)}</p>
       <div class="row" style="margin-top:12px"><button type="button" class="btn small" data-rec="reload">読み込み直す</button></div>${tokenSection(token)}`;
   }
-  const records = rec.file.records;
+  const { records, undated } = allRecords(ctx.state);
   const period = periodOf(ctx.query);
   const [ty, tm] = todayLocal().split('-').map(Number);
   const month = summarizeMonth(records, period.year, period.month);
@@ -150,6 +157,12 @@ function body(ctx) {
       ? month.days.map((day) => html`<h3 class="chapter">${dayHeading(day)} <span class="small muted">${day.count} 冊・${day.pages.toLocaleString('ja-JP')} ページ</span></h3>
           <ul class="book-list">${day.items.map((item) => itemRow(item, canEdit))}</ul>`)
       : html`<p class="empty">この月に読み終えた本の記録はまだありません。${canEdit ? '' : 'GitHub のトークンを保存すると記録できます。'}</p>`}
+    <p class="small muted">線を 1 本でも引いた本は、最初に線を引いた日に読み終えたとして自動で数えます（「自動」の印）。${canEdit ? 'タップすると読んだ日・ページ数を直したり、記録から外したりできます。' : ''}</p>
+    ${undated.length
+      ? html`<details class="rec-undated"><summary>読み終えた日が分からない本（${undated.length} 冊・集計に入りません）</summary>
+          <p class="small muted">線を引いた日が残っていない本です。${canEdit ? 'タップして読み終えた日を入れると集計に入ります。' : ''}Kindle の本は、拡張機能の「全ての本を取り込み直す」で最後に線を引いた日が入ります。</p>
+          <ul class="book-list">${undated.map((item) => itemRow(item, canEdit))}</ul></details>`
+      : ''}
     <div class="row" style="margin-top:16px"><button type="button" class="btn small" data-rec="reload">読み込み直す</button></div>
     ${tokenSection(token)}`;
 }
@@ -161,21 +174,30 @@ function openRecordSheet(state, { bookId = '', onSaved }) {
   const libBook = bookId && Object.hasOwn(state.library.books, bookId) ? state.library.books[bookId] : null;
   const fixed = existing || libBook;
   const books = listBooks(state.library);
+  // 線から自動で付いた記録（日付が分からない本は read_on が空）
+  const { dated, undated } = bookId && !existing ? autoRecords(state.library, rec.file) : { dated: {}, undated: [] };
+  const auto = (Object.hasOwn(dated, bookId) ? dated[bookId] : undated.find((item) => item.book_id === bookId)) || null;
+  // 線のある本は、記録を消すと自動で記録し直されるので「外す」（自動でも記録しない）にする
+  const hasHighlights = Boolean(bookId) && books.some((b) => b.id === bookId);
   openSheet(
-    html`<h2>${existing ? '読書記録を編集' : '読み終えた本を記録'}</h2>
+    html`<h2>${existing ? '読書記録を編集' : auto ? '自動の記録を確かめる' : '読み終えた本を記録'}</h2>
       ${fixed
         ? html`<p class="quote">${fixed.title}</p>`
         : html`<label class="field"><span>本</span><select name="book">${books.map((b) => html`<option value="${b.id}">${b.title}</option>`)}<option value="">ライブラリに無い本（書名を入れる）</option></select></label>
           <label class="field"><span>書名（ライブラリに無い本のとき）</span><input type="text" name="title" maxlength="200"></label>
           <label class="field"><span>著者（任意）</span><input type="text" name="author" maxlength="100"></label>`}
-      <label class="field"><span>読み終えた日</span><input type="date" name="read_on" required value="${existing?.read_on || todayLocal()}"></label>
+      ${auto ? html`<p class="small muted">線を引いた本なので自動で記録しています。${auto.read_on ? '読み終えた日は最初に線を引いた日です。' : '線を引いた日が分からないので、読み終えた日を入れてください。'}保存すると手で付けた記録になります。</p>` : ''}
+      <label class="field"><span>読み終えた日</span><input type="date" name="read_on" required value="${existing?.read_on || auto?.read_on || todayLocal()}"></label>
       <label class="field"><span>ページ数（分からなければ空のまま）</span><input type="number" name="pages" inputmode="numeric" min="1" step="1" value="${existing?.pages ?? ''}"></label>
-      <div class="row spread">${existing ? html`<button class="btn danger" value="delete">記録を消す</button>` : html`<span></span>`}<span class="row"><button class="btn" value="cancel">やめる</button><button class="btn primary" value="save">保存</button></span></div>`,
+      <div class="row spread">${existing || auto ? html`<button class="btn danger" value="delete">${hasHighlights ? '記録から外す' : '記録を消す'}</button>` : html`<span></span>`}<span class="row"><button class="btn" value="cancel">やめる</button><button class="btn primary" value="save">保存</button></span></div>`,
     async (data, action) => {
       const token = loadToken();
       let change;
       try {
-        if (action === 'delete') {
+        if (action === 'delete' && hasHighlights) {
+          if (!confirm(`『${fixed.title}』を読書記録から外しますか？線を引いた本でも、自動では記録しなくなります（後から手で記録すると戻ります）。`)) return true;
+          change = { type: 'exclude', book_id: bookId };
+        } else if (action === 'delete') {
           if (!confirm(`『${fixed.title}』の記録を消しますか？`)) return true;
           change = { type: 'remove', book_id: bookId };
         } else {
@@ -202,7 +224,7 @@ function openRecordSheet(state, { bookId = '', onSaved }) {
         toast(err.kind ? recordsErrorMessage(err) : err.message, 5000);
         return true;
       }
-      toast(action === 'delete' ? '記録を消しました' : '記録しました');
+      toast(change.type === 'exclude' ? '記録から外しました' : change.type === 'remove' ? '記録を消しました' : '記録しました');
       onSaved(change);
       return false;
     },
