@@ -29,6 +29,8 @@ export const state = {
   servedByCompanion: false,
   job: null,
   lastSync: null,
+  // 最後の PC との同期が失敗したか（保存しない。開き直すたびに同期し直す）
+  pcSyncFailed: false,
   // PC のコンパニオンサーバの状態（出力先・最後に Vault に書き出した結果など）
   pcInfo: null,
   // このブラウザから Vault のフォルダに最後に書き出した結果

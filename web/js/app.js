@@ -8,7 +8,7 @@ import { book, books, home, search } from './views/library.js';
 import { isolatedView, knowledge, lineView, planeView } from './views/knowledge.js';
 import { exportView, importView, kindleSyncBlock, settingsView } from './views/settings.js';
 import { wishlist } from './views/wishlist.js';
-import { FEEDBACK_LABELS, deleteBook, emptyLibrary, mergeParsed, setFeedback, updateHighlight } from '../core/model.js';
+import { FEEDBACK_LABELS, deleteBook, emptyLibrary, listBooks, mergeParsed, setFeedback, updateHighlight } from '../core/model.js';
 import { parseFiles } from '../core/parsers/index.js';
 import { applyImport, makeBackup } from '../core/importing.js';
 import { isNotebookJson, parseNotebookJson } from '../core/parsers/kindle-notebook.js';
@@ -308,6 +308,7 @@ async function cancelAnalysis() {
 async function sync({ quiet = false } = {}) {
   try {
     const { analysisDir } = await syncWithPc();
+    state.pcSyncFailed = false;
     if (!quiet) toast(`PC と同期しました${analysisDir ? `（分析: ${analysisDir}）` : ''}`);
     render({ keepScroll: true });
     // PC は同期のあと自動で Vault に書き出すので、少し待ってから結果（最後に書き出した時刻）を取り直す
@@ -321,7 +322,12 @@ async function sync({ quiet = false } = {}) {
       pollPcJob().catch((e) => setJob({ running: false, error: e.message }));
     }
   } catch (e) {
+    // 本が 0 冊のとき「読んだ本」に PC のつなぎ方を出すため、失敗を覚えておく
+    const wasFailed = state.pcSyncFailed;
+    state.pcSyncFailed = true;
     if (!quiet) toast(e.message, 5000);
+    // 空表示に案内を出すために描き直す（本があれば空表示は出ないので、絞り込みの入力中を描き直さない）
+    if (!wasFailed && parseHash().path === '/books' && !listBooks(state.library).length) render({ keepScroll: true });
   }
 }
 

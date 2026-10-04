@@ -5,7 +5,7 @@ import { vaultPaths } from '../../core/obsidian.js';
 import { normalizeText } from '../../core/text.js';
 import { browserStore, formatPrice, loadMarks, searchWishlist, wishlistSummary } from '../../core/wishlist.js';
 import { loadWishlist } from '../wishlist-data.js';
-import { bookRow, highlightCard, kindleAlertBlock, lineIndex, sourceBadge, spineColor } from '../ui.js';
+import { bookRow, emptyBooksBlock, highlightCard, kindleAlertBlock, lineIndex, sourceBadge, spineColor } from '../ui.js';
 
 const flow = html`<div class="flow" aria-label="点から立体へ">
   <div class="f-point"><b>点</b>線を引いた一文</div>
@@ -119,7 +119,7 @@ export const books = {
       <form class="search-box" data-form="book-filter" role="search"><input type="search" name="q" value="${query.get('q') || ''}" placeholder="書名・著者で絞り込む" aria-label="書名・著者で絞り込む"></form>
       <div class="chips">${chip('source', '', 'すべて')}${chip('source', 'kindle', 'Kindle')}${chip('source', 'playbooks', 'Play Books')}</div>
       <div class="chips" style="margin-top:6px">${chip('sort', 'recent', '最近')}${chip('sort', 'title', '書名')}${chip('sort', 'count', '点の数')}</div>
-      ${list.length ? html`<ul class="book-list">${list.map(bookRow)}</ul>` : html`<p class="empty">本がありません。<a href="#/import">取り込む</a></p>`}`;
+      ${list.length ? html`<ul class="book-list">${list.map(bookRow)}</ul>` : emptyBooksBlock(state)}`;
   },
 };
 
