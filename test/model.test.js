@@ -86,6 +86,16 @@ test('検索・一覧・今日の点', () => {
   assert.deepEqual(dailyPicks(lib, 3, d).map((h) => h.id), dailyPicks(lib, 3, d).map((h) => h.id));
 });
 
+test('今日の点の「別の点」は日付ではなく渡した種で選ぶ（翌日の今日の点と同じ組にならない）', () => {
+  const lib = sampleLibrary();
+  const d = new Date(2025, 5, 1);
+  const ids = (seed) => dailyPicks(lib, 3, d, seed).map((h) => h.id).join();
+  assert.equal(ids('abc'), ids('abc'), '同じ種なら同じ組');
+  assert.ok(new Set(['s1', 's2', 's3', 's4', 's5'].map(ids)).size > 1, '種が違えば違う組が出る');
+  const nextDay = dailyPicks(lib, 3, new Date(2025, 5, 2)).map((h) => h.id).join();
+  assert.notEqual(ids('s1'), nextDay, '種を渡したら翌日の今日の点とは別の組');
+});
+
 function fakeAnalysis(lib) {
   const hs = Object.values(lib.highlights);
   return {

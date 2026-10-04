@@ -548,7 +548,8 @@ const actions = {
     render();
   },
   shuffle() {
-    shuffle++;
+    // 押すたびに新しい種で選び直す（開き直すたびに同じ並びが出ないよう、回数ではなく乱数にする）
+    shuffle = Math.random().toString(36).slice(2);
     render({ keepScroll: true });
   },
   'run-analysis': () => runAnalysis('analyze'),
