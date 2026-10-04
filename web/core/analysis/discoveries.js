@@ -4,7 +4,9 @@
 //   kind: 'cross'    … 既にある線に増えた点が、別の本の点とつながった
 //         'line'     … 新しい線ができた（別の本の 2 点を見せる）
 //         'isolated' … 前回「まだつながらない点」だった点が、線に入った
-// 最初の分析・作り直した分析では作らない（すべてが「新しい」になり、思いがけなさが無くなるため）
+//         'far'      … 遠いつながり（far.js）が新しく見つかった。lineName は共通する考え、reason はなぜつながるか
+// 最初の分析・作り直した分析では作らない（すべてが「新しい」になり、思いがけなさが無くなるため）。
+// 遠いつながりは線の ID に依らず、1 回の分析で 10 組までしか判定しないので、作り直した分析でも作る
 
 import { hash } from '../text.js';
 import { dot } from './vectors.js';
@@ -77,6 +79,11 @@ export function findDiscoveries({ previous, lines, sourceOf, vectorOf, formerIds
       return true;
     })
     .slice(0, DISCOVERIES_PER_ANALYSIS);
+}
+
+/** 新しく見つかった遠いつながり（far.js の FarConnection）を発見にする */
+export function farDiscovery(f) {
+  return { id: discoveryId('far', '', [f.a, f.b]), kind: 'far', lineId: '', lineName: f.idea, reason: f.explanation, pointIds: [f.a, f.b], foundAt: f.foundAt };
 }
 
 /** 発見として使える形か（ほかの端末・バックアップから届いた分析の中の発見を、画面に出す前に確かめる） */

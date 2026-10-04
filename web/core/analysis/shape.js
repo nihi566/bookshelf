@@ -4,6 +4,7 @@
 // ここでは中身の正しさまでは見ず、使う場所が前提にしている形（配列・文字列）だけを確かめる。
 
 import { isDiscovery } from './discoveries.js';
+import { isFarConnection } from './far.js';
 
 const isStr = (v, max = 200) => typeof v === 'string' && v.length <= max;
 const isIdList = (v) => Array.isArray(v) && v.every((x) => isStr(x, 80));
@@ -32,6 +33,10 @@ export function analysisShapeError(a, now = Date.now()) {
   if (a.isolated != null && !isIdList(a.isolated)) return 'まだつながらない点（isolated）の形が違います';
   if (!a.solid || typeof a.solid !== 'object' || Array.isArray(a.solid)) return '立体（solid）の形が違います';
   if (a.discoveries != null && (!Array.isArray(a.discoveries) || !a.discoveries.every(isDiscovery))) return '発見（discoveries）の形が違います';
+  if (a.farConnections != null && (!Array.isArray(a.farConnections) || !a.farConnections.every(isFarConnection))) return '遠いつながり（farConnections）の形が違います';
+  if (a.farNote != null && !isStr(a.farNote, 1000)) return '遠いつながりの説明（farNote）の形が違います';
+  const far = a.stats?.far;
+  if (far != null && (typeof far !== 'object' || !['candidates', 'calls', 'found'].every((k) => Number.isInteger(far[k]) && far[k] >= 0))) return '遠いつながりの件数（stats.far）の形が違います';
   return '';
 }
 
