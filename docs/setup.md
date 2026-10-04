@@ -9,7 +9,7 @@
 
 1. このリポジトリの **Settings → Pages → Build and deployment → Source** を「**GitHub Actions**」にする
 2. `main` ブランチに push すると `.github/workflows/pages.yml` がテストして `web/` を公開する
-3. `https://<ユーザー名>.github.io/book-highlights/` を開き、スマホではホーム画面に追加する
+3. `https://<ユーザー名>.github.io/bookshelf/` を開き、スマホではホーム画面に追加する
 
 公開されるのはアプリのプログラムだけです。ハイライトは各端末のブラウザ（IndexedDB）と PC の `data/` にしか保存されません。
 

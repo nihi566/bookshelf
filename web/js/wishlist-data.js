@@ -5,7 +5,7 @@ import { parseWishlist } from '../core/wishlist.js';
 // 手元のファイルが無い・古いクローンのときは、公開 URL から読む（GitHub Pages は CORS を許可している）。
 export const WISHLIST_URLS = [
   new URL('../wishlist-site/wishlist.json', import.meta.url).href,
-  'https://nihi566.github.io/book-highlights/wishlist-site/wishlist.json',
+  'https://nihi566.github.io/bookshelf/wishlist-site/wishlist.json',
 ];
 
 let loaded = null; // 成功した結果だけを覚える（開いている間は読み直さない）

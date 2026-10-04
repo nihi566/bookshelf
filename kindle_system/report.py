@@ -1,11 +1,11 @@
 """
 report.py
 ---------
-蔵書一覧（読みたい本 / 購入済み本 / 全部）を、book-highlights の web/wishlist-site/（GitHub Pages で公開される）に
+蔵書一覧（読みたい本 / 購入済み本 / 全部）を、bookshelf の web/wishlist-site/（GitHub Pages で公開される）に
 データだけの wishlist.json として書き出すバッチスクリプト。画面は持たない。
 
-欲しい本の画面は book-highlights アプリ（https://nihi566.github.io/book-highlights/#/wishlist）にあり、
-同じ場所からこの wishlist.json を fetch して表示する。見た目・操作を変えるときは book-highlights の web/ を直す。
+欲しい本の画面は bookshelf アプリ（https://nihi566.github.io/bookshelf/#/wishlist）にあり、
+同じ場所からこの wishlist.json を fetch して表示する。見た目・操作を変えるときは bookshelf の web/ を直す。
 
 画面ではタグ（読みたい / 購入済み / 読んだ。旧画面の「読みたくない」は廃止）・「見た」本の★評価・種別
 （マンガ / 本）をブラウザに保存でき、「見た・評価を書き出す」で JSON にして
@@ -44,7 +44,7 @@ from src.book_kind import KINDS, classify_kind
 from src.models import UNPRICED_REASONS
 from src.repository import MARK_TAGS, UNKNOWN_TITLE, get_all_price_points, get_book_marks, get_books, get_paid_price_points, get_unpriced_reasons
 
-# book-highlights アプリが読む欲しい本のデータ（wishlist.json）の形式名と版
+# bookshelf アプリが読む欲しい本のデータ（wishlist.json）の形式名と版
 WISHLIST_FILE_FORMAT = "kindle-wishlist"
 WISHLIST_FILE_VERSION = 1
 # 値下がり・読み放題入りを知らせる Atom フィード（feed.xml）に載せる件数の上限（新しい方から）
@@ -135,7 +135,7 @@ def _sources(book: dict) -> list:
 
 def build_wishlist(books: list) -> dict:
     """
-    欲しい本のデータ（book-highlights アプリが同じオリジンから fetch する wishlist.json）を組み立てる。
+    欲しい本のデータ（bookshelf アプリが同じオリジンから fetch する wishlist.json）を組み立てる。
 
     画面は持たずデータだけを渡す。価格は index.html と同じく KU の本（価格が 0 で保存される）と
     未取得の本を null にする。生成時刻は載せない（自動公開のたびに差分が出て、データが同じでも
@@ -171,7 +171,7 @@ def build_wishlist(books: list) -> dict:
                 "price_low": trend.get("low"),
                 "price_history": book.get("price_history") or [],
                 "price_reason": _price_reason(book, price, is_ku),
-                # 読書メーターの本 ID（数字だけ。book-highlights が https://bookmeter.com/books/<ID> を開く）
+                # 読書メーターの本 ID（数字だけ。bookshelf が https://bookmeter.com/books/<ID> を開く）
                 "bookmeter_id": _bookmeter_id(book.get("bookmeter_id")),
             }
         )
@@ -295,7 +295,7 @@ def _require_env(name: str) -> str:
 
 def _inside_git_work_tree(path: str) -> bool:
     """path 自身か親のどれかに .git（フォルダ、または worktree のファイル）があるか。
-    公開先は book-highlights の中の web/wishlist-site/ なので、リポジトリ直下に限らない。"""
+    公開先は bookshelf の中の web/wishlist-site/ なので、リポジトリ直下に限らない。"""
     current = os.path.abspath(path)
     while True:
         if os.path.exists(os.path.join(current, ".git")):

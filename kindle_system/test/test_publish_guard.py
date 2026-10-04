@@ -1,7 +1,7 @@
 """
 test_publish_guard.py
 ---------------------
-run.ensure_safe_to_publish() のテスト。公開先は人や他のセッションが作業する book-highlights の作業ツリーの中なので、
+run.ensure_safe_to_publish() のテスト。公開先は人や他のセッションが作業する bookshelf の作業ツリーの中なので、
 main 以外のブランチ・rebase / merge の途中・公開する 2 ファイル以外の変更があるときは git を触らずに止めること。
 
 一時フォルダに本物の git リポジトリを作って確かめる（git の判定そのものを確かめたいので、モックしない）。
