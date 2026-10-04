@@ -11,6 +11,8 @@ export const WISHLIST_URLS = [
 // 値下がり・読み放題入りを知らせるフィード（kindle_system/report.py が wishlist.json と一緒に書き出す）。
 // フィードリーダーに登録する URL なので、bh serve で開いていても公開先の URL を案内する
 export const FEED_URL = 'https://nihi566.github.io/bookshelf/wishlist-site/feed.xml';
+// そのうち読みたい本の出来事・希望価格への到達・大きな値下がりだけを載せるフィード（report.py の PICKED_FEED_FILE）
+export const FEED_WANTED_URL = 'https://nihi566.github.io/bookshelf/wishlist-site/feed-wanted.xml';
 
 let loaded = null; // 成功した結果だけを覚える（開いている間は読み直さない）
 let loading = null;

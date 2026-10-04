@@ -542,3 +542,12 @@ test('FEED_URL: 欲しい本の画面が案内するフィードは、wishlist.j
   const published = WISHLIST_URLS.find((url) => url.startsWith('https://'));
   assert.equal(FEED_URL, published.replace(/wishlist\.json$/, 'feed.xml'));
 });
+
+test('FEED_WANTED_URL: 読みたい本・大きな値下がりだけのフィードも同じ公開先（kindle_system/report.py の PICKED_FEED_FILE）', async () => {
+  const { FEED_URL, FEED_WANTED_URL } = await import('../web/js/wishlist-data.js');
+  const { readFile } = await import('node:fs/promises');
+  const report = await readFile(new URL('../kindle_system/report.py', import.meta.url), 'utf8');
+  const name = /^PICKED_FEED_FILE = "([^"]+)"$/m.exec(report)?.[1];
+  assert.ok(name, 'report.py に PICKED_FEED_FILE がある');
+  assert.equal(FEED_WANTED_URL, FEED_URL.replace(/feed\.xml$/, name));
+});

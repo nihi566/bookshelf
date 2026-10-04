@@ -142,9 +142,9 @@ class PublishGitSequenceTest(unittest.TestCase):
             called_cmds,
             [
                 ["git", "pull", "--rebase", "--autostash", "-q"],
-                ["git", "add", "wishlist.json", "feed.xml"],
-                ["git", "diff", "--cached", "--quiet", "--", "wishlist.json", "feed.xml"],
-                ["git", "commit", "-m", "chore: update wishlist", "-q", "--", "wishlist.json", "feed.xml"],
+                ["git", "add", "wishlist.json", "feed.xml", "feed-wanted.xml"],
+                ["git", "diff", "--cached", "--quiet", "--", "wishlist.json", "feed.xml", "feed-wanted.xml"],
+                ["git", "commit", "-m", "chore: update wishlist", "-q", "--", "wishlist.json", "feed.xml", "feed-wanted.xml"],
                 ["git", "push", "-q"],
             ],
         )
@@ -168,8 +168,8 @@ class PublishGitSequenceTest(unittest.TestCase):
             called_cmds,
             [
                 ["git", "pull", "--rebase", "--autostash", "-q"],
-                ["git", "add", "wishlist.json", "feed.xml"],
-                ["git", "diff", "--cached", "--quiet", "--", "wishlist.json", "feed.xml"],
+                ["git", "add", "wishlist.json", "feed.xml", "feed-wanted.xml"],
+                ["git", "diff", "--cached", "--quiet", "--", "wishlist.json", "feed.xml", "feed-wanted.xml"],
                 ["git", "push", "-q"],
             ],
         )
@@ -189,7 +189,7 @@ class PublishGitSequenceTest(unittest.TestCase):
         called_cmds = [call.args[0] for call in mock_subprocess_run.call_args_list]
         self.assertEqual(
             called_cmds,
-            [["git", "pull", "--rebase", "--autostash", "-q"], ["git", "add", "wishlist.json", "feed.xml"]],
+            [["git", "pull", "--rebase", "--autostash", "-q"], ["git", "add", "wishlist.json", "feed.xml", "feed-wanted.xml"]],
         )
 
     @patch("run.subprocess.run")
@@ -211,9 +211,9 @@ class PublishGitSequenceTest(unittest.TestCase):
             called_cmds,
             [
                 ["git", "pull", "--rebase", "--autostash", "-q"],
-                ["git", "add", "wishlist.json", "feed.xml"],
-                ["git", "diff", "--cached", "--quiet", "--", "wishlist.json", "feed.xml"],
-                ["git", "commit", "-m", "chore: update wishlist", "-q", "--", "wishlist.json", "feed.xml"],
+                ["git", "add", "wishlist.json", "feed.xml", "feed-wanted.xml"],
+                ["git", "diff", "--cached", "--quiet", "--", "wishlist.json", "feed.xml", "feed-wanted.xml"],
+                ["git", "commit", "-m", "chore: update wishlist", "-q", "--", "wishlist.json", "feed.xml", "feed-wanted.xml"],
             ],
         )
 
@@ -576,6 +576,13 @@ class WantCommandTest(unittest.TestCase):
         with self.assertRaises(SystemExit) as cm:
             run.cmd_want(argparse.Namespace(asin="B0MISSING", on=True, off=False))
         self.assertEqual(cm.exception.code, 1)
+
+
+class PublishedFilesTest(unittest.TestCase):
+    def test_publishes_every_file_report_writes(self):
+        """report.main() が書き出すフィードは全部公開する（書き出しても commit しなければ公開されない）。"""
+        import report
+        self.assertEqual(run.PUBLISHED_FILES, ["wishlist.json", "feed.xml", report.PICKED_FEED_FILE])
 
 
 class TargetPriceCommandTest(unittest.TestCase):

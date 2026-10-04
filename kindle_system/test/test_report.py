@@ -318,6 +318,13 @@ class MainIntegrationTest(unittest.TestCase):
         self.assertIn('href="https://example.invalid/feed.xml"', text)
         self.assertFalse(os.path.exists(os.path.join(self.tmpdir, "feed.xml.tmp")))
 
+    def test_main_writes_picked_feed_next_to_feed_xml(self):
+        """読みたい本・大きな値下がりだけのフィードも一緒に書き出す（run.py の PUBLISHED_FILES で一緒に公開する）。"""
+        self._run_main_with_marks({})
+        with open(os.path.join(self.tmpdir, report.PICKED_FEED_FILE), encoding="utf-8") as f:
+            text = f.read()
+        self.assertIn(f'href="https://example.invalid/{report.PICKED_FEED_FILE}"', text)
+
     def test_main_wishlist_publishes_only_kind_override_by_default(self):
         os.environ.pop("PUBLISH_MARKS", None)
         self._run_main_with_marks({})

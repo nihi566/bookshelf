@@ -144,8 +144,8 @@ node cli/bh.js serve  # http://localhost:8787 で Web アプリを開発
 - `cli/` … `bh` コマンドとコンパニオンサーバ
 - `kindle_system/` … 欲しい本の価格チェック（Python。Amazon・読書メーターの「読みたい本」を集めて価格を記録する）。
   使い方は `kindle_system/README.md`。テストは `cd kindle_system && python -m unittest discover -s test`
-- `web/wishlist-site/` … `kindle_system/` が書き出す欲しい本のデータ（`wishlist.json` / `feed.xml`。生成物なので直接編集しない）。
-  `python run.py sync` がこの 2 つだけを main に commit・push し、Pages に公開される
+- `web/wishlist-site/` … `kindle_system/` が書き出す欲しい本のデータ（`wishlist.json` / `feed.xml` / `feed-wanted.xml`。生成物なので直接編集しない）。
+  `python run.py sync` がこれらだけを main に commit・push し、Pages に公開される
 - `.github/workflows/pages.yml` … テストと GitHub Pages への公開（リポジトリの Settings → Pages で Source を「GitHub Actions」に）
 
 ハイライトのデータ（`data/`）はリポジトリに含めません。

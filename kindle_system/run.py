@@ -47,8 +47,8 @@ MARKS_FILE_FORMAT = "kindle-marks"
 MARKS_FILE_GLOB = "kindle-marks-*.json"
 
 # report.main() が PUBLIC_SITE_DIR に書き出し、publish() が公開するファイル。
-# 公開先は bookshelf の web/wishlist-site/。この 2 つ以外は commit しない（他の作業中の変更を巻き込まない）。
-PUBLISHED_FILES = ["wishlist.json", "feed.xml"]
+# 公開先は bookshelf の web/wishlist-site/。これら以外は commit しない（他の作業中の変更を巻き込まない）。
+PUBLISHED_FILES = ["wishlist.json", "feed.xml", report.PICKED_FEED_FILE]
 
 # GitHub Pages は main への push でだけ公開される（bookshelf の .github/workflows/pages.yml）
 PUBLISH_BRANCH = "main"
@@ -69,7 +69,7 @@ def ensure_safe_to_publish(public_site_dir: str, git_env: dict) -> None:
     """
     公開先は人や他のセッションが作業する bookshelf の作業ツリーの中なので、
     pull・commit・push で他の作業を壊したり巻き込んだりしないことを先に確かめる。
-    main 以外のブランチ / rebase・merge の途中 / 公開する 2 ファイル以外の（追跡中の）変更があれば、
+    main 以外のブランチ / rebase・merge の途中 / 公開するファイル以外の（追跡中の）変更があれば、
     git を何も変えずに終了コード 1 で止める（未追跡のファイルは pull にも commit にも関わらないので許す）。
     """
     problems = []
@@ -130,7 +130,7 @@ def _prepare_publish() -> tuple:
     git_env["GIT_TERMINAL_PROMPT"] = "0"
 
     # 下の rebase --abort や autostash が他の人の作業を壊さないよう、git を変える前に確かめる
-    # （これを通れば、autostash が退避するのは公開する 2 ファイルだけになる）
+    # （これを通れば、autostash が退避するのは公開するファイルだけになる）
     ensure_safe_to_publish(public_site_dir, git_env)
     return public_site_dir, public_site_url, git_env
 
