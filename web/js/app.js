@@ -8,6 +8,7 @@ import { book, books, home, search } from './views/library.js';
 import { isolatedView, knowledge, lineView, planeView } from './views/knowledge.js';
 import { importView, kindleSyncBlock, settingsView } from './views/settings.js';
 import { wishlist } from './views/wishlist.js';
+import { records } from './views/records.js';
 import { FEEDBACK_LABELS, deleteBook, emptyLibrary, listBooks, mergeParsed, setFeedback, updateHighlight } from '../core/model.js';
 import { parseFiles } from '../core/parsers/index.js';
 import { applyImport, makeBackup } from '../core/importing.js';
@@ -26,6 +27,8 @@ const ROUTES = [
   [/^\/wishlist$/, wishlist, 'price'],
   // ハイライトの検索は「読んだ本」の中の画面（タブは持たない）
   [/^\/search$/, search, 'books'],
+  // 読書記録も「読んだ本」の中の画面
+  [/^\/records$/, records, 'books'],
   [/^\/knowledge$/, knowledge, 'knowledge'],
   [/^\/knowledge\/line\/(?<id>[\w-]+)$/, lineView, 'knowledge'],
   [/^\/knowledge\/plane\/(?<id>[\w-]+)$/, planeView, 'knowledge'],
@@ -534,6 +537,11 @@ const forms = {
     }
   },
 };
+
+// 表紙が読めない（通信できない・表紙の無い本で 1px の画像が返る）ときは画像を外し、書名の 1 文字目を見せる
+const dropCover = (img) => img.matches?.('img[data-cover]') && img.remove();
+document.addEventListener('error', (e) => dropCover(e.target), true);
+document.addEventListener('load', (e) => e.target.naturalWidth <= 1 && dropCover(e.target), true);
 
 document.addEventListener('click', (e) => {
   const el = e.target.closest('[data-action]');

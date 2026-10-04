@@ -4,7 +4,7 @@ import { emptyLibrary, mergeParsed } from '../web/core/model.js';
 import { SAMPLE_BOOKS } from '../web/core/sample.js';
 import { createLlmClient, extractJson } from '../web/core/analysis/llm.js';
 import { analyzeLibrary, deserializeCache, emptyCache, serializeCache } from '../web/core/analysis/pipeline.js';
-import { dot, groupPoints, kmeans, tfidfEmbed } from '../web/core/analysis/vectors.js';
+import { dot, groupLines, groupPoints, kmeans, l2normalize, tfidfEmbed } from '../web/core/analysis/vectors.js';
 import { matchVolume, parseNdlRss, verifyBooks } from '../web/core/analysis/recommend.js';
 import { recommendBooks } from '../web/core/analysis/pipeline.js';
 import { startFakeLlm } from './helpers/fake-llm.js';
@@ -31,6 +31,75 @@ test('kmeans / groupPoints: シード固定で再現可能、全ての点がど�
   const all = [...groups.flat(), ...isolated].sort((x, y) => x - y);
   assert.deepEqual(all, [...texts.keys()]);
   assert.ok(groups.every((g) => g.length >= 2));
+});
+
+/** 中心 center のまわりに散らばる単位ベクトル（seed で決まる） */
+function around(center, n, spread, seed) {
+  let s = seed;
+  const rand = () => ((s = (s * 16807) % 2147483647) / 2147483647) - 0.5;
+  return Array.from({ length: n }, () => l2normalize(Float32Array.from(center, (x) => x + rand() * spread)));
+}
+const axis = (i, dims = 8) => Float32Array.from({ length: dims }, (_, j) => (j === i ? 1 : 0));
+
+test('groupLines: 1 つの面に線が集まりすぎない（上限で分ける）・線 1 本だけの面は作らない', () => {
+  // 似た線が 20 本の塊・4 本の塊・ぽつんと離れた 1 本（実データで「線 18 本の面」と「線 1 本の面」が並んだ形）
+  const vecs = [...around(axis(0), 20, 0.6, 1), ...around(axis(1), 4, 0.3, 2), axis(2)];
+  const groups = groupLines(vecs);
+  assert.deepEqual(groups.flat().sort((a, b) => a - b), [...vecs.keys()], '全ての線がちょうど 1 つの面に入る');
+  assert.ok(groups.every((g) => g.length >= 2), `線 1 本だけの面がある: ${groups.map((g) => g.length)}`);
+  const cap = Math.ceil((vecs.length / Math.round(Math.sqrt(vecs.length))) * 1.6);
+  assert.ok(Math.max(...groups.map((g) => g.length)) <= cap + 1, `大きすぎる面がある: ${groups.map((g) => g.length)}`);
+  assert.ok(groups.length <= 8);
+});
+
+test('groupLines: 線 1 本だけの面どうしが近くても、まとめた面を割って 1 本の面を残さない', () => {
+  // 離れた 1 本の線が 2 つ（互いに近い）と、大きな塊
+  const vecs = [...around(axis(0), 12, 0.3, 6), l2normalize(Float32Array.from(axis(3), (x, j) => x + (j === 4 ? 0.2 : 0))), l2normalize(Float32Array.from(axis(4), (x, j) => x + (j === 3 ? 0.2 : 0)))];
+  const groups = groupLines(vecs, { maxPlanes: 5 });
+  assert.deepEqual(groups.flat().sort((a, b) => a - b), [...vecs.keys()]);
+  assert.ok(groups.every((g) => g.length >= 2), `線 1 本だけの面がある: ${groups.map((g) => g.length)}`);
+});
+
+test('本の検索: CiNii Books で条件に合う本が 0 冊なら国立国会図書館サーチで探す', async () => {
+  const { searchBooks } = await import('../web/core/analysis/recommend.js');
+  const fetchImpl = async (url) => {
+    if (url.startsWith('https://www.googleapis.com')) return new Response('', { status: 429 });
+    if (url.startsWith('https://ci.nii.ac.jp')) return Response.json({ '@graph': [{ items: [{ title: '古い本', 'dc:date': '1970', 'cinii:ownerCount': '9' }] }] });
+    return new Response('<rss><item><category>図書</category><dc:title>NDL の本</dc:title><dc:date>2020</dc:date><dc:identifier xsi:type="dcndl:ISBN">9784000000000</dc:identifier></item></rss>');
+  };
+  const books = await searchBooks('集中力', { fetchImpl, now: new Date(2026, 9, 4) });
+  assert.deepEqual(books.map((b) => [b.title, b.source]), [['NDL の本', '国立国会図書館サーチ']]);
+});
+
+test('recommendBooks: 理由が別の候補の書名を挙げていたらその候補を採る・理由から面の記号（P2 など）を外す', async () => {
+  // 実機（qwen2.5:7b）で、候補の番号を 1 つずらして答え、書名と理由が食い違った
+  const llm = {
+    chatModel: 'stub',
+    chatJson: async ({ name }) =>
+      name === 'searches'
+        ? { searches: [{ query: 'ウェブ技術', plane: 'P2', kind: 'deepen' }] }
+        : {
+            picks: [
+              { candidate: 1, plane: 'P2', kind: 'deepen', reason: '『からくりインターネット』は、ウェブ技術の歴史を考察し、P2「ウェブ技術」の面を深く掘り下げます。' },
+              { candidate: 3, plane: 'P1', kind: 'broaden', reason: 'P1の「人生」の面を広げます。' },
+            ],
+          },
+  };
+  const vol = (id, title) => ({ id, volumeInfo: { title, authors: ['著者'], publishedDate: '2020', infoLink: `https://books.google.com/?id=${id}` } });
+  const fetchImpl = async () => Response.json({ items: [vol('a', '図書館員の未来カリキュラム'), vol('b', 'からくりインターネット'), vol('c', '哲学の入口')] });
+  const analysis = { solid: { core: '核', questions: [] }, planes: [{ id: 'p1', name: '人生', summary: '' }, { id: 'p2', name: 'ウェブ技術', summary: '' }] };
+  const recs = await recommendBooks({ library: emptyLibrary(), analysis, llm, fetchImpl });
+  assert.deepEqual(recs.map((r) => r.title), ['からくりインターネット', '哲学の入口']);
+  assert.equal(recs[0].reason, '『からくりインターネット』は、ウェブ技術の歴史を考察し、「ウェブ技術」の面を深く掘り下げます。');
+  assert.equal(recs[1].reason, '「人生」の面を広げます。');
+});
+
+test('groupPoints: 1 本の線に点が集まりすぎない（平均の 2.5 倍まで）', () => {
+  // 文字 n-gram の代替ベクトルでは、ありふれた語でつながった大きな塊ができやすい
+  const vecs = [...around(axis(0), 120, 0.05, 3), ...around(axis(1), 20, 1.2, 4), ...around(axis(2), 20, 1.2, 5)];
+  const { groups, isolated } = groupPoints(vecs, { targetSize: 5, maxGroups: 8 });
+  assert.deepEqual([...groups.flat(), ...isolated].sort((a, b) => a - b), [...vecs.keys()]);
+  assert.ok(Math.max(...groups.map((g) => g.length)) <= Math.ceil((vecs.length / 8) * 2.5), `大きすぎる線がある: ${groups.map((g) => g.length)}`);
 });
 
 test('extractJson: 思考タグ・コードフェンス・前置きの文章に強い', () => {
@@ -185,11 +254,32 @@ test('おすすめの実在確認: 書名・著者の照合、NDL の RSS、通�
   assert.equal(recs[0].verified, undefined);
 });
 
-test('本の検索: Google Books が使えないときは国立国会図書館サーチで探す（ISBN あり・新しい順）', async () => {
+test('本の検索: Google Books が使えないときは CiNii Books で探し、所蔵館の多い（定番の）本から選ぶ。古すぎる本・ISBN の無い資料は外す', async () => {
+  const { searchBooks } = await import('../web/core/analysis/recommend.js');
+  const item = (title, date, owners, isbn = '9784000000000') => ({ title, '@id': `https://ci.nii.ac.jp/ncid/${title}`, 'dc:date': date, 'dc:creator': `${title}の著者著`, 'cinii:ownerCount': String(owners), ...(isbn ? { 'dcterms:hasPart': [{ '@id': `urn:isbn:${isbn}` }] } : {}) });
+  const urls = [];
+  const fetchImpl = async (url) => {
+    urls.push(url);
+    if (url.startsWith('https://www.googleapis.com')) return new Response('', { status: 429 });
+    assert.equal(new URL(url).searchParams.get('q'), '集中力 科学');
+    const items = [item('少し読まれている本', '2015', 30), item('古い定番', '1980', 500), item('ISBN の無い資料', '2020', 900, ''), item('定番の本', '2012', 120), item('新しい本', '2025', 5)];
+    return Response.json({ '@graph': [{ items }] });
+  };
+  const books = await searchBooks('集中力 科学', { fetchImpl, now: new Date(2026, 9, 4) });
+  assert.deepEqual(books.map((b) => b.title), ['定番の本', '少し読まれている本', '新しい本']);
+  assert.equal(books[0].source, 'CiNii Books');
+  assert.equal(books[0].authors, '定番の本の著者');
+  assert.equal(books[0].isbn, '9784000000000');
+  assert.equal(books[0].link, 'https://ci.nii.ac.jp/ncid/定番の本');
+  assert.equal(urls.length, 2, 'Google → CiNii');
+});
+
+test('本の検索: Google Books も CiNii Books も使えないときは国立国会図書館サーチで探す（ISBN あり・新しい順）', async () => {
   const { searchBooks } = await import('../web/core/analysis/recommend.js');
   const item = (title, date, isbn) => `<item><category>図書</category><dc:title>${title}</dc:title><link>https://ndlsearch.ndl.go.jp/books/${title}</link><dc:date>${date}</dc:date>${isbn ? `<dc:identifier xsi:type="dcndl:ISBN">${isbn}</dc:identifier>` : ''}</item>`;
   const urls = [];
   const fetchImpl = async (url) => {
+    if (url.startsWith('https://ci.nii.ac.jp')) return new Response('', { status: 503 });
     urls.push(url);
     if (url.startsWith('https://www.googleapis.com')) return new Response('', { status: 429 });
     const title = new URL(url).searchParams.get('title');

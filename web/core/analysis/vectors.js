@@ -60,7 +60,7 @@ export function centroid(vectors) {
  * 球面 k-means（コサイン類似度）。k-means++ 初期化、シード固定で再現性あり。
  * 戻り値: { assign: number[], centroids: Float32Array[] }
  */
-export function kmeans(vectors, k, { seed = 42, iterations = 30 } = {}) {
+export function kmeans(vectors, k, { seed = 42, iterations = 30, maxSize = Infinity } = {}) {
   const n = vectors.length;
   k = Math.max(1, Math.min(k, n));
   const rand = seededRandom(seed);
@@ -86,22 +86,13 @@ export function kmeans(vectors, k, { seed = 42, iterations = 30 } = {}) {
     }
     centroids.push(vectors[pick]);
   }
-  const assign = new Array(n).fill(0);
+  let assign = new Array(n).fill(0);
+  // 上限があっても全員が入れるよう、組の数 × 上限 が n を下回らないようにする
+  const cap = Math.max(maxSize, Math.ceil(n / centroids.length));
   for (let it = 0; it < iterations; it++) {
-    let moved = 0;
-    for (let i = 0; i < n; i++) {
-      let bi = 0;
-      let bs = -Infinity;
-      for (let c = 0; c < centroids.length; c++) {
-        const s = dot(vectors[i], centroids[c]);
-        if (s > bs) {
-          bs = s;
-          bi = c;
-        }
-      }
-      if (assign[i] !== bi || it === 0) moved++;
-      assign[i] = bi;
-    }
+    const next = cap < n ? assignCapped(vectors, centroids, cap) : assignNearest(vectors, centroids);
+    const moved = it === 0 ? n : next.filter((c, i) => c !== assign[i]).length;
+    assign = next;
     for (let c = 0; c < centroids.length; c++) {
       const members = vectors.filter((_, i) => assign[i] === c);
       if (members.length) centroids[c] = centroid(members);
@@ -109,6 +100,43 @@ export function kmeans(vectors, k, { seed = 42, iterations = 30 } = {}) {
     if (moved === 0) break;
   }
   return { assign, centroids };
+}
+
+function assignNearest(vectors, centroids) {
+  return vectors.map((v) => {
+    let bi = 0;
+    let bs = -Infinity;
+    for (let c = 0; c < centroids.length; c++) {
+      const s = dot(v, centroids[c]);
+      if (s > bs) {
+        bs = s;
+        bi = c;
+      }
+    }
+    return bi;
+  });
+}
+
+/**
+ * 組の大きさに上限がある割り当て。似ている組み合わせから順に決め、満員の組には入れない。
+ * 似た点が 1 か所に固まると（文字 n-gram のベクトルでありふれた語を共有するときなど）、
+ * ふつうの k-means では 1 つの組が膨らみ、中身の薄い「線」や「面」になるため
+ */
+function assignCapped(vectors, centroids, cap) {
+  const k = centroids.length;
+  const sims = new Float64Array(vectors.length * k);
+  vectors.forEach((v, i) => centroids.forEach((c, j) => (sims[i * k + j] = dot(v, c))));
+  const order = [...sims.keys()].sort((a, b) => sims[b] - sims[a] || a - b);
+  const assign = new Array(vectors.length).fill(-1);
+  const sizes = new Array(k).fill(0);
+  for (const p of order) {
+    const i = Math.floor(p / k);
+    const c = p % k;
+    if (assign[i] !== -1 || sizes[c] >= cap) continue;
+    assign[i] = c;
+    sizes[c]++;
+  }
+  return assign;
 }
 
 /**
@@ -119,7 +147,8 @@ export function groupPoints(vectors, { targetSize = 5, minSize = 2, minSimilarit
   const n = vectors.length;
   if (n < minSize) return { groups: [], isolated: [...Array(n).keys()] };
   const k = Math.max(1, Math.min(maxGroups, Math.round(n / targetSize)));
-  const { assign, centroids } = kmeans(vectors, k, { seed });
+  // 1 本の線は平均の 2.5 倍まで（大きすぎる線は LLM が中心の 12 点しか見ず、ぼやけた概念になる）
+  const { assign, centroids } = kmeans(vectors, k, { seed, maxSize: Math.ceil((n / k) * 2.5) });
   const sims = vectors.map((v, i) => dot(v, centroids[assign[i]]));
   // 'auto': 埋め込みモデルごとに類似度の分布が違うので、全体の分布から外れ値だけを落とす
   let threshold = minSimilarity;
@@ -151,8 +180,15 @@ export function groupLines(vectors, { seed = 7, maxPlanes = 8 } = {}) {
   if (n === 0) return [];
   if (n <= 2) return [[...Array(n).keys()]];
   const k = Math.max(2, Math.min(maxPlanes, Math.round(Math.sqrt(n))));
-  const { assign, centroids } = kmeans(vectors, k, { seed });
+  // 1 つの面は平均の 1.6 倍まで（「知識と人生」のような何でも入る面にしない）
+  const { assign, centroids } = kmeans(vectors, k, { seed, maxSize: Math.ceil((n / k) * 1.6) });
   const groups = centroids.map((_, c) => assign.map((a, i) => (a === c ? i : -1)).filter((i) => i >= 0)).filter((g) => g.length);
-  groups.sort((a, b) => b.length - a.length);
-  return groups;
+  // 線 1 本だけの面は、いちばん近い他の面に入れる（線 1 本ではテーマにならない）。入れた先がまた 1 本の面なら 2 本になる
+  for (let lone = groups.find((g) => g.length === 1); lone && groups.length > 1; lone = groups.find((g) => g.length === 1)) {
+    groups.splice(groups.indexOf(lone), 1);
+    const v = vectors[lone[0]];
+    const closeness = (g) => dot(v, centroid(g.map((i) => vectors[i])));
+    groups.reduce((best, g) => (closeness(g) > closeness(best) ? g : best)).push(lone[0]);
+  }
+  return groups.sort((a, b) => b.length - a.length);
 }

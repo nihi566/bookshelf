@@ -3,6 +3,7 @@ import { html, mark } from './html.js';
 import { listBooks, SOURCES } from '../core/model.js';
 import { hash, isoDate } from '../core/text.js';
 import { kindleSyncState } from '../core/kindle-status.js';
+import { bookCoverUrl } from '../core/covers.js';
 
 export const COLOR_VAR = {
   yellow: 'var(--hl-yellow)',
@@ -19,6 +20,12 @@ export const sourceBadge = (s) => html`<span class="badge ${s}">${SOURCES[s] || 
 export function spineColor(title) {
   const h = parseInt(hash(title).slice(0, 4), 36) % 360;
   return `hsl(${h} 32% 42%)`;
+}
+
+/** 本の表紙。画像が無い・読めないときは背表紙の色と書名の 1 文字目（画像は読めなければ app.js が外す） */
+export function bookSpine(b, cls = 'book-spine') {
+  const url = bookCoverUrl(b);
+  return html`<span class="${cls}" style="background:${spineColor(b.title)}" aria-hidden="true">${[...b.title][0] || ''}${url ? html`<img src="${url}" alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer" data-cover>` : ''}</span>`;
 }
 
 /** ハイライト ID → それを含む線 の対応表 */
@@ -62,7 +69,7 @@ export function highlightCard(h, { library, lines = [], query = '', showBook = t
 
 export function bookRow(b) {
   return html`<li><a class="book-item" href="#/book/${b.id}">
-    <span class="book-spine" style="background:${spineColor(b.title)}" aria-hidden="true">${[...b.title][0]}</span>
+    ${bookSpine(b)}
     <span class="grow">
       <span class="title">${b.title}</span>
       <span class="meta">${b.author || '著者不明'} ${b.sources.map(sourceBadge)}</span>
@@ -109,6 +116,8 @@ export function openSheet(content, onSubmit) {
   const dialog = document.getElementById('sheet');
   dialog.innerHTML = String(html`<form method="dialog">${content}</form>`);
   const form = dialog.querySelector('form');
+  // 保存が終わるまでは次の送信を受け付けない（連打・Enter の二重送信で同じ記録が 2 件できないように）
+  let busy = false;
   const initial = [...new FormData(form)];
   // 外側のタップ・Esc で閉じるときは、書きかけがあれば確かめる（うっかり触れてメモを失わない）
   const tryClose = () => {
@@ -118,8 +127,14 @@ export function openSheet(content, onSubmit) {
     e.preventDefault();
     const action = e.submitter?.value || 'save';
     if (action === 'cancel') return dialog.close();
-    const keep = await onSubmit(new FormData(form), action);
-    if (keep !== true) dialog.close();
+    if (busy) return;
+    busy = true;
+    try {
+      const keep = await onSubmit(new FormData(form), action);
+      if (keep !== true) dialog.close();
+    } finally {
+      busy = false;
+    }
   });
   // 開くたびに差し替える（前に開いたときの処理を残さない。シートの中を押しても外側のタップの処理は消えない）
   dialog.onclick = (e) => {

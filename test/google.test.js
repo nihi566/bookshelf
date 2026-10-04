@@ -95,6 +95,23 @@ test('Google ドライブ: 更新されたドキュメントだけを書き出�
   assert.equal(google.calls.token[0].grant_type, 'refresh_token');
 });
 
+test('Google ドライブ: 表紙の書籍 ID を持たない前の版の記録なら、全ドキュメントを一度だけ読み直して本に ID を付ける', async () => {
+  const docs = [doc('2026-09-27T01:00:00.000Z')];
+  const { store, google, client } = await setup({ docs });
+  // 書籍 ID を拾う前の版で取り込み済み（本に volumeId が無く、記録にも版が無い）
+  await client.sync();
+  const lib = await store.library();
+  for (const b of Object.values(lib.books)) delete b.volumeId;
+  await store.saveLibrary(lib);
+  await store.saveGoogleSync({ files: (await store.googleSync()).files });
+
+  const r = await client.sync();
+  assert.equal(r.changed, 1, '変わっていないドキュメントも読み直す');
+  assert.equal(Object.values((await store.library()).books)[0].volumeId, 'ABC');
+  assert.equal((await client.sync()).changed, 0, '読み直しは一度だけ');
+  assert.equal(google.calls.exports.length, 2);
+});
+
 test('Google ドライブ: 読めないドキュメントはエラーとして返し、他の取り込みは続ける', async () => {
   const docs = [doc('2026-09-27T01:00:00.000Z'), { id: 'doc2', name: '関係ない文書', modifiedTime: '2026-09-27T01:00:00.000Z', body: '<html><body><p>ただのメモ</p></body></html>' }];
   const { client, google } = await setup({ docs });

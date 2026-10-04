@@ -22,6 +22,8 @@ const FOLDER = 'application/vnd.google-apps.folder';
 // Play ブックスが作るフォルダの名前（表示言語で変わる。見つからなければ bh config google-folder <フォルダ ID>）
 export const FOLDER_NAMES = ['Play ブックスのメモ', 'Play Books Notes'];
 export const MIN_INTERVAL_SEC = 15;
+// 取り込み済みの記録（google-sync.json）の版。2: 表紙に使う書籍 ID を本に付けるようになった
+const SYNC_VERSION = 2;
 
 /** ログインし直すしかない失敗（未ログイン・トークン失効・クライアント設定の誤り） */
 function needsLogin(message) {
@@ -179,7 +181,9 @@ export function createGoogleClient({ store, fetchImpl = fetch }) {
         folders = null;
         return { checked: 0, changed: 0, added: 0, updated: 0, booksAdded: 0, errors: [] };
       }
-      const changed = docs.filter((d) => synced.files[d.id] !== d.modifiedTime);
+      // 前の版の記録（表紙の書籍 ID を拾う前）なら、変わっていないドキュメントも一度だけ読み直して本に ID を付ける
+      const reread = synced.version !== SYNC_VERSION;
+      const changed = docs.filter((d) => reread || synced.files[d.id] !== d.modifiedTime);
       const result = { checked: docs.length, changed: changed.length, added: 0, updated: 0, booksAdded: 0, errors: [] };
       if (!changed.length) return result;
 
@@ -199,7 +203,7 @@ export function createGoogleClient({ store, fetchImpl = fetch }) {
           const lib = await store.library();
           // 自動取り込みなので、アプリで削除した本は戻さない（戻したいときは手動で取り込む）
           const s = mergeParsed(lib, books, { reviveDeleted: false });
-          if (s.added || s.updated || s.booksAdded) await store.saveLibrary(lib);
+          if (s.added || s.updated || s.booksAdded || s.booksUpdated) await store.saveLibrary(lib);
           return s;
         });
         Object.assign(result, { added: st.added, updated: st.updated, booksAdded: st.booksAdded });
@@ -208,6 +212,8 @@ export function createGoogleClient({ store, fetchImpl = fetch }) {
       for (const { doc } of inputs) synced.files[doc.id] = doc.modifiedTime;
       const present = new Set(docs.map((d) => d.id));
       for (const id of Object.keys(synced.files)) if (!present.has(id)) delete synced.files[id];
+      // 読み直しで書き出せなかったドキュメントがあれば、次の確認でもう一度全部を読み直す
+      if (inputs.length === changed.length) synced.version = SYNC_VERSION;
       await store.saveGoogleSync(synced);
       return result;
     },

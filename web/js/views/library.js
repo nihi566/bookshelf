@@ -4,7 +4,7 @@ import { bookHighlights, dailyPicks, libraryStats, listBooks, searchHighlights, 
 import { normalizeText } from '../../core/text.js';
 import { browserStore, formatPrice, loadMarks, searchWishlist, wishlistSummary } from '../../core/wishlist.js';
 import { loadWishlist } from '../wishlist-data.js';
-import { bookRow, emptyBooksBlock, highlightCard, kindleAlertBlock, lineIndex, sourceBadge, spineColor } from '../ui.js';
+import { bookRow, bookSpine, emptyBooksBlock, highlightCard, kindleAlertBlock, lineIndex, sourceBadge } from '../ui.js';
 
 const flow = html`<div class="flow" aria-label="点から立体へ">
   <div class="f-point"><b>点</b>線を引いた一文</div>
@@ -110,7 +110,7 @@ export const books = {
       return html`<a class="chip ${on ? 'on' : ''}" href="#/books?${params}" ${on ? html`aria-current="true"` : ''}>${label}</a>`;
     };
     return html`<div class="page-head"><div><h1>読んだ本</h1><div class="sub">${list.length} 冊</div></div><a class="btn small" href="#/import">＋ 取り込む</a></div>
-      <div class="row" style="margin-bottom:12px"><a class="btn small" href="#/search">ハイライトを検索</a></div>
+      <div class="row" style="margin-bottom:12px"><a class="btn small" href="#/search">ハイライトを検索</a><a class="btn small" href="#/records">読書記録（冊数・ページ数）</a></div>
       <form class="search-box" data-form="book-filter" role="search"><input type="search" name="q" value="${query.get('q') || ''}" placeholder="書名・著者で絞り込む" aria-label="書名・著者で絞り込む"></form>
       <div class="chips" role="group" aria-label="読み方で絞り込む">${chip('source', '', 'すべて')}${chip('source', 'kindle', 'Kindle')}${chip('source', 'playbooks', 'Play Books')}</div>
       <div class="chips" style="margin-top:6px" role="group" aria-labelledby="books-sort-label"><span class="chips-label" id="books-sort-label">並び順</span>${chip('sort', 'recent', '最近')}${chip('sort', 'title', '書名')}${chip('sort', 'count', '点の数')}</div>
@@ -137,11 +137,12 @@ export const book = {
     return html`<a class="back" href="#/books">‹ 読んだ本</a>
       <div class="page-head">
         <div class="row" style="flex-wrap:nowrap;align-items:flex-start;gap:12px">
-          <span class="book-spine" style="background:${spineColor(b.title)}" aria-hidden="true">${[...b.title][0]}</span>
+          ${bookSpine(b)}
           <div><h1>${b.title}</h1><div class="sub">${b.author || '著者不明'} ${b.sources.map(sourceBadge)} ・ ${hs.length} 点</div></div>
         </div>
       </div>
       <div class="row">
+        <a class="btn small" href="#/records?book=${encodeURIComponent(b.id)}">読み終えた日を記録</a>
         <button class="btn small danger" data-action="delete-book" data-id="${b.id}">この本を削除</button>
       </div>
       ${linesHere.length ? html`<div class="section"><h2>この本から伸びる線</h2></div><div class="hl-lines">${linesHere.map((l) => html`<a class="line-chip" href="#/knowledge/line/${l.id}">${l.name}</a>`)}</div>` : ''}
@@ -227,7 +228,7 @@ function renderWishlistHits(root, q) {
 }
 
 function wishlistHitRow(b) {
-  const inner = html`<span class="book-spine" style="background:${spineColor(b.title)}" aria-hidden="true">${[...b.title][0] || ''}</span>
+  const inner = html`${bookSpine(b)}
     <span class="grow"><span class="title">${b.title}</span><span class="meta">${formatPrice(b)}</span></span>`;
   return b.asin
     ? html`<li><a class="book-item" href="https://www.amazon.co.jp/dp/${b.asin}" target="_blank" rel="noopener noreferrer" aria-label="${b.title}（Amazon で開く）">${inner}</a></li>`

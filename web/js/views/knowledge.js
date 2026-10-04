@@ -3,6 +3,7 @@ import { html, raw, esc, safeUrl } from '../html.js';
 import { FEEDBACK_LABELS, feedbackByStatus, feedbackFor, libraryStats } from '../../core/model.js';
 import { layoutKnowledgeMap } from '../../core/knowledge-map.js';
 import { isoDate, truncate } from '../../core/text.js';
+import { TFIDF_HINT } from '../../core/analysis/pipeline.js';
 import { highlightCard, lineIndex } from '../ui.js';
 import { amazonKindleUrl, findWishlistBook, formatPrice } from '../../core/wishlist.js';
 import { loadWishlist } from '../wishlist-data.js';
@@ -52,6 +53,7 @@ export const knowledge = {
         ${s.highlights < 4 ? html`<p class="notice">分析には 4 件以上の点が必要です。<a href="#/import">取り込む</a></p>` : ''}
         <div class="row">${runBtn}${a ? html`<button class="btn" data-action="rerun-recommend" ${job?.running ? 'disabled' : ''}>おすすめを選び直す</button>` : ''}</div>
         ${a ? html`<p class="small muted">前回の分析: ${isoDate(a.createdAt)}・${a.model?.chat}${a.model?.embed ? ' / ' + a.model.embed : ''}・点 ${a.stats.points}</p>` : ''}
+        ${a?.model?.embed === 'tfidf' ? html`<p class="notice">${TFIDF_HINT}</p>` : ''}
       </div>
       ${jobPanel(job)}`;
     if (!a) {

@@ -126,11 +126,27 @@ export function parsePlayBooksBlocks(blocks, fallbackTitle = '') {
 export async function parsePlayBooksDocx(entries, fallbackTitle) {
   const doc = entries.find((e) => e.name === 'word/document.xml');
   if (!doc) return [];
-  return parsePlayBooksBlocks(docxXmlToBlocks(new TextDecoder().decode(doc.bytes)), fallbackTitle);
+  // docx のリンク先は本文ではなく関係ファイルに入っている
+  const rels = entries.find((e) => e.name === 'word/_rels/document.xml.rels');
+  const volumeId = rels ? playBooksVolumeId(new TextDecoder().decode(rels.bytes)) : '';
+  return withVolumeId(parsePlayBooksBlocks(docxXmlToBlocks(new TextDecoder().decode(doc.bytes)), fallbackTitle), volumeId);
 }
 
 export function parsePlayBooksHtml(html, fallbackTitle) {
-  return parsePlayBooksBlocks(htmlToBlocks(html), fallbackTitle);
+  return withVolumeId(parsePlayBooksBlocks(htmlToBlocks(html), fallbackTitle), playBooksVolumeId(html));
+}
+
+/**
+ * 注釈のページ番号のリンク（play.google.com/books/reader?id=…）から Play ブックスの書籍 ID を拾う（表紙画像に使う）。
+ * HTML 書き出しではリンクが Google のリダイレクト（reader?id%3D…）に包まれ、docx では & が &amp; になっている
+ */
+export function playBooksVolumeId(text) {
+  const m = String(text).match(/play\.google\.com\/books\/reader\?(?:[^"'\s)<>]*?(?:&amp;|&|%26))?id(?:=|%3D)([\w-]{3,24})/i);
+  return m ? m[1] : '';
+}
+
+function withVolumeId(books, volumeId) {
+  return volumeId ? books.map((b) => ({ ...b, volumeId })) : books;
 }
 
 export function looksLikePlayBooksMarkdown(text) {
@@ -198,7 +214,7 @@ export function parsePlayBooksMarkdown(md, fallbackTitle = '') {
       };
     });
   if (!highlights.length) return [];
-  return [{ title: title || fallbackTitle, author: '', source: 'playbooks', highlights }];
+  return withVolumeId([{ title: title || fallbackTitle, author: '', source: 'playbooks', highlights }], playBooksVolumeId(md));
 }
 
 /** ファイル名「Notes from "Drive".docx」「「書名」のメモ.docx」から書名を推測（本文に書名が無いとき用） */
