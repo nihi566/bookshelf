@@ -578,6 +578,37 @@ class WantCommandTest(unittest.TestCase):
         self.assertEqual(cm.exception.code, 1)
 
 
+class TargetPriceCommandTest(unittest.TestCase):
+    @patch("run.set_target_price", return_value=True)
+    def test_sets_target_price(self, mock_set):
+        args = run.build_parser().parse_args(["target-price", "B0EXAMPLE", "500"])
+        self.assertIs(args.func, run.cmd_target_price)
+        with contextlib.redirect_stdout(io.StringIO()):
+            args.func(args)
+        mock_set.assert_called_once_with("B0EXAMPLE", 500)
+
+    @patch("run.set_target_price", return_value=True)
+    def test_clear_removes_target_price(self, mock_set):
+        args = run.build_parser().parse_args(["target-price", "B0EXAMPLE", "--clear"])
+        with contextlib.redirect_stdout(io.StringIO()):
+            args.func(args)
+        mock_set.assert_called_once_with("B0EXAMPLE", None)
+
+    def test_price_and_clear_are_exclusive_and_one_is_required(self):
+        parser = run.build_parser()
+        for argv in (["target-price", "B0EXAMPLE"], ["target-price", "B0EXAMPLE", "500", "--clear"], ["target-price", "B0EXAMPLE", "0"], ["target-price", "B0EXAMPLE", "abc"]):
+            with self.assertRaises(SystemExit), contextlib.redirect_stderr(io.StringIO()):
+                args = parser.parse_args(argv)
+                args.func(args)
+
+    @patch("run.set_target_price", return_value=False)
+    def test_unknown_book_exits_with_code_1(self, mock_set):
+        args = run.build_parser().parse_args(["target-price", "B0MISSING", "500"])
+        with self.assertRaises(SystemExit) as cm, contextlib.redirect_stderr(io.StringIO()):
+            args.func(args)
+        self.assertEqual(cm.exception.code, 1)
+
+
 class PurchaseCommandTest(unittest.TestCase):
     @patch("run.set_purchased", return_value=True)
     def test_on_calls_set_purchased_with_status_1(self, mock_set_purchased):

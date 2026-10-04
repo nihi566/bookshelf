@@ -156,6 +156,45 @@ class BuildFeedTest(unittest.TestCase):
         ]
         self.assertEqual(_entries(report.build_feed(_wishlist(*books), SITE)), [])
 
+    def test_reaching_target_price_becomes_an_entry(self):
+        history = [
+            {"at": "2026-09-30T09:00:00", "price": 700, "ku": False},
+            {"at": "2026-10-01T09:00:00", "price": None, "ku": False},
+            {"at": "2026-10-02T09:00:00", "price": 480, "ku": False},
+            {"at": "2026-10-03T09:00:00", "price": 450, "ku": False},
+        ]
+        book = _book(price=450, price_prev=480, price_changed_at="2026-10-03T09:00:00", target_price=500, price_history=history)
+        entries = [e for e in _entries(report.build_feed(_wishlist(book), SITE)) if "#target:" in e["id"]]
+        self.assertEqual(len(entries), 1)
+        self.assertIn("希望価格 ¥500 以下", entries[0]["title"])
+        self.assertIn("¥480", entries[0]["title"])
+        self.assertIn("欲しい本", entries[0]["title"])
+        self.assertTrue(entries[0]["updated"].startswith("2026-10-02T09:00:00"), "取得に失敗した回は飛ばして、初めて希望価格以下になった回の時刻")
+
+    def test_target_price_not_reached_already_below_or_unset_is_not_an_entry(self):
+        above = [{"at": "2026-10-01T09:00:00", "price": 700, "ku": False}, {"at": "2026-10-02T09:00:00", "price": 600, "ku": False}]
+        always = [{"at": "2026-10-01T09:00:00", "price": 400, "ku": False}, {"at": "2026-10-02T09:00:00", "price": 400, "ku": False}]
+        reached = [{"at": "2026-10-01T09:00:00", "price": 700, "ku": False}, {"at": "2026-10-02T09:00:00", "price": 400, "ku": False}]
+        books = [
+            _book(asin="B0FEED0021", price=600, target_price=500, price_history=above),
+            _book(asin="B0FEED0022", price=400, target_price=500, price_history=always),
+            _book(asin="B0FEED0023", price=400, target_price=None, price_history=reached),
+            _book(asin="B0FEED0024", price=400, target_price=500, price_history=reached, purchased=True),
+        ]
+        self.assertEqual([e for e in _entries(report.build_feed(_wishlist(*books), SITE)) if "#target:" in e["id"]], [])
+
+    def test_drop_to_all_time_low_is_marked_in_the_entry(self):
+        book = _book(price=700, price_prev=1000, price_changed_at="2026-10-02T08:00:00", price_low=700, price_low_at="2026-10-02T08:00:00")
+        [entry] = _entries(report.build_feed(_wishlist(book), SITE))
+        self.assertIn("過去最安値", entry["title"])
+        self.assertIn("¥1,000 → ¥700", entry["title"])
+
+    def test_drop_that_does_not_beat_the_low_is_not_marked(self):
+        back_to_low = _book(price=700, price_prev=900, price_changed_at="2026-10-03T08:00:00", price_low=700, price_low_at="2026-10-01T08:00:00")
+        above_low = _book(asin="B0FEED0025", price=800, price_prev=900, price_changed_at="2026-10-03T08:00:00", price_low=700, price_low_at="2026-10-01T08:00:00")
+        for entry in _entries(report.build_feed(_wishlist(back_to_low, above_low), SITE)):
+            self.assertNotIn("過去最安値", entry["title"])
+
     def test_titles_are_escaped_and_bad_asin_links_to_the_site(self):
         book = _book(asin="", title="A & B <C>", price=700, price_prev=1000, price_changed_at="2026-10-02T08:00:00")
         xml_text = report.build_feed(_wishlist(book), SITE)

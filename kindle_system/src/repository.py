@@ -24,7 +24,7 @@ from sqlmodel import Session, select, text
 from src import database as database_module
 from src.book_kind import KINDS, classify_kind
 from src.database import DB_PATH, get_session, init_db_orm
-from src.models import UNPRICED_REASONS, BookMapping, BookMark, PriceHistory, UnpricedReason
+from src.models import UNPRICED_REASONS, BookMapping, BookMark, PriceHistory, TargetPrice, UnpricedReason
 
 logger = logging.getLogger(__name__)
 
@@ -1037,3 +1037,46 @@ def import_marks(items: list) -> dict:
             result["updated"] += 1
         session.commit()
     return result
+
+
+def _target_prices_table_exists(session: Session) -> bool:
+    row = session.exec(
+        text("SELECT name FROM sqlite_master WHERE type='table' AND name='target_prices'")
+    ).first()
+    return row is not None
+
+
+def set_target_price(paid_asin: str, price: Optional[int]) -> bool:
+    """
+    本ごとの希望価格を決める（price が None なら取り消す）。book_mappings に無い本・空の ASIN は False。
+    表が無ければ作る（init_db() を経ない経路からも書き込めるように。ensure_book_marks_table と同じ）。
+    """
+    if not paid_asin:
+        return False
+    TargetPrice.__table__.create(bind=database_module.engine, checkfirst=True)
+    with get_session() as session:
+        if not session.exec(select(BookMapping).where(BookMapping.paid_asin == paid_asin)).first():
+            return False
+        current = session.get(TargetPrice, paid_asin)
+        if price is None:
+            if current:
+                session.delete(current)
+        elif current:
+            current.price = price
+            current.updated_at = datetime.now().isoformat()
+            session.add(current)
+        else:
+            session.add(TargetPrice(paid_asin=paid_asin, price=price, updated_at=datetime.now().isoformat()))
+        session.commit()
+        return True
+
+
+def get_target_prices() -> dict:
+    """
+    希望価格を {paid_asin: 価格} で返す。読み取り専用の経路（report.py）から呼ばれるため、
+    表が未作成なら作らずに空の dict を返す（get_book_marks と同じ）。
+    """
+    with get_session() as session:
+        if not _target_prices_table_exists(session):
+            return {}
+        return {row.paid_asin: row.price for row in session.exec(select(TargetPrice)).all()}

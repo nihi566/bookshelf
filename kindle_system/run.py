@@ -8,6 +8,7 @@ run.py
     python run.py sync [--workers N] [--limit N] [--start N]
     python run.py want <asin> (--on|--off)
     python run.py purchase <asin> (--on|--off)
+    python run.py target-price <asin> (<円>|--clear)
     python run.py import-marks [<書き出したファイル>] [--publish]
     python run.py recommend [--kind manga|book|all] [--count N] [--new N] [--model NAME] [--dry-run]
 """
@@ -39,7 +40,7 @@ import main as main_module
 from src import recommender
 from src.book_kind import KIND_BOOK, KIND_MANGA
 from src.bookmeter_sync import sync_bookmeter_wishlist
-from src.repository import get_book_marks, get_books, import_marks, init_db, set_wanted, set_purchased
+from src.repository import get_book_marks, get_books, import_marks, init_db, set_purchased, set_target_price, set_wanted
 
 # 欲しい本の画面（bookshelf の web/core/wishlist.js の marksFile）の「見た・評価を書き出す」が作るファイル
 MARKS_FILE_FORMAT = "kindle-marks"
@@ -302,6 +303,18 @@ def cmd_purchase(args: argparse.Namespace) -> None:
     print(f"[OK] purchase フラグを更新しました（ASIN: {args.asin}, status: {status}）。")
 
 
+def cmd_target_price(args: argparse.Namespace) -> None:
+    """本ごとの希望価格を決める（--clear で取り消す）。実質価格がこれ以下になった回に feed.xml で知らせる。"""
+    price = None if args.clear else args.price
+    if not set_target_price(args.asin, price):
+        print(f"エラー: 対象が見つかりませんでした（ASIN: {args.asin}）。", file=sys.stderr)
+        sys.exit(1)
+    if price is None:
+        print(f"[OK] 希望価格を取り消しました（ASIN: {args.asin}）。")
+    else:
+        print(f"[OK] 希望価格を ¥{price:,} にしました（ASIN: {args.asin}）。次の python run.py sync でフィードに反映されます。")
+
+
 def _find_latest_marks_file(directory: str):
     """directory 直下の書き出しファイル（kindle-marks-*.json）のうち最も新しいものを返す。無ければ None。"""
     files = glob.glob(os.path.join(directory, MARKS_FILE_GLOB))
@@ -421,6 +434,16 @@ def cmd_recommend(args: argparse.Namespace) -> None:
         print()
 
 
+def _positive_int(value: str) -> int:
+    try:
+        number = int(value)
+    except ValueError:
+        raise argparse.ArgumentTypeError("1 以上の整数（円）を指定してください")
+    if number < 1:
+        raise argparse.ArgumentTypeError("1 以上の整数（円）を指定してください")
+    return number
+
+
 def _non_negative_int(value: str) -> int:
     number = int(value)
     if number < 0:
@@ -474,6 +497,15 @@ def build_parser() -> argparse.ArgumentParser:
     purchase_parser.add_argument("asin", help="対象の paid_asin")
     _add_on_off_group(purchase_parser)
     purchase_parser.set_defaults(func=cmd_purchase)
+
+    target_parser = subparsers.add_parser(
+        "target-price", help="本ごとの希望価格を決める（実質価格がこれ以下になったらフィードで知らせる）"
+    )
+    target_parser.add_argument("asin", help="対象の paid_asin")
+    target_group = target_parser.add_mutually_exclusive_group(required=True)
+    target_group.add_argument("price", nargs="?", type=_positive_int, help="希望価格（円。ポイント差し引き後の実質価格と比べる）")
+    target_group.add_argument("--clear", action="store_true", help="希望価格を取り消す")
+    target_parser.set_defaults(func=cmd_target_price)
 
     import_parser = subparsers.add_parser(
         "import-marks", help="公開ページで書き出した「見た」・★評価・種別（JSON）を DB に取り込む"

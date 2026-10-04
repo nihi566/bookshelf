@@ -42,7 +42,7 @@ sys.path.insert(0, BASE_DIR)
 
 from src.book_kind import KINDS, classify_kind
 from src.models import UNPRICED_REASONS
-from src.repository import MARK_TAGS, UNKNOWN_TITLE, get_all_price_points, get_book_marks, get_books, get_paid_price_points, get_unpriced_reasons
+from src.repository import MARK_TAGS, UNKNOWN_TITLE, get_all_price_points, get_book_marks, get_books, get_paid_price_points, get_target_prices, get_unpriced_reasons
 
 # bookshelf アプリが読む欲しい本のデータ（wishlist.json）の形式名と版
 WISHLIST_FILE_FORMAT = "kindle-wishlist"
@@ -74,19 +74,21 @@ def _resolve_mark(book: dict) -> tuple:
 def summarize_price_changes(points: list) -> dict:
     """
     有料価格の記録（repository.get_paid_price_points() の戻り値。本ごと・時刻順）から、本ごとに
-    {"prev": 直前の価格, "changed_at": 今の価格に変わった日時, "low": 記録上の最安値} を返す。
-    一度も変わっていなければ prev / changed_at は None。
+    {"prev": 直前の価格, "changed_at": 今の価格に変わった日時, "low": 記録上の最安値,
+     "low_at": 最安値を更新した（それまでのどの価格よりも安くなった）日時} を返す。
+    一度も変わっていなければ prev / changed_at は None。最初の記録の価格が最安値のままなら low_at は None。
     """
     result = {}
     for point in points:
         asin, price = point["paid_asin"], point["actual_price"]
         summary = result.get(asin)
         if summary is None:
-            result[asin] = {"prev": None, "changed_at": None, "low": price, "current": price}
+            result[asin] = {"prev": None, "changed_at": None, "low": price, "low_at": None, "current": price}
             continue
         if price != summary["current"]:
             summary.update(prev=summary["current"], changed_at=str(point["timestamp"]), current=price)
-        summary["low"] = min(summary["low"], price)
+        if price < summary["low"]:
+            summary.update(low=price, low_at=str(point["timestamp"]))
     return {asin: {k: v for k, v in s.items() if k != "current"} for asin, s in result.items()}
 
 
@@ -152,6 +154,7 @@ def build_wishlist(books: list) -> dict:
     どこから来た本か（sources。_sources）を載せる（画面が Kindle / 読書メーターで分類する）。
     ポイント差し引き前の販売価格（sell_price）・還元ポイント（points）・キャンペーン文（campaign）は、
     今の価格がある本にだけ載せる（KU の本のキャンペーン文は読み放題の宣伝文なので載せない）。
+    希望価格（target_price。book["target_price"] = repository.get_target_prices の 1 件）は全冊に載せる（無ければ null）。
     """
     timestamps = [str(book["timestamp"]) for book in books if book.get("timestamp")]
     items = []
@@ -178,6 +181,8 @@ def build_wishlist(books: list) -> dict:
                 "price_prev": trend.get("prev"),
                 "price_changed_at": trend.get("changed_at"),
                 "price_low": trend.get("low"),
+                "price_low_at": trend.get("low_at"),
+                "target_price": book.get("target_price"),
                 "price_history": book.get("price_history") or [],
                 "price_reason": _price_reason(book, price, is_ku),
                 # 読書メーターの本 ID（数字だけ。bookshelf が https://bookmeter.com/books/<ID> を開く）
@@ -218,6 +223,23 @@ def _joined_ku_at(history: list):
     return None
 
 
+def _target_reached_at(history: list, target):
+    """
+    スクレイピングの履歴（古い順）から、実質価格が希望価格より高い回の次に希望価格以下になった回の時刻を返す
+    （今も希望価格以下のときだけ。無ければ None）。価格のある回だけを見る（取得失敗・KU の回は飛ばす）。
+    希望価格を決めたときに既に以下だった本（記録の初めから以下）は None（知らせるまでもない）。
+    """
+    if not isinstance(target, int) or isinstance(target, bool):
+        return None
+    rows = [r for r in history if r.get("price") is not None and not r.get("ku")]
+    if not rows or rows[-1]["price"] > target:
+        return None
+    for prev, row in zip(reversed(rows[:-1]), reversed(rows)):
+        if prev["price"] > target:
+            return row["at"]
+    return None
+
+
 def _left_ku_at(history: list):
     """
     スクレイピングの履歴（古い順）から、最後に読み放題 → 有料に変わった取得の時刻を返す（無ければ None）。
@@ -248,7 +270,7 @@ def _campaign_started_at(history: list):
 
 
 def _feed_events(wishlist: dict) -> list:
-    """フィードに載せる出来事 [{"id", "title", "at", "asin"}]（値下がり・読み放題入り・読み放題の終了・キャンペーン開始。購入済みの本は除く）。"""
+    """フィードに載せる出来事 [{"id", "title", "at", "asin"}]（値下がり・希望価格への到達・読み放題入り・読み放題の終了・キャンペーン開始。購入済みの本は除く）。"""
     events = []
     for book in wishlist["books"]:
         if book.get("purchased"):
@@ -256,7 +278,15 @@ def _feed_events(wishlist: dict) -> list:
         title, asin = book.get("title") or UNKNOWN_TITLE, book.get("asin") or ""
         price, prev, changed_at = book.get("price"), book.get("price_prev"), book.get("price_changed_at")
         if price is not None and prev is not None and changed_at and price < prev:
-            events.append({"id": f"drop:{asin}:{changed_at}", "title": f"値下がり ¥{prev:,} → ¥{price:,}: {title}", "at": changed_at, "asin": asin})
+            # 最安値を更新した値下がりは、それと分かるように題名に添える（同じ回の 1 件にまとめる）
+            is_new_low = price == book.get("price_low") and book.get("price_low_at") == changed_at
+            label = "値下がり（過去最安値）" if is_new_low else "値下がり"
+            events.append({"id": f"drop:{asin}:{changed_at}", "title": f"{label} ¥{prev:,} → ¥{price:,}: {title}", "at": changed_at, "asin": asin})
+        target = book.get("target_price")
+        reached = _target_reached_at(book.get("price_history") or [], target) if price is not None else None
+        if reached:
+            reached_price = next(r["price"] for r in book["price_history"] if r.get("at") == reached)
+            events.append({"id": f"target:{asin}:{reached}", "title": f"希望価格 ¥{target:,} 以下になりました（¥{reached_price:,}）: {title}", "at": reached, "asin": asin})
         joined = _joined_ku_at(book.get("price_history") or []) if book.get("ku") else None
         if joined:
             events.append({"id": f"ku:{asin}:{joined}", "title": f"読み放題（Kindle Unlimited）に入りました: {title}", "at": joined, "asin": asin})
@@ -416,6 +446,7 @@ def main(allow_shrink: bool = False) -> None:
     trends = summarize_price_changes(get_paid_price_points())
     histories = summarize_price_history(get_all_price_points())
     unpriced = get_unpriced_reasons()
+    targets = get_target_prices()
     publish_marks = os.environ.get("PUBLISH_MARKS", "").strip().lower() in ("1", "true", "yes")
     for book in books:
         mark = marks.get(book["asin"])
@@ -425,6 +456,7 @@ def main(allow_shrink: bool = False) -> None:
         book["price_trend"] = trends.get(book["asin"])
         book["price_history"] = histories.get(book["asin"], [])
         book["unpriced_reason"] = unpriced.get(book["asin"])
+        book["target_price"] = targets.get(book["asin"])
     wishlist_path = os.path.join(public_site_dir, "wishlist.json")
     reason = _shrink_error(len(books), _published_book_count(wishlist_path))
     if reason and not allow_shrink:

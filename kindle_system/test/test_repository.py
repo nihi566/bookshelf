@@ -1295,7 +1295,7 @@ class GetPaidPricePointsTest(unittest.TestCase):
 
         self.assertEqual(
             report.summarize_price_changes(repository.get_paid_price_points()),
-            {"B0KUMIDDL1": {"prev": 1000, "changed_at": "2026-01-03T00:00:00", "low": 800}},
+            {"B0KUMIDDL1": {"prev": 1000, "changed_at": "2026-01-03T00:00:00", "low": 800, "low_at": "2026-01-03T00:00:00"}},
         )
 
 
@@ -1691,3 +1691,37 @@ class FixTruncatedBookmeterTitlesTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TargetPriceTest(unittest.TestCase):
+    """repository.set_target_price / get_target_prices（本ごとの希望価格）のテスト。"""
+
+    setUp = GetPriceHistoryTest.setUp
+    tearDown = GetPriceHistoryTest.tearDown
+
+    def _add_book(self, paid_asin):
+        from sqlmodel import Session
+        from src.models import BookMapping
+        with Session(self.engine) as session:
+            session.add(BookMapping(paid_asin=paid_asin, title="本"))
+            session.commit()
+
+    def test_set_get_overwrite_and_clear(self):
+        self._add_book("B0AAAAAAA1")
+        self.assertTrue(repository.set_target_price("B0AAAAAAA1", 500))
+        self.assertEqual(repository.get_target_prices(), {"B0AAAAAAA1": 500})
+        self.assertTrue(repository.set_target_price("B0AAAAAAA1", 450))
+        self.assertEqual(repository.get_target_prices(), {"B0AAAAAAA1": 450})
+        self.assertTrue(repository.set_target_price("B0AAAAAAA1", None))
+        self.assertEqual(repository.get_target_prices(), {})
+
+    def test_unknown_or_empty_asin_is_rejected(self):
+        self.assertFalse(repository.set_target_price("B0MISSING1", 500))
+        self.assertFalse(repository.set_target_price("", 500))
+        self.assertEqual(repository.get_target_prices(), {})
+
+    def test_get_returns_empty_when_table_is_missing(self):
+        """読み取り専用の経路（report.py）から呼ばれるので、表が無ければ作らずに空を返す。"""
+        from src.models import TargetPrice
+        TargetPrice.__table__.drop(bind=self.engine)
+        self.assertEqual(repository.get_target_prices(), {})
