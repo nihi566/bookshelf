@@ -40,7 +40,7 @@ test('Kindle: ノートブックの最終ハイライト日を本の annotatedOn
   assert.equal(mergeLibraries(other, lib).books[id].annotatedOn, '2026-09-20');
 });
 
-test('autoRecords: 線が 1 本でもある本は読了。読んだ日は最初に線を引いた日（端末の日付）', () => {
+test('autoRecords: 線が 1 本でもある本は読了。読んだ日は最初に線を引いた日（日本時間）', () => {
   const lib = libraryOf([play('二本の本', '2026-09-03T03:00:00.000Z', AUG15_JST), play('一本の本', '2026-10-01T03:00:00.000Z')]);
   const { dated, undated } = autoRecords(lib, emptyRecordsFile());
   const byTitle = Object.fromEntries(Object.values(dated).map((r) => [r.title, r]));

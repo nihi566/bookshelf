@@ -126,15 +126,18 @@ export function applyChange(file, change, now) {
   return { ...file, records, excluded };
 }
 
-/** 本ごとの最初の線の日（端末の日付）。日付のある線だけを見る */
+// 線を引いた時刻は日本時間の日付にする（Play ブックスのメモの日付は日本時間の 0 時で入るので、端末の時間帯で日付が変わらないように）
+const JST_DATE = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Tokyo', year: 'numeric', month: '2-digit', day: '2-digit' });
+
+/** 本ごとの最初の線の日（日本時間）。日付のある線だけを見る */
 function firstHighlightDates(library) {
   const first = new Map();
   for (const h of Object.values(library.highlights)) {
     if (h.deleted || !h.createdAt) continue;
-    // 日付だけの値は Date に通すと UTC の 0 時になり、日本より西の端末で前日にずれるのでそのまま使う
+    // 日付だけの値は Date に通すと UTC の 0 時として読まれてずれるので、そのまま使う
     const time = isValidDate(h.createdAt) ? null : new Date(h.createdAt);
     if (time && Number.isNaN(time.getTime())) continue;
-    const date = time ? todayLocal(time) : h.createdAt;
+    const date = time ? JST_DATE.format(time) : h.createdAt;
     if (!first.has(h.bookId) || date < first.get(h.bookId)) first.set(h.bookId, date);
   }
   return first;
