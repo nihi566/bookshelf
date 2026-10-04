@@ -272,11 +272,15 @@ class MainIntegrationTest(unittest.TestCase):
         self.mock_all_points = self._all_points.start()
         self._targets = unittest.mock.patch.object(report, "get_target_prices", return_value={})
         self.mock_targets = self._targets.start()
+        # 本物の data/kindle_monitor.db を読まない（CI の新しいチェックアウトには data/ が無く開けない）
+        self._unpriced = unittest.mock.patch.object(report, "get_unpriced_reasons", return_value={})
+        self._unpriced.start()
 
     def tearDown(self):
         self._points.stop()
         self._all_points.stop()
         self._targets.stop()
+        self._unpriced.stop()
         shutil.rmtree(self.tmpdir, ignore_errors=True)
         for key, value in self._saved_env.items():
             if value is None:
@@ -396,11 +400,18 @@ class ShrinkGuardTest(unittest.TestCase):
         self._points.start()
         self._all_points = unittest.mock.patch.object(report, "get_all_price_points", return_value=[])
         self._all_points.start()
+        # 本物の data/kindle_monitor.db を読まない（CI の新しいチェックアウトには data/ が無く開けない）
+        self._unpriced = unittest.mock.patch.object(report, "get_unpriced_reasons", return_value={})
+        self._unpriced.start()
+        self._targets = unittest.mock.patch.object(report, "get_target_prices", return_value={})
+        self._targets.start()
         self.path = os.path.join(self.tmpdir, "wishlist.json")
 
     def tearDown(self):
         self._points.stop()
         self._all_points.stop()
+        self._unpriced.stop()
+        self._targets.stop()
         self._env.stop()
         shutil.rmtree(self.tmpdir, ignore_errors=True)
 

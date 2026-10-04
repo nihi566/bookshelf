@@ -378,6 +378,9 @@ def migrate_book_mappings_schema(db_path: str = DB_PATH) -> None:
 
         # ここに到達した時点で staging_path は検証済みの新スキーマ。
         # 元ファイルには一度も書き込んでいないため、失敗時は無傷のまま残る。
+        # Windows では開いたままのファイルを置き換えられない（アクセス拒否）。init_db_orm() が
+        # 開いた接続プールを置換前にも破棄し、db_path を掴んだ接続を残さない。
+        database_module.engine.dispose()
         os.replace(staging_path, db_path)
 
         # SQLAlchemy の接続プールが置換前（旧 inode）の接続を保持したままだと、
