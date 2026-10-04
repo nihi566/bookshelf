@@ -31,7 +31,7 @@
 
   <div class="card">
     <h2>状態</h2>
-    <div id="status">まだ取り込んでいません</div>
+    <div id="status" role="status" aria-live="polite">まだ取り込んでいません</div>
     <div class="row">
       <button class="primary" id="sync-now">今すぐ取り込む</button>
       <button id="reset" title="前回までの記録を消して、全ての本を読み直します">全ての本を取り込み直す</button>
@@ -73,7 +73,7 @@
       </select>
     </label>
     <div class="help">Kindle アプリで引いた線がノートブックに出るまでにも数分かかります。</div>
-    <div class="row"><button class="primary" type="submit">保存</button><span id="saved" class="help"></span></div>
+    <div class="row"><button class="primary" type="submit">保存</button><span id="saved" class="help" role="status" aria-live="polite"></span></div>
   </form>
 </main>
 <script type="module" src="options.js"></script>

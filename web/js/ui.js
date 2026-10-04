@@ -105,6 +105,12 @@ export function toast(message, ms = 2600) {
   toastTimer = setTimeout(() => el.classList.remove('show'), ms);
 }
 
+/** シートの入力が開いたときから変わったか。entries は [...new FormData(form)] の形 */
+export function sheetDirty(before, after) {
+  const key = (entries) => JSON.stringify(entries.map(([k, v]) => [k, String(v)]));
+  return key(before) !== key(after);
+}
+
 /** 下から出るシート。content は html``、onSubmit(formData, action) を返す */
 export function openSheet(content, onSubmit) {
   const dialog = document.getElementById('sheet');
@@ -112,6 +118,11 @@ export function openSheet(content, onSubmit) {
   const form = dialog.querySelector('form');
   // 保存が終わるまでは次の送信を受け付けない（連打・Enter の二重送信で同じ記録が 2 件できないように）
   let busy = false;
+  const initial = [...new FormData(form)];
+  // 外側のタップ・Esc で閉じるときは、書きかけがあれば確かめる（うっかり触れてメモを失わない）
+  const tryClose = () => {
+    if (!sheetDirty(initial, [...new FormData(form)]) || confirm('編集中の内容を破棄して閉じますか？')) dialog.close();
+  };
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
     const action = e.submitter?.value || 'save';
@@ -125,10 +136,15 @@ export function openSheet(content, onSubmit) {
       busy = false;
     }
   });
+  // 開くたびに差し替える（前に開いたときの処理を残さない。シートの中を押しても外側のタップの処理は消えない）
+  dialog.onclick = (e) => {
+    if (e.target === dialog) tryClose();
+  };
+  dialog.oncancel = (e) => {
+    e.preventDefault();
+    tryClose();
+  };
   dialog.showModal();
-  dialog.addEventListener('click', (e) => {
-    if (e.target === dialog) dialog.close();
-  }, { once: true });
 }
 
 const EXPORT_TRIGGERS = { sync: '同期のあと', import: '取り込みのあと', analysis: '分析のあと', manual: '手動', folder: 'このブラウザから' };

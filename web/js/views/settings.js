@@ -127,8 +127,8 @@ export const settingsView = {
       <form class="card" data-form="ai-settings">
         <fieldset style="border:none;padding:0;margin:0">
           <legend class="small muted">分析を動かす場所</legend>
-          <label class="row" style="margin:8px 0"><input type="radio" name="mode" value="companion" ${ai.mode === 'companion' ? 'checked' : ''}> <span><b>PC のコンパニオンサーバ</b>（おすすめ・スマホからも可）</span></label>
-          <label class="row" style="margin:8px 0"><input type="radio" name="mode" value="direct" ${ai.mode === 'direct' ? 'checked' : ''}> <span><b>このブラウザから LLM に直接</b>（PC のみ）</span></label>
+          <label class="check" style="margin:8px 0"><input type="radio" name="mode" value="companion" ${ai.mode === 'companion' ? 'checked' : ''}> <span><b>PC のコンパニオンサーバ</b>（おすすめ・スマホからも可）</span></label>
+          <label class="check" style="margin:8px 0"><input type="radio" name="mode" value="direct" ${ai.mode === 'direct' ? 'checked' : ''}> <span><b>このブラウザから LLM に直接</b>（PC のみ）</span></label>
         </fieldset>
         <div data-show="companion" ${ai.mode === 'companion' ? '' : 'hidden'}>
           <label class="field"><span>コンパニオンサーバの URL</span><input type="url" name="companionUrl" value="${ai.companionUrl}" placeholder="${state.servedByCompanion ? location.origin : 'http://localhost:8787 または https://<PC名>.<tailnet>.ts.net'}"></label>
