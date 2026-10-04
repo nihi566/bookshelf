@@ -1,10 +1,13 @@
 // ホーム・本・検索の画面
 import { html } from '../html.js';
 import { bookHighlights, dailyPicks, isTechnicalBook, libraryStats, listBooks, searchHighlights, SOURCES } from '../../core/model.js';
+import { searchPoints } from '../../core/points.js';
+import { THOUGHT_LABEL, liveThoughts } from '../../core/thoughts.js';
 import { normalizeText } from '../../core/text.js';
 import { browserStore, formatPrice, loadMarks, searchWishlist, wishlistSummary } from '../../core/wishlist.js';
 import { loadWishlist } from '../wishlist-data.js';
-import { bookRow, bookSpine, emptyBooksBlock, highlightCard, kindleAlertBlock, lineIndex, sourceBadge } from '../ui.js';
+import { bookRow, bookSpine, emptyBooksBlock, highlightCard, kindleAlertBlock, lineIndex, pointCard, sourceBadge } from '../ui.js';
+import { inboxBlock } from './thoughts.js';
 
 const flow = html`<div class="flow" aria-label="点から立体へ">
   <div class="f-point"><b>点</b>線を引いた一文</div>
@@ -20,7 +23,7 @@ export const home = {
     const a = state.analysis;
     // 自動取り込みの異常はスマホで最初に開くホームで気づけるようにする（中身は PC の情報を取り直したときに差し替える）
     const alert = html`<div id="kindle-alert">${kindleAlertBlock(state)}</div>`;
-    if (!s.highlights && !s.technical) {
+    if (!s.highlights && !s.technical && !liveThoughts(lib).length) {
       return html`${alert}<section class="card hero">
           <h1>本に引いた線を、<br>知識の立体へ。</h1>
           <p class="help">Kindle と Play ブックスのハイライトを 1 か所に集めます。PC のローカル LLM が「点」をつないで「線」「面」「立体」に組み立て、次に読む本も提案します。</p>
@@ -39,17 +42,20 @@ export const home = {
     const picks = dailyPicks(lib, 3, new Date(), shuffle);
     const idx = lineIndex(a);
     const recent = searchHighlights(lib, '').slice(0, 5);
+    const bySource = [...Object.entries(s.bySource).map(([k, v]) => `${SOURCES[k] || k} ${v}`), ...(s.thoughts ? [`${THOUGHT_LABEL} ${s.thoughts}`] : [])];
     return html`${alert}
       <div class="stats">
-        <a class="stat point" href="#/search"><b>${s.highlights}</b><span>点</span></a>
+        <a class="stat point" href="#/search"><b>${s.points}</b><span>点</span></a>
         <a class="stat line" href="#/knowledge"><b>${a ? a.lines.length : '–'}</b><span>線</span></a>
         <a class="stat plane" href="#/knowledge"><b>${a ? a.planes.length : '–'}</b><span>面</span></a>
         <a class="stat solid" href="#/knowledge"><b>${a ? 1 : '–'}</b><span>立体</span></a>
       </div>
-      <p class="small muted" style="margin-top:8px">本 ${s.books} 冊 ・ ${Object.entries(s.bySource).map(([k, v]) => `${SOURCES[k] || k} ${v}`).join(' ・ ')} ・ ★ ${s.favorites}${s.technical ? ` ・ 技術書の線 ${s.technical} 件は点に数えていません` : ''}</p>
+      <p class="small muted" style="margin-top:8px">本 ${s.books} 冊 ・ ${bySource.join(' ・ ')} ・ ★ ${s.favorites}${s.technical ? ` ・ 技術書の線 ${s.technical} 件は点に数えていません` : ''}</p>
+
+      ${inboxBlock(state)}
 
       <div class="section"><h2>今日の点</h2><button class="btn small" data-action="shuffle">別の点</button></div>
-      ${picks.map((h) => highlightCard(h, { library: lib, lines: idx.get(h.id) }))}
+      ${picks.map((p) => pointCard(p, { library: lib, lines: idx.get(p.id) }))}
 
       ${a
         ? html`<div class="section"><h2>立体</h2><a class="small" href="#/knowledge">知識マップへ</a></div>
@@ -59,7 +65,7 @@ export const home = {
               <p class="core">${a.solid.core}</p>
             </a>`
         : html`<div class="section"><h2>AI 分析</h2></div>
-            <div class="card"><p>点が ${s.highlights} 件たまりました。ローカル LLM で点をつないで、線・面・立体にしてみましょう。</p>
+            <div class="card"><p>点が ${s.points} 件たまりました。ローカル LLM で点をつないで、線・面・立体にしてみましょう。</p>
             <a class="btn primary" href="#/knowledge">分析する</a></div>`}
 
       <div id="home-wishlist"></div>
@@ -173,9 +179,9 @@ export const search = {
   render({ state, query }) {
     const q = query.get('q') || '';
     return html`<a class="back" href="#/books">‹ 読んだ本</a>
-      <div class="page-head"><h1>ハイライトを検索</h1></div>
+      <div class="page-head"><h1>点を検索</h1></div>
       <form class="search-box" data-form="search" role="search">
-        <input type="search" name="q" value="${q}" placeholder="言葉・書名・#タグ（空白で AND）" aria-label="ハイライトを検索" autocomplete="off" ${q ? '' : 'autofocus'}>
+        <input type="search" name="q" value="${q}" placeholder="言葉・書名・#タグ（空白で AND）" aria-label="ハイライトと思いつきを検索" autocomplete="off" ${q ? '' : 'autofocus'}>
       </form>
       <div class="chips" id="search-filters" role="group" aria-label="絞り込み"></div>
       <div id="search-wishlist"></div>
@@ -204,17 +210,18 @@ function renderResults(root, ctx, q) {
   const { state, query } = ctx;
   const source = query.get('source') || '';
   const fav = query.get('fav') === '1';
-  const results = searchHighlights(state.library, q, { source, favorite: fav });
+  // 捨てた思いつきは出さない（メモの一覧の「捨てた」でだけ見られる）
+  const results = searchPoints(state.library, q, { source, favorite: fav });
   const idx = lineIndex(state.analysis);
   const link = (patch, label, on) => {
     const p = new URLSearchParams(query);
     for (const [k, v] of Object.entries(patch)) v ? p.set(k, v) : p.delete(k);
     return html`<a class="chip ${on ? 'on' : ''}" href="#/search?${p}" ${on ? html`aria-current="true"` : ''}>${label}</a>`;
   };
-  root.querySelector('#search-filters').innerHTML = String(html`${link({ source: '' }, 'すべて', !source)}${link({ source: 'kindle' }, 'Kindle', source === 'kindle')}${link({ source: 'playbooks' }, 'Play Books', source === 'playbooks')}${link({ source: 'paper' }, '紙の本', source === 'paper')}${link({ source: 'memo' }, '読書メモ', source === 'memo')}${link({ fav: fav ? '' : '1' }, '★ お気に入り', fav)}`);
+  root.querySelector('#search-filters').innerHTML = String(html`${link({ source: '' }, 'すべて', !source)}${link({ source: 'kindle' }, 'Kindle', source === 'kindle')}${link({ source: 'playbooks' }, 'Play Books', source === 'playbooks')}${link({ source: 'paper' }, '紙の本', source === 'paper')}${link({ source: 'memo' }, '読書メモ', source === 'memo')}${link({ source: 'thought' }, THOUGHT_LABEL, source === 'thought')}${link({ fav: fav ? '' : '1' }, '★ お気に入り', fav)}`);
   const shown = results.slice(0, 200);
   root.querySelector('#search-results').innerHTML = String(html`<p class="small muted">${results.length} 件${results.length > shown.length ? `（先頭 ${shown.length} 件を表示）` : ''}</p>
-    ${shown.map((h) => highlightCard(h, { library: state.library, lines: idx.get(h.id), query: q }))}
+    ${shown.map((p) => pointCard(p, { library: state.library, lines: idx.get(p.id), query: q }))}
     ${!results.length ? html`<p class="empty">見つかりませんでした</p>` : ''}`);
   renderWishlistHits(root, q);
 }

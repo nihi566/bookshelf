@@ -82,7 +82,7 @@ export const importView = {
 
       <div class="section"><h2>ほかに</h2></div>
       <div class="card row spread"><span class="help grow">架空の 8 冊・48 の点で動きを試せます。</span><button class="btn" data-action="load-sample">サンプルを入れる</button></div>
-      <p class="small muted" style="margin-top:12px">現在: 本 ${libraryStats(state.library).books} 冊 / 点 ${libraryStats(state.library).highlights} 件</p>`;
+      <p class="small muted" style="margin-top:12px">現在: 本 ${libraryStats(state.library).books} 冊 / 点 ${libraryStats(state.library).points} 件</p>`;
   },
 };
 
@@ -127,7 +127,7 @@ export const settingsView = {
 
       <div class="section"><h2>データ</h2></div>
       <div class="card stack">
-        <p class="help">ハイライトはこの端末（ブラウザ）の中だけに保存されています。本 ${s.books} 冊 / 点 ${s.highlights} 件。</p>
+        <p class="help">ハイライトと思いつきはこの端末（ブラウザ）の中だけに保存されています。本 ${s.books} 冊 / 点 ${s.points} 件${s.thoughts ? `（うち思いつき ${s.thoughts} 件）` : ''}。</p>
         <div class="row"><button class="btn" data-action="backup">バックアップを保存</button><a class="btn" href="#/import">バックアップから戻す</a></div>
         <button class="btn danger" data-action="clear-all">この端末のデータをすべて消す</button>
       </div>

@@ -3,27 +3,39 @@
 
 import { truncate } from '../text.js';
 
-export const PROMPT_VERSION = 3;
+export const PROMPT_VERSION = 4;
 
 const SYSTEM = `あなたは読書の知識を構造化する編集者です。
-ユーザーが本に引いた線（ハイライト）を「点」と呼びます。点どうしの共通項を抽象化して「線（概念）」を作り、線を束ねて「面（テーマ）」を作り、面の関係から知識の全体像「立体」を組み立てます。
+ユーザーが本に引いた線（ハイライト）と、本に関係なく書き留めた思いつきを「点」と呼びます。点どうしの共通項を抽象化して「線（概念）」を作り、線を束ねて「面（テーマ）」を作り、面の関係から知識の全体像「立体」を組み立てます。
 - 必ず日本語で書く
 - 引用文をそのまま繰り返さず、一段抽象化した言葉で表す
+- 「読者自身の言葉」は、読者がその点をどう受け取ったかを表すので重く見る
 - 指定された JSON だけを出力する（説明文やコードフェンスは付けない）`;
 
 const str = { type: 'string' };
 const strArray = { type: 'array', items: str };
 
+/**
+ * 線を作るときの点 1 つの書き方。書名（思いつきは「思いつき」）・線を引いた文・取り込んだメモと、
+ * 読者が自分で付けたメモ・タグ（「読者自身の言葉」として取り込んだメモと分ける）
+ * p = { text, label, thought?, note?, userNote?, tags? }
+ */
+export function pointLine(p, i) {
+  const head = p.thought ? `[${i + 1}]（${truncate(p.label, 20)}・読者自身の言葉）` : `[${i + 1}]『${truncate(p.label, 40)}』`;
+  const own = [p.userNote ? `メモ: ${truncate(p.userNote.replace(/\s+/g, ' '), 160)}` : '', p.tags?.length ? `タグ: ${p.tags.slice(0, 8).map((t) => '#' + t).join(' ')}` : ''].filter(Boolean).join(' ／ ');
+  return `${head} ${truncate(p.text.replace(/\s+/g, ' '), 280)}${p.note ? `（取り込んだメモ: ${truncate(p.note.replace(/\s+/g, ' '), 120)}）` : ''}${own ? `（読者自身の言葉: ${own}）` : ''}`;
+}
+
 export function linePrompt(points) {
-  const list = points.map((p, i) => `[${i + 1}]『${truncate(p.book, 40)}』 ${truncate(p.text.replace(/\s+/g, ' '), 280)}${p.note ? `（読者のメモ: ${truncate(p.note, 120)}）` : ''}`).join('\n');
+  const list = points.map(pointLine).join('\n');
   return {
     system: SYSTEM,
     name: 'line',
-    user: `次の点（ハイライト）は、意味が近いものとして集まりました。これらをつなぐ「線」を作ってください。
+    user: `次の点（本に引いた線と思いつき）は、意味が近いものとして集まりました。これらをつなぐ「線」を作ってください。
 
 ${list}
 
-書名を並べるのではなく、点に共通する考えの中身を自分の言葉で書いてください。
+書名を並べるのではなく、点に共通する考えの中身を自分の言葉で書いてください。「読者自身の言葉」があれば、その受け取り方を生かしてください。
 
 出力する JSON:
 {"name": "線の名前（15字以内の概念名）", "summary": "点に共通する考えを抽象化した説明（2〜3文）", "insight": "この線から生まれる問いや実践への示唆（1文）", "keywords": ["キーワード", "3〜5個"]}`,

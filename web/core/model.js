@@ -9,6 +9,8 @@
 
 import { bookKey, cleanText, hash, normalizeText } from './text.js';
 import { isUploadedCover } from './covers.js';
+import { mergeCollections } from './collections.js';
+import { mergeThought, normalizeThought, pointThoughts } from './thoughts.js';
 
 export const SOURCES = {
   kindle: 'Kindle',
@@ -41,8 +43,9 @@ export function isTechnicalBook(book) {
   return typeof book.technical === 'boolean' ? book.technical : guessTechnical(book.title);
 }
 
+// thoughts: 本に属さない思いつき（thoughts.js）。古い版のデータには無いので、読むときは thoughtsOf() を通す
 export function emptyLibrary() {
-  return { version: LIBRARY_VERSION, books: {}, highlights: {}, feedback: {}, updatedAt: null };
+  return { version: LIBRARY_VERSION, books: {}, highlights: {}, feedback: {}, thoughts: {}, updatedAt: null };
 }
 
 // ---- おすすめの本への反応（読んだ／読みたい／興味なし）。同期され、次のおすすめの選定に使う ----
@@ -382,6 +385,8 @@ export function mergeLibraries(base, incoming) {
     const cur = out.feedback[key];
     out.feedback[key] = structuredClone(cur ? order(cur, f, cur.updatedAt || '', f.updatedAt || '')[1] : f);
   }
+  // 思いつきは書き直した時刻が新しい方（状態は状態を変えた時刻が新しい方）。消したものはどちらから来ても消えたまま
+  out.thoughts = mergeCollections(base.thoughts, incoming.thoughts, { stickyDelete: true, normalize: normalizeThought, mergeItem: mergeThought });
   out.updatedAt = later(base.updatedAt, incoming.updatedAt);
   return out;
 }
@@ -477,14 +482,18 @@ export function deleteBook(library, bookId, now = new Date().toISOString()) {
   library.updatedAt = now;
 }
 
-/** highlights は点の数（技術書の線を除く）。technical は数えなかった技術書の線の数 */
+/**
+ * highlights は本の点の数（技術書の線を除く）。technical は数えなかった技術書の線の数。
+ * thoughts は点になる思いつき（捨てたものを除く）の数、points は分析の点の数（highlights + thoughts）
+ */
 export function libraryStats(library) {
   const live = liveHighlights(library);
   const hs = live.filter((h) => !isTechnicalBook(library.books[h.bookId]));
   const books = listBooks(library);
   const bySource = {};
   for (const h of hs) bySource[h.source] = (bySource[h.source] || 0) + 1;
-  return { books: books.length, highlights: hs.length, technical: live.length - hs.length, bySource, favorites: hs.filter((h) => h.favorite).length };
+  const thoughts = pointThoughts(library).length;
+  return { books: books.length, highlights: hs.length, technical: live.length - hs.length, bySource, favorites: hs.filter((h) => h.favorite).length, thoughts, points: hs.length + thoughts };
 }
 
 // ---- 紙の本（書名・表紙を登録し、線を引いた文を手で入れる） ----
@@ -556,11 +565,11 @@ export function addHighlight(library, bookId, { text, page = '', chapter = '', n
 }
 
 /**
- * 日付をシードにした「今日の点」。同じ日には同じ結果になる
+ * 日付をシードにした「今日の点」（思いつきも含む。捨てたものは出さない）。同じ日には同じ結果になる
  * seed を渡すと日付の代わりにそれで選ぶ（「別の点」用。日付をずらすと翌日以降の今日の点と同じ組になる）
  */
 export function dailyPicks(library, count = 3, date = new Date(), seed = '') {
-  const hs = pointHighlights(library).sort((a, b) => a.id.localeCompare(b.id));
+  const hs = [...pointHighlights(library), ...pointThoughts(library)].sort((a, b) => a.id.localeCompare(b.id));
   if (!hs.length) return [];
   const key = seed ? `seed:${seed}` : `${date.getFullYear()}-${date.getMonth() + 1}-${date.getDate()}`;
   const scored = hs.map((h) => ({ h, s: hash(key + h.id) }));

@@ -24,12 +24,20 @@
 ## データモデル（`web/core/model.js`）
 
 ```
-Library = { version, books: { [id]: Book }, highlights: { [id]: Highlight }, updatedAt }
+Library = { version, books: { [id]: Book }, highlights: { [id]: Highlight }, feedback, thoughts: { [id]: Thought }, updatedAt }
 Book      = { id: 'b'+hash(書名の正規化), title, author, sources: ['kindle'|'playbooks'|'paper'|'memo'], asin?, volumeId?, cover?（アップロードした表紙の data URL）, technical?（技術書か。無ければ書名から推定）, updatedAt, deleted? }
 Highlight = { id: 'h'+hash(bookId+本文の正規化), bookId, source, kind: 'highlight'|'note',
               text, note, chapter, location, locationEnd, page, color, createdAt,
               favorite, tags, userNote, importedAt, updatedAt, deleted?, supersededBy? }
+Thought   = { id: 't'+時刻+乱数, text, status: 'inbox'|'done'|'discarded', answerTo?: { kind, id?, question },
+              createdAt, updatedAt }                    // 消したものは { id, deleted: true, createdAt, updatedAt } だけ残す
 ```
+
+- **思いつき（Thought）**は本に属さないメモ（フリートノート。`web/core/thoughts.js`）。「メモ」と呼ぶものが他にもある（読書メモ = source `memo` の点 / 取り込んだメモ = `note` / 自分のメモ = `userNote`）ので、コードでは thought と呼ぶ。本文を直しても ID は変わらない
+  - 状態: 未整理（受け箱に出る）・整理済み・捨てた。捨てたもの以外は分析の点になり、今日の点・検索にも出る
+  - 同期（`mergeLibraries`）では `updatedAt` が新しい方を採る。消したもの（墓標）はどちらから来ても消えたまま（`web/core/collections.js` の `mergeCollections`）。外から来た項目は形を確かめ、壊れたものは捨てる
+  - 古い版のデータ（`thoughts` が無い）は空として読む（`thoughtsOf()`）
+- **点の共通の形**（`web/core/points.js`）: 分析の点 = 技術書を除くハイライト + 捨てていない思いつき（`analysisPoints`）。分析結果の `highlightIds` には思いつきの ID も入る（`pointById` で引く）
 
 - ID は内容から決まるので、何度取り込んでも・どの端末で取り込んでも同じ点は同じ ID になる
 - 取り込み（`mergeParsed`）は空欄を補うだけで、ユーザーの編集（★・メモ・タグ・削除）は変えない
@@ -57,9 +65,12 @@ Analysis = { createdAt, model: { chat, embed }, stats,
 
 - 点 → 線：球面 k-means（k ≒ 点の数 / 5、上限 40）。中心から外れすぎた点（類似度が平均 − 1.5σ 未満）と 1 点だけの束は「まだつながらない点」にする
 - 線 → 面：線の中心ベクトル + 線の説明文の埋め込みで k-means（k ≒ √線の数、2〜8）
-- LLM への依頼は線 1 本・面 1 つずつに分け、プロンプトには中心に近い点から最大 12 件だけ入れる
+- LLM への依頼は線 1 本・面 1 つずつに分け、プロンプトには中心に近い点から最大 12 件だけ入れる（★の点は優先して入れる）
+- **自分の言葉**: 埋め込みの文は「線を引いた文 + 取り込んだメモ + 自分のメモ + タグ」（`embedText`。印は付けない）。線を作る AI への入力では、取り込んだメモと分けて自分のメモ・タグを「読者自身の言葉」と示す。思いつきは書名の代わりに「思いつき」と示す
 - `response_format` は `json_schema` → `json_object` → なし の順に自動で緩める（LM Studio は `json_object` 非対応、古いサーバは `json_schema` 非対応）。壊れた JSON は 1 回だけ言い直させる
-- LLM の結果は「メンバー構成 + モデル + プロンプト版」のハッシュでキャッシュ。埋め込みも点ごとにキャッシュ
+- LLM の結果は「メンバー構成（点の ID + 点の文のハッシュ）+ モデル + プロンプト版」のハッシュでキャッシュ。自分のメモ・タグを書き換えた点を含む線は作り直す
+- 埋め込みは点ごとにキャッシュし、埋め込んだ文のハッシュ（`cache.embeddings.keys`）も持つ。文が変わった点だけ埋め込み直す（ハッシュを持たない前の版のキャッシュは、前の版と同じ文なら使い続ける）
+- `stats.thoughts` は点のうち思いつきの数
 
 ## おすすめの本（`web/core/analysis/recommend.js`）
 

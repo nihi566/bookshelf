@@ -32,7 +32,8 @@ function answer(name, prompt) {
 
 /** options.rejectJsonSchema: json_schema を 400 で拒否（LM Studio 以外の古いサーバの再現） */
 export async function startFakeLlm({ rejectJsonSchema = false, wrapInThink = false } = {}) {
-  const calls = { chat: 0, embed: 0, bodies: [] };
+  // embedInputs: 埋め込みに渡された文（どの点を埋め込み直したかを確かめる）
+  const calls = { chat: 0, embed: 0, bodies: [], embedInputs: [] };
   const server = createServer(async (req, res) => {
     let body = '';
     for await (const c of req) body += c;
@@ -44,6 +45,7 @@ export async function startFakeLlm({ rejectJsonSchema = false, wrapInThink = fal
     if (req.url === '/v1/models') return send(200, { data: [{ id: 'fake-chat' }, { id: 'fake-embed' }] });
     if (req.url === '/v1/embeddings') {
       calls.embed++;
+      calls.embedInputs.push(...json.input);
       return send(200, { data: json.input.map((t, index) => ({ index, embedding: embedText(t) })) });
     }
     if (req.url === '/v1/chat/completions') {

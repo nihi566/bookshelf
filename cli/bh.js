@@ -185,7 +185,7 @@ async function main() {
     case 'list': {
       const lib = await store.library();
       const s = libraryStats(lib);
-      console.log(`本 ${s.books} 冊 / 点 ${s.highlights} 件`);
+      console.log(`本 ${s.books} 冊 / 点 ${s.points} 件${s.thoughts ? `（うち思いつき ${s.thoughts} 件）` : ''}`);
       for (const b of listBooks(lib)) console.log(`${String(b.count).padStart(4)}  ${b.title}${b.author ? ' — ' + b.author : ''}  [${b.sources.map((x) => SOURCES[x]).join(', ')}]`);
       break;
     }
