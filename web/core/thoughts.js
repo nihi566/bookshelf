@@ -8,7 +8,7 @@
 // 消したものは墓標 { id, deleted: true, createdAt, updatedAt } だけを残す（同期で戻らないように）
 
 import { newerItem } from './collections.js';
-import { cleanText, normalizeText, randomId, truncate } from './text.js';
+import { cleanText, isoStamp, normalizeText, randomId, truncate } from './text.js';
 
 export const THOUGHT_LABEL = '思いつき';
 export const THOUGHT_STATUS = { inbox: '未整理', done: '整理済み', discarded: '捨てた' };
@@ -25,18 +25,17 @@ export function thoughtsOf(library) {
   return library?.thoughts || {};
 }
 
-const str = (v) => (typeof v === 'string' ? v : '');
 const isStatus = (s) => typeof s === 'string' && Object.hasOwn(THOUGHT_STATUS, s);
 
 /** 外から来た思いつきの形を整える（同期・バックアップ用）。壊れていれば null */
-export function normalizeThought(t) {
+export function normalizeThought(t, now = new Date().toISOString()) {
   if (!isThoughtId(t.id)) return null;
-  if (t.deleted) return { id: t.id, deleted: true, createdAt: str(t.createdAt), updatedAt: str(t.updatedAt) };
+  if (t.deleted) return { id: t.id, deleted: true, createdAt: isoStamp(t.createdAt, now), updatedAt: isoStamp(t.updatedAt, now) };
   if (typeof t.text !== 'string') return null;
   const text = cleanText(t.text).slice(0, THOUGHT_MAX_LENGTH);
   if (!text) return null;
-  const createdAt = str(t.createdAt);
-  const out = { id: t.id, text, status: isStatus(t.status) ? t.status : 'inbox', statusAt: str(t.statusAt) || createdAt, createdAt, updatedAt: str(t.updatedAt) };
+  const createdAt = isoStamp(t.createdAt, now);
+  const out = { id: t.id, text, status: isStatus(t.status) ? t.status : 'inbox', statusAt: isoStamp(t.statusAt, now) || createdAt, createdAt, updatedAt: isoStamp(t.updatedAt, now) };
   const answerTo = normalizeAnswerTo(t.answerTo);
   if (answerTo) out.answerTo = answerTo;
   return out;
