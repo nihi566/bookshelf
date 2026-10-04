@@ -536,3 +536,9 @@ test('読書メーターの本 ID（bookmeter_id）: 数字だけを読み、読
   assert.deepEqual(w.books.map(bookmeterUrl), ['https://bookmeter.com/books/22690039', '', '', '', '']);
   assert.equal(bookmeterUrl({ bookmeterId: 'javascript:alert(1)' }), '', '画面側でも形を確かめてから URL にする');
 });
+
+test('FEED_URL: 欲しい本の画面が案内するフィードは、wishlist.json と同じ公開先の feed.xml', async () => {
+  const { FEED_URL, WISHLIST_URLS } = await import('../web/js/wishlist-data.js');
+  const published = WISHLIST_URLS.find((url) => url.startsWith('https://'));
+  assert.equal(FEED_URL, published.replace(/wishlist\.json$/, 'feed.xml'));
+});
