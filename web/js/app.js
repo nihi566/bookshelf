@@ -515,7 +515,6 @@ const actions = {
         <div class="row spread"><button class="btn danger" value="delete">この点を削除</button><span class="row"><button class="btn" value="cancel">やめる</button><button class="btn primary" value="save">保存</button></span></div>`,
       async (data, action) => {
         if (action === 'delete') {
-          if (!confirm('この点を削除しますか？（再取り込みしても戻りません）')) return true;
           updateHighlight(state.library, h.id, { deleted: true });
           toast('削除しました');
         } else {
