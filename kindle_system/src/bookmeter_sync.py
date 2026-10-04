@@ -27,10 +27,38 @@ from src.anti_ban import BanCoordinator, RequestPacer
 from src.bookmeter import fetch_wish_books
 from src.crawler import crawl_price_info
 from src.database import get_session
-from src.repository import attach_bookmeter_ids, fix_truncated_bookmeter_titles, get_or_create_by_paid_asin, save_price_history
+from src.repository import (
+    attach_bookmeter_ids,
+    fix_truncated_bookmeter_titles,
+    get_bookmeter_asin_overrides,
+    get_or_create_by_paid_asin,
+    save_price_history,
+)
 from src.title_resolver import resolve_title_to_paid_asin
 
 ProgressCallback = Callable[[str], None]
+
+
+async def _resolve_asin(title, author, ban_coordinator, request_pacer, emit) -> Optional[str]:
+    """書名から Kindle 版 ASIN を検索する。見つからない・失敗したら理由を emit して None。"""
+    # BAN 発生中は解除を待つ（main.py の process_book と同じ呼び出し位置）
+    await ban_coordinator.wait_if_banned(worker_id=1)
+    try:
+        paid_asin = await resolve_title_to_paid_asin(
+            title,
+            author,
+            headless=True,
+            worker_id=1,
+            ban_coordinator=ban_coordinator,
+            request_pacer=request_pacer,
+        )
+    except Exception as e:
+        emit(f"  [Error] ASIN解決中にエラーが発生しました: {e}")
+        return None
+    if not paid_asin:
+        emit(f"  [Skip] Kindle版ASINを解決できませんでした（python run.py bookmeter-asin で手で対応づけられます）: {title}")
+        return None
+    return paid_asin
 
 
 async def sync_bookmeter_wishlist(progress_cb: Optional[ProgressCallback] = None) -> Dict:
@@ -86,6 +114,13 @@ async def sync_bookmeter_wishlist(progress_cb: Optional[ProgressCallback] = None
     except Exception as e:
         emit(f"  [Error] 読書メーターの本 ID の保存に失敗しました（同期は続けます）: {e}")
 
+    # run.py bookmeter-asin で手で対応づけた書名は、検索せずにその ASIN を使う（読めなくても同期は続ける）
+    try:
+        overrides = get_bookmeter_asin_overrides()
+    except Exception as e:
+        overrides = {}
+        emit(f"  [Error] 手動で対応づけた ASIN を読めませんでした（いつもどおり検索します）: {e}")
+
     ban_coordinator = BanCoordinator()
     request_pacer = RequestPacer()
 
@@ -98,31 +133,17 @@ async def sync_bookmeter_wishlist(progress_cb: Optional[ProgressCallback] = None
         author = book.get("author", "")
         emit(f"[{i}/{len(books)}] {title}")
 
-        # BAN 発生中は解除を待つ（main.py の process_book と同じ呼び出し位置）
-        await ban_coordinator.wait_if_banned(worker_id=1)
-
-        try:
-            paid_asin = await resolve_title_to_paid_asin(
-                title,
-                author,
-                headless=True,
-                worker_id=1,
-                ban_coordinator=ban_coordinator,
-                request_pacer=request_pacer,
-            )
-        except Exception as e:
-            emit(f"  [Error] ASIN解決中にエラーが発生しました: {e}")
-            skipped += 1
-            failed_titles.append(title)
-            continue
-
-        if not paid_asin:
-            emit(f"  [Skip] Kindle版ASINを解決できませんでした: {title}")
-            skipped += 1
-            failed_titles.append(title)
-            continue
-
-        emit(f"  [OK] ASIN解決成功: {paid_asin}")
+        manual_asin = overrides.get(title.strip())
+        if manual_asin:
+            paid_asin = manual_asin
+            emit(f"  [OK] 手動で対応づけた ASIN を使います: {paid_asin}")
+        else:
+            paid_asin = await _resolve_asin(title, author, ban_coordinator, request_pacer, emit)
+            if paid_asin is None:
+                skipped += 1
+                failed_titles.append(title)
+                continue
+            emit(f"  [OK] ASIN解決成功: {paid_asin}")
 
         try:
             with get_session() as session:

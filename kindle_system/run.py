@@ -9,6 +9,7 @@ run.py
     python run.py want <asin> (--on|--off)
     python run.py purchase <asin> (--on|--off)
     python run.py target-price <asin> (<円>|--clear)
+    python run.py bookmeter-asin <読書メーターの書名> <asin>
     python run.py import-marks [<書き出したファイル>] [--publish]
     python run.py recommend [--kind manga|book|all] [--count N] [--new N] [--model NAME] [--dry-run]
 """
@@ -40,7 +41,7 @@ import main as main_module
 from src import recommender
 from src.book_kind import KIND_BOOK, KIND_MANGA
 from src.bookmeter_sync import sync_bookmeter_wishlist
-from src.repository import get_book_marks, get_books, import_marks, init_db, set_purchased, set_target_price, set_wanted
+from src.repository import get_book_marks, get_books, import_marks, init_db, set_bookmeter_asin, set_purchased, set_target_price, set_wanted
 
 # 欲しい本の画面（bookshelf の web/core/wishlist.js の marksFile）の「見た・評価を書き出す」が作るファイル
 MARKS_FILE_FORMAT = "kindle-marks"
@@ -241,6 +242,13 @@ async def _run_sync(
 _ASIN_RE = re.compile(r"[A-Z0-9]{10}")
 
 
+def _parse_asin(value: str) -> str:
+    """ASIN 1 つ（英大文字・数字 10 文字）。形式が違えば argparse のエラーにする。"""
+    if not _ASIN_RE.fullmatch(value):
+        raise argparse.ArgumentTypeError("ASIN は英大文字・数字 10 文字で指定してください。")
+    return value
+
+
 def _parse_asin_list(value: str) -> set:
     """`--asins` の値（カンマ区切りの ASIN）を集合にする。形式が違えば argparse のエラーにする。"""
     asins = value.split(",")
@@ -313,6 +321,22 @@ def cmd_target_price(args: argparse.Namespace) -> None:
         print(f"[OK] 希望価格を取り消しました（ASIN: {args.asin}）。")
     else:
         print(f"[OK] 希望価格を ¥{price:,} にしました（ASIN: {args.asin}）。次の python run.py sync でフィードに反映されます。")
+
+
+def cmd_bookmeter_asin(args: argparse.Namespace) -> None:
+    """
+    読書メーターの書名に Kindle 版 ASIN を手で対応づけ、読書メーターの読みたい本として登録する。
+    書名から ASIN を見つけられずに sync の [スキップ一覧] に出続ける本を、次回以降は検索せずにこの ASIN で監視する。
+    """
+    try:
+        set_bookmeter_asin(args.title, args.asin)
+    except (ValueError, SQLAlchemyError) as e:
+        print(f"エラー: 対応づけられませんでした（{e}）", file=sys.stderr)
+        sys.exit(1)
+    print(
+        f"[OK] 「{args.title.strip()}」を ASIN {args.asin} に対応づけ、読書メーターの読みたい本として登録しました。"
+        "次の python run.py sync から検索せずにこの ASIN で価格を取ります。"
+    )
 
 
 def _find_latest_marks_file(directory: str):
@@ -506,6 +530,14 @@ def build_parser() -> argparse.ArgumentParser:
     target_group.add_argument("price", nargs="?", type=_positive_int, help="希望価格（円。ポイント差し引き後の実質価格と比べる）")
     target_group.add_argument("--clear", action="store_true", help="希望価格を取り消す")
     target_parser.set_defaults(func=cmd_target_price)
+
+    bookmeter_asin_parser = subparsers.add_parser(
+        "bookmeter-asin",
+        help="読書メーターの書名に Kindle 版 ASIN を手で対応づける（sync の [スキップ一覧] に出続ける本向け）",
+    )
+    bookmeter_asin_parser.add_argument("title", help="読書メーターの書名（sync の [スキップ一覧] に出たとおり）")
+    bookmeter_asin_parser.add_argument("asin", type=_parse_asin, help="Kindle 版の ASIN（英大文字・数字 10 文字）")
+    bookmeter_asin_parser.set_defaults(func=cmd_bookmeter_asin)
 
     import_parser = subparsers.add_parser(
         "import-marks", help="公開ページで書き出した「見た」・★評価・種別（JSON）を DB に取り込む"

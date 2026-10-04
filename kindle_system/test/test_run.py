@@ -585,6 +585,30 @@ class PublishedFilesTest(unittest.TestCase):
         self.assertEqual(run.PUBLISHED_FILES, ["wishlist.json", "feed.xml", report.PICKED_FEED_FILE])
 
 
+class BookmeterAsinCommandTest(unittest.TestCase):
+    @patch("run.set_bookmeter_asin")
+    def test_registers_title_with_asin(self, mock_set):
+        args = run.build_parser().parse_args(["bookmeter-asin", "見つからない本", "B0MANUAL01"])
+        self.assertIs(args.func, run.cmd_bookmeter_asin)
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            args.func(args)
+        mock_set.assert_called_once_with("見つからない本", "B0MANUAL01")
+        self.assertIn("B0MANUAL01", out.getvalue())
+
+    def test_rejects_malformed_asin(self):
+        for asin in ("b0manual01", "B0SHORT", "B0MANUAL01X"):
+            with self.assertRaises(SystemExit), contextlib.redirect_stderr(io.StringIO()):
+                run.build_parser().parse_args(["bookmeter-asin", "本", asin])
+
+    @patch("run.set_bookmeter_asin", side_effect=ValueError("書名が空です"))
+    def test_invalid_title_exits_with_code_1(self, mock_set):
+        args = run.build_parser().parse_args(["bookmeter-asin", " ", "B0MANUAL01"])
+        with self.assertRaises(SystemExit) as cm, contextlib.redirect_stderr(io.StringIO()):
+            args.func(args)
+        self.assertEqual(cm.exception.code, 1)
+
+
 class TargetPriceCommandTest(unittest.TestCase):
     @patch("run.set_target_price", return_value=True)
     def test_sets_target_price(self, mock_set):
