@@ -1,7 +1,7 @@
 // 知識（AI 分析）の画面: 点 → 線 → 面 → 立体、おすすめの本
 import { html, raw, esc, safeUrl } from '../html.js';
 import { FEEDBACK_LABELS, feedbackByStatus, feedbackFor, libraryStats } from '../../core/model.js';
-import { layoutKnowledgeMap } from '../../core/obsidian.js';
+import { layoutKnowledgeMap } from '../../core/knowledge-map.js';
 import { isoDate, truncate } from '../../core/text.js';
 import { TFIDF_HINT } from '../../core/analysis/pipeline.js';
 import { highlightCard, lineIndex } from '../ui.js';
@@ -165,7 +165,7 @@ function amazonLink(title, asin) {
   return url ? html`<p class="small"><a class="rec-amazon" href="${url}" target="_blank" rel="noopener noreferrer">${label}</a></p>` : '';
 }
 
-/** 立体を放射状の図にする（中心=核、内側=面、外側=線）。Obsidian の Canvas と同じ配置 */
+/** 立体を放射状の図にする（中心=核、内側=面、外側=線） */
 function mapSvg(a) {
   const { nodes, edges } = layoutKnowledgeMap(a);
   const byId = new Map(nodes.map((n) => [n.id, n]));

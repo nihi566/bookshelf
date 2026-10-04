@@ -1,7 +1,7 @@
 {
   "name": "bookshelf",
   "version": "0.1.0",
-  "description": "Play Books と Kindle のハイライトを Obsidian に集め、ローカル LLM で知識を「点→線→面→立体」に構造化する",
+  "description": "Play Books と Kindle のハイライトを 1 か所に集め、ローカル LLM で知識を「点→線→面→立体」に構造化する",
   "type": "module",
   "private": true,
   "bin": {

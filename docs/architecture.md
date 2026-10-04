@@ -2,8 +2,8 @@
 
 ## 方針
 
-- **静的サイト + PC のコンパニオン**：画面は GitHub Pages に置ける静的ファイルだけで作り、AI（ローカル LLM）と Obsidian の Vault への書き込みは PC 側が受け持つ
-- **同じコードをブラウザと PC で使う**：`web/core/` はブラウザと Node の両方で動く純粋な ES モジュール（DOM や `fs` に依存しない）。パーサ・モデル・Obsidian 出力・分析パイプラインは 1 か所にしかない
+- **静的サイト + PC のコンパニオン**：画面は GitHub Pages に置ける静的ファイルだけで作り、AI（ローカル LLM）は PC 側が受け持つ。ハイライトと分析結果はこのシステムだけで管理する（Obsidian などへの書き出しはしない）
+- **同じコードをブラウザと PC で使う**：`web/core/` はブラウザと Node の両方で動く純粋な ES モジュール（DOM や `fs` に依存しない）。パーサ・モデル・分析パイプラインは 1 か所にしかない
 - **依存ライブラリなし**：zip の読み書き、docx の解析、HTML の分解、k-means まで自前。ビルド不要で `web/` をそのまま公開できる
 - **データは手元だけ**：ハイライトは端末の IndexedDB と PC の `data/*.json` にだけ置く。外に出るのは、ローカル LLM への依頼と、おすすめの本を探す検索語・書名（Google Books / 国立国会図書館サーチ）のみ。ハイライトの本文は外部に送らない
 
@@ -42,7 +42,7 @@ Highlight = { id: 'h'+hash(bookId+本文の正規化), bookId, source, kind: 'hi
 - 包含関係での置き換え（伸ばしたハイライト）は Kindle だけで、位置が重なるか、位置が無ければ同じページのときだけ行う（Play ブックスの別ページの短いハイライトを消さない）
 - おすすめへの反応は `library.feedback[書名キー] = { status: read|want|no|'', updatedAt }` に持ち、同期では新しい方を採る
 - バックアップは `{ format: 'book-highlights/backup', library, analysis }`。取り込み（Web・`bh import`・サーバ共通の `web/core/importing.js`）では、ライブラリを統合し、分析結果は手元より新しいときだけ採用する
-- リポジトリ名は `bookshelf` に変えたが、データ形式名（`book-highlights/backup` など）・Obsidian のタグ（`book-highlights/book` など）・IndexedDB の名前・`bh serve` の応答の `app` は旧名 `book-highlights` のまま残す（変えると既存のバックアップ・Vault のノート・端末に保存したデータ・古い版のアプリと合わなくなる）
+- リポジトリ名は `bookshelf` に変えたが、データ形式名（`book-highlights/backup` など）・IndexedDB の名前・`bh serve` の応答の `app` は旧名 `book-highlights` のまま残す（変えると既存のバックアップ・端末に保存したデータ・古い版のアプリと合わなくなる）
 
 ## 分析結果（`web/core/analysis/pipeline.js`）
 
@@ -74,21 +74,11 @@ Analysis = { createdAt, model: { chat, embed }, stats,
 - すべての埋め込みはエスケープする（`web/js/html.js` の `html` タグ付きテンプレート）。知識マップの SVG も ID・座標・ラベルをエスケープ／数値化して組み立てる
 - 外部由来の URL（書誌 DB のリンク・表紙画像）は `https:` だけ通す
 - ブックマークレットからの `postMessage` は Kindle ノートブックのドメイン（`read.amazon.com` / `.co.jp` など）の完全一致だけ受け付ける
-- Obsidian に書き出す引用文中のコードフェンス（```` ```dataviewjs ```` など）は無害化する
 
-## Obsidian 出力（`web/core/obsidian.js`）
+## 知識マップ・PC の状態
 
-- 自動生成部分を `<!-- bh:start -->`〜`<!-- bh:end -->` で囲み、外側（自分のメモ）は残す。frontmatter は生成するキーだけ差し替える
-- 線のノートは点を `![[Highlights/Books/書名#^hxxxx]]` で埋め込むので、元の本のノートと常に一致する
-- `Knowledge Map.canvas` の配置（中心 = 核、内側の輪 = 面、外側の輪 = 線）は Web アプリの知識マップと同じ関数（`layoutKnowledgeMap`）
-- `.bh-manifest.json` に前回書き出したファイルと、各ファイルの持ち主（本・線・面の ID）を記録する
-  - 次の書き出しでは同じファイルを同じ持ち主に使い続ける（書名の先頭 80 文字が同じ本が増えても付け替わらない）
-  - 分析から外れたノートは、自分の書き込み（見出しの下・`bh:end` の下・frontmatter に足したキー・`tags` に足したタグ・コメント）が無ければ削除、あれば残す
-- frontmatter は YAML の最上位のキー単位で扱う（空白や引用符を含む名前、複数行の値、コメントも 1 まとまり）。生成するキーだけ差し替え、`tags` は自分で足したタグと合わせる。CRLF・BOM のノートは元の形のまま書き戻す
-- コンパニオンサーバは同期・取り込み・分析結果の保存のあと、少し待って Vault を自動で書き出し、結果を `data/state.json` の `lastExport` に残す（`/api/info` で Web アプリに見せる）。Web アプリで「Vault 内のフォルダ名」を自分で決めたときは「PC に書き出す」でそれを送り、PC の設定にも残す（決めていなければ Web 側が PC の設定に合わせる）。分析中に届いた同期の自動書き出しは、分析が Vault まで書き出せなかったときに分析の後で行う
+- 知識マップの配置（中心 = 核、内側の輪 = 面、外側の輪 = 線）は `web/core/knowledge-map.js` の `layoutKnowledgeMap`
 - ブラウザ拡張は確認のたびに結果（成否・ログイン切れ・新しい線の件数・確認の間隔・エラー文）だけを `POST /api/kindle-status` に送り、コンパニオンサーバが `state.json` の `kindleSync` に残す（`/api/info` で Web アプリの取り込み画面に見せる）。トークン・URL・本の一覧は送らない
-- 線・面の ID は分析し直すと変わるので、前回の持ち主による予約は「本」と「今も存在する線・面」にだけ効かせる（同じ名前の線・面は同じノートを使い続け、自分のメモが残る）
-- 同名になるノートの「 (2)」は ID 順で決めるので、並び順が変わってもノートが入れ替わらない
 
 ## パーサ（`web/core/parsers/`）
 

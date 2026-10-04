@@ -5,7 +5,7 @@ import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { bookHighlights, dailyPicks, deleteBook, emptyLibrary, highlightIdFor, bookIdFor, libraryStats, listBooks, mergeLibraries, mergeParsed, searchHighlights, updateHighlight } from '../web/core/model.js';
-import { END, layoutKnowledgeMap, mergeManaged, planVaultWrite, renderVault } from '../web/core/obsidian.js';
+import { layoutKnowledgeMap } from '../web/core/knowledge-map.js';
 import { createZip, readZip } from '../web/core/zip.js';
 import { SAMPLE_BOOKS } from '../web/core/sample.js';
 
@@ -103,80 +103,13 @@ function fakeAnalysis(lib) {
   };
 }
 
-test('renderVault: 本ノートにブロック ID、線ノートから点を埋め込み、Canvas は妥当な JSON', () => {
+test('layoutKnowledgeMap: 核・面・線をすべて有限の座標に置き、核→面→線をつなぐ', () => {
   const lib = sampleLibrary();
   const analysis = fakeAnalysis(lib);
-  const files = renderVault(lib, analysis, { root: 'Highlights' });
-  const paths = files.map((f) => f.path);
-  assert.ok(paths.includes('Highlights/Index.md'));
-  assert.ok(paths.includes('Highlights/Books/小さな習慣の力.md'));
-  assert.ok(paths.includes('Highlights/Lines/仕組み 環境.md'), 'ファイル名に使えない文字は除く');
-  assert.ok(paths.includes('Highlights/Planes/自己の設計.md'));
-  assert.ok(paths.includes('Highlights/Knowledge Map.canvas'));
-  assert.ok(paths.includes('Highlights/Recommendations.md'));
-
-  const bookNote = files.find((f) => f.path === 'Highlights/Books/小さな習慣の力.md').content;
-  assert.match(bookNote, /^---\ntitle: "小さな習慣の力"\nauthor: "山田 太郎"/);
-  assert.match(bookNote, /> \[!quote\] 位置 \d+-\d+ · \d{4}-\d{2}-\d{2}\n> 行動を変えたいなら/);
-  assert.match(bookNote, /\n\^h[0-9a-z]+\n/);
-  assert.match(bookNote, /## 第2章 環境と自己像/);
-  assert.match(bookNote, /\*\*メモ:\*\* 複利の考え方/);
-
-  const line = files.find((f) => f.path.startsWith('Highlights/Lines/仕組み')).content;
-  const hs = Object.values(lib.highlights);
-  const book = lib.books[hs[0].bookId];
-  assert.ok(line.includes(`![[Highlights/Books/${book.title}#^${hs[0].id}]]`));
-  assert.ok(line.includes('[[Highlights/Planes/自己の設計|自己の設計]]'));
-
-  const canvas = JSON.parse(files.find((f) => f.path.endsWith('.canvas')).content);
-  assert.equal(canvas.nodes.length, 1 + 1 + 2);
-  assert.ok(canvas.nodes.every((n) => Number.isFinite(n.x) && Number.isFinite(n.y)));
-  assert.ok(canvas.nodes.some((n) => n.file === 'Highlights/Lines/注意の管理.md'));
   const layout = layoutKnowledgeMap(analysis);
+  assert.equal(layout.nodes.length, 1 + 1 + 2);
+  assert.ok(layout.nodes.every((n) => Number.isFinite(n.x) && Number.isFinite(n.y)));
   assert.equal(layout.edges.length, 3);
-});
-
-test('mergeManaged: 自分のメモと追加した frontmatter は残る。マーカーの無い同名ノートは上書きしない', () => {
-  const lib = sampleLibrary();
-  const f = renderVault(lib, null).find((x) => x.path === 'Highlights/Books/小さな習慣の力.md');
-  const edited = f.content.replace('---\n#', 'rating: 5\n---\n#').replace(/## 自分のメモ\n\n$/, '## 自分のメモ\n\nとても良い本だった\n');
-  const regenerated = f.content.replace('行動を変えたいなら', '行動を変えたいなら（更新）');
-  const merged = mergeManaged(edited, regenerated);
-  assert.ok(merged.includes('（更新）'));
-  assert.ok(merged.includes('とても良い本だった'));
-  assert.ok(merged.includes('rating: 5'));
-  assert.equal(merged.match(/^title:/gm).length, 1);
-  assert.equal(mergeManaged('# 自分で書いたノート', regenerated), null);
-  assert.equal(mergeManaged(null, regenerated), regenerated);
-});
-
-test('planVaultWrite: 変更なしはスキップ、分析から外れたノートは自分のメモが無ければ削除', async () => {
-  const lib = sampleLibrary();
-  const analysis = fakeAnalysis(lib);
-  const disk = new Map();
-  const read = async (p) => disk.get(p) ?? null;
-  const apply = (plan) => {
-    for (const w of plan.writes) disk.set(w.path, w.content);
-    for (const d of plan.deletes) disk.delete(d);
-  };
-  const first = await planVaultWrite(renderVault(lib, analysis), read);
-  apply(first);
-  assert.equal(first.deletes.length, 0);
-  const again = await planVaultWrite(renderVault(lib, analysis), read);
-  assert.equal(again.writes.length, 1, 'マニフェスト以外は変更なし');
-
-  // 線 l1 にだけ自分のメモを書き、次の分析で l1 と l2 が消えた場合
-  const l1Path = 'Highlights/Lines/仕組み 環境.md';
-  disk.set(l1Path, disk.get(l1Path) + 'この線について考えたこと\n');
-  const next = { ...analysis, lines: [{ ...analysis.lines[1], id: 'l3', name: '新しい線' }], planes: [{ ...analysis.planes[0], lineIds: ['l3'] }] };
-  const plan = await planVaultWrite(renderVault(lib, next), read);
-  assert.deepEqual(plan.deletes, ['Highlights/Lines/注意の管理.md']);
-  assert.deepEqual(plan.orphaned, [l1Path]);
-  assert.ok(plan.writes.some((w) => w.path === 'Highlights/Lines/新しい線.md'));
-  // ユーザーが作った同名ノートは上書きしない
-  disk.set('Highlights/Books/深い集中.md', '# 自分のノート');
-  const plan2 = await planVaultWrite(renderVault(lib, next), read);
-  assert.ok(plan2.skipped.includes('Highlights/Books/深い集中.md'));
 });
 
 test('zip: 書き出しと読み込みの往復、system unzip でも検証', async () => {
@@ -202,16 +135,13 @@ test('zip: 書き出しと読み込みの往復、system unzip でも検証', as
   }
 });
 
-test('レビュー指摘の回帰: 削除した本の再取り込み・改行入りの書名・コードフェンスの無害化', () => {
+test('レビュー指摘の回帰: 削除した本の再取り込み・改行入りの書名', () => {
   const lib = emptyLibrary();
   const parsed = [{ title: '本\n# 見出しの注入', author: '著者\nX', source: 'kindle', highlights: [{ text: '点A' }, { text: '```dataviewjs\nalert(1)\n```' }] }];
   mergeParsed(lib, parsed, { now: T1 });
   const [b] = listBooks(lib);
   assert.equal(b.title, '本 # 見出しの注入');
   assert.equal(b.author, '著者 X');
-  const note = renderVault(lib, null).find((f) => f.path.includes('/Books/')).content;
-  assert.ok(!/^```dataviewjs/m.test(note.replace(/^> /gm, '')), 'コードフェンスがそのまま残らない');
-  assert.match(note, /> `​``dataviewjs/);
   // 本を削除してから再取り込みすると、本と一緒に消えた点も戻る（個別に消した点は戻らない）
   const [h1, h2] = bookHighlights(lib, b.id);
   updateHighlight(lib, h2.id, { deleted: true }, T1);
@@ -231,31 +161,6 @@ test('mergeParsed: 自動取り込み（reviveDeleted: false）では削除し�
   assert.equal(stats.added, 0);
   assert.ok(lib.books[b.id].deleted);
   assert.equal(listBooks(lib).length, 0);
-});
-
-test('レビュー指摘の回帰: 同名の本のノートは並び順が変わっても入れ替わらない', () => {
-  const lib = emptyLibrary();
-  const long = 'あ'.repeat(90);
-  mergeParsed(lib, [{ title: long + '上', source: 'kindle', highlights: [{ text: 'x', createdAt: '2024-01-01T00:00:00Z' }] }, { title: long + '下', source: 'kindle', highlights: [{ text: 'y', createdAt: '2024-02-01T00:00:00Z' }] }], { now: T1 });
-  const before = renderVault(lib, null).filter((f) => f.path.includes('/Books/')).map((f) => [f.path, f.content.includes('\n> x\n')]);
-  mergeParsed(lib, [{ title: long + '上', source: 'kindle', highlights: [{ text: 'z', createdAt: '2024-03-01T00:00:00Z' }] }], { now: T2 });
-  const after = renderVault(lib, null).filter((f) => f.path.includes('/Books/')).map((f) => [f.path, f.content.includes('\n> x\n')]);
-  assert.deepEqual(after.sort(), before.sort());
-});
-
-test('レビュー指摘の回帰: 見出しの下や frontmatter に書き足したノートは、分析から外れても削除しない', async () => {
-  const lib = sampleLibrary();
-  const analysis = fakeAnalysis(lib);
-  const disk = new Map();
-  const read = async (p) => disk.get(p) ?? null;
-  for (const w of (await planVaultWrite(renderVault(lib, analysis), read)).writes) disk.set(w.path, w.content);
-  const a = 'Highlights/Lines/仕組み 環境.md';
-  const b = 'Highlights/Lines/注意の管理.md';
-  disk.set(a, disk.get(a).replace('# 仕組み: 環境\n', '# 仕組み: 環境\n\n見出しの下に書いたメモ\n'));
-  disk.set(b, disk.get(b).replace('tags:', 'my_rating: 5\ntags:'));
-  const plan = await planVaultWrite(renderVault(lib, { ...analysis, lines: [], planes: [] }), read);
-  assert.deepEqual(plan.deletes.filter((p) => p.includes('/Lines/')), []);
-  assert.deepEqual(plan.orphaned.sort(), [a, b].sort());
 });
 
 test('HTML: 検索語の強調はエスケープを壊さない・外部 URL は https のみ', async () => {

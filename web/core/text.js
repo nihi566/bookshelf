@@ -39,23 +39,6 @@ export function hash(str, seed = 0) {
   return (4294967296 * (2097151 & h2) + (h1 >>> 0)).toString(36);
 }
 
-/** Obsidian / 各 OS で使えないファイル名文字を除去する */
-export function safeFileName(name, maxLength = 80) {
-  let s = String(name ?? '')
-    .normalize('NFC')
-    .replace(/[\\/:*?"<>|#^[\]{}\n\r\t]/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim()
-    .replace(/^\.+/, '');
-  if (s.length > maxLength) s = s.slice(0, maxLength).trim();
-  return s || 'untitled';
-}
-
-/** YAML の文字列値として安全にクォートする */
-export function yamlString(s) {
-  return JSON.stringify(String(s ?? ''));
-}
-
 /** ISO 日付文字列 → YYYY-MM-DD（不正な値は空文字） */
 export function isoDate(value) {
   if (!value) return '';

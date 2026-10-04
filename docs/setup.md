@@ -2,7 +2,7 @@
 
 ## 0. 必要なもの
 
-- PC: Node.js 20 以上、Obsidian、ローカル LLM（[Ollama](https://ollama.com) か LM Studio など OpenAI 互換 API を持つもの）
+- PC: Node.js 20 以上、ローカル LLM（[Ollama](https://ollama.com) か LM Studio など OpenAI 互換 API を持つもの）
 - スマホ: ブラウザ（Safari / Chrome）。PC の AI を使うなら [Tailscale](https://tailscale.com)
 
 ## 1. Web アプリを GitHub Pages で公開する
@@ -37,7 +37,6 @@ node cli/bh.js config url http://localhost:1234   # LM Studio の既定ポート
 ## 3. PC: `bh` の設定とコンパニオンサーバ
 
 ```sh
-node cli/bh.js config vault "/Users/me/Documents/MyVault"
 node cli/bh.js config model qwen3.5:9b
 node cli/bh.js config embed bge-m3
 node cli/bh.js config origin https://<ユーザー名>.github.io   # GitHub Pages 版から接続する場合
@@ -46,14 +45,12 @@ node cli/bh.js serve
 
 | コマンド | 内容 |
 | --- | --- |
-| `bh import <ファイル...> [--no-obsidian]` | 取り込み（Vault を設定していれば続けて書き出す。`--no-obsidian` で止める）。このアプリのバックアップ（.json）も取り込め、手元より新しい分析結果なら反映する |
-| `bh obsidian [--dry-run]` | Vault に書き出し |
-| `bh analyze [--no-recommend]` | 点→線→面→立体の分析とおすすめ（結果は Vault にも書き出し） |
+| `bh import <ファイル...>` | 取り込み。このアプリのバックアップ（.json）も取り込め、手元より新しい分析結果なら反映する |
+| `bh analyze [--no-recommend]` | 点→線→面→立体の分析とおすすめ |
 | `bh recommend` | おすすめだけ選び直す |
 | `bh serve [--port 8787] [--host 127.0.0.1]` | コンパニオンサーバ（Google にログイン済みなら Play ブックスを自動取り込み。3.5 節） |
 | `bh list` / `bh search <語>` | 一覧・検索 |
-| `bh config` | 設定と、最後に Vault に書き出した時刻の表示（`data/config.json`・`data/state.json`） |
-| `bh config autoexport on\|off` | 同期・取り込み・分析のあとに Vault を自動で書き出すか（既定: on） |
+| `bh config` | 設定の表示（`data/config.json`） |
 
 データは既定でリポジトリの `data/`（`.gitignore` 済み）に保存されます。`BH_DATA=/path` で変更できます。
 
@@ -61,12 +58,12 @@ node cli/bh.js serve
 
 ## 3.5 Play ブックスの自動取り込み（Google ドライブ）
 
-Play ブックスで線を引くと、Google がドライブの「Play ブックスのメモ」フォルダにある本ごとのドキュメントを書き換えます。`bh serve` がそのフォルダを定期的に確認し、更新されたドキュメントだけを取り込みます（Vault が設定されていれば Obsidian にも書き出します）。スマホの Web アプリには PC との同期で届きます（開いている間は、PC に新しい線が入ったときに自動で同期します）。
+Play ブックスで線を引くと、Google がドライブの「Play ブックスのメモ」フォルダにある本ごとのドキュメントを書き換えます。`bh serve` がそのフォルダを定期的に確認し、更新されたドキュメントだけを取り込みます。スマホの Web アプリには PC との同期で届きます（開いている間は、PC に新しい線が入ったときに自動で同期します）。
 
 ```
 Play ブックスで線を引く
   → Google がドキュメントを更新（数分かかることがある。間隔は Google 次第）
-  → bh serve が確認（既定 60 秒ごと）して取り込み・Obsidian へ書き出し
+  → bh serve が確認（既定 60 秒ごと）して取り込み
   → Web アプリが PC と同期
 ```
 
@@ -157,10 +154,6 @@ Amazon には Kindle のハイライトを外部に渡す公式の API があり
 - **安全性**: Amazon のパスワードや Cookie は保存しない。ブラウザを閉じている間は止まる。拡張機能が接続できるのは Amazon のノートブック・`localhost`・`*.ts.net` だけ
 - **削除との関係**: Web アプリで削除した本は、自動の取り込みでは復活しない（手動で取り込み直すと戻る）
 - 拡張機能のフォルダを移動すると ID が変わるので、もう一度 `bh config origin` を実行する
-
-## 6. Obsidian をスマホでも読む
-
-分析結果は Vault の Markdown / Canvas になるので、Obsidian Sync・iCloud Drive・Git など、普段の同期方法でスマホの Obsidian からも読めます。Web アプリの「Obsidian に写す」で Vault 名を設定すると、本の画面に「Obsidian で開く」ボタンが出ます。
 
 ## うまくいかないとき
 

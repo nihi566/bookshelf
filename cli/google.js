@@ -11,7 +11,6 @@ import { createHash, randomBytes } from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { mergeParsed } from '../web/core/model.js';
 import { parseFiles } from '../web/core/parsers/index.js';
-import { exportAndRecord } from './store.js';
 
 const AUTH_URL = 'https://accounts.google.com/o/oauth2/v2/auth';
 const TOKEN_URL = 'https://oauth2.googleapis.com/token';
@@ -172,7 +171,7 @@ export function createGoogleClient({ store, fetchImpl = fetch }) {
       folders = null;
     },
 
-    /** 1 回分の確認: 更新されたドキュメントだけ取り込み、Vault が設定されていれば書き出す */
+    /** 1 回分の確認: 更新されたドキュメントだけ取り込む */
     async sync() {
       const docs = await listDocs(await findFolders());
       const synced = await store.googleSync();
@@ -180,12 +179,12 @@ export function createGoogleClient({ store, fetchImpl = fetch }) {
         // フォルダが作り直された（設定のオフ → オン等）かもしれないので、次の確認で探し直す。
         // 取り込み済みの記録は消さない（消すと全部を取り込み直すことになる）
         folders = null;
-        return { checked: 0, changed: 0, added: 0, updated: 0, booksAdded: 0, errors: [], vault: null };
+        return { checked: 0, changed: 0, added: 0, updated: 0, booksAdded: 0, errors: [] };
       }
       // 前の版の記録（表紙の書籍 ID を拾う前）なら、変わっていないドキュメントも一度だけ読み直して本に ID を付ける
       const reread = synced.version !== SYNC_VERSION;
       const changed = docs.filter((d) => reread || synced.files[d.id] !== d.modifiedTime);
-      const result = { checked: docs.length, changed: changed.length, added: 0, updated: 0, booksAdded: 0, errors: [], vault: null };
+      const result = { checked: docs.length, changed: changed.length, added: 0, updated: 0, booksAdded: 0, errors: [] };
       if (!changed.length) return result;
 
       const inputs = [];
@@ -216,23 +215,13 @@ export function createGoogleClient({ store, fetchImpl = fetch }) {
       // 読み直しで書き出せなかったドキュメントがあれば、次の確認でもう一度全部を読み直す
       if (inputs.length === changed.length) synced.version = SYNC_VERSION;
       await store.saveGoogleSync(synced);
-
-      const cfg = await store.config();
-      if (cfg.vault && cfg.autoExport !== false && (result.added || result.updated)) {
-        try {
-          result.vault = await store.lock(() => exportAndRecord(store, { trigger: 'google' }));
-        } catch (e) {
-          result.errors.push(`Obsidian: ${e.message}`);
-        }
-      }
       return result;
     },
   };
 }
 
 export function describeSync(r) {
-  const head = r.changed ? `更新されたドキュメント ${r.changed} 件 → 新しい点 ${r.added} 件・更新 ${r.updated} 件${r.booksAdded ? `（新しい本 ${r.booksAdded} 冊）` : ''}` : `変更なし（ドキュメント ${r.checked} 件）`;
-  return head + (r.vault ? ` / Obsidian: 書き込み ${r.vault.written} 件` : '');
+  return r.changed ? `更新されたドキュメント ${r.changed} 件 → 新しい点 ${r.added} 件・更新 ${r.updated} 件${r.booksAdded ? `（新しい本 ${r.booksAdded} 冊）` : ''}` : `変更なし（ドキュメント ${r.checked} 件）`;
 }
 
 /**
