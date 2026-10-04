@@ -21,9 +21,10 @@ function Write-Log([string]$message) {
 Set-Location $RepoDir
 Write-Log "開始: $Python run.py sync"
 # run.py の出力は UTF-8。PowerShell を通すと文字コードを読み替えてしまうので、cmd のリダイレクトでそのまま追記する
+# 標準入力は NUL にする。タスクは隠れたコンソールで動き誰も入力できないので、入力を待つと 3 時間で打ち切られるため
 $env:PYTHONIOENCODING = 'utf-8'
 $process = Start-Process -FilePath 'cmd.exe' -NoNewWindow -Wait -PassThru `
-    -ArgumentList "/d /s /c `"`"$Python`" run.py sync >> `"$LogPath`" 2>&1`""
+    -ArgumentList "/d /s /c `"`"$Python`" run.py sync < NUL >> `"$LogPath`" 2>&1`""
 $exitCode = $process.ExitCode
 Write-Log "終了（終了コード $exitCode）"
 exit $exitCode

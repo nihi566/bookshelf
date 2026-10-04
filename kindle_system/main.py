@@ -147,6 +147,31 @@ def format_summary_line(counts: dict, resumed: int = 0) -> str:
     return line
 
 
+def ask_start_index(total: int):
+    """開始する番号（1 始まり）を端末で聞く。最初から始めるときは None を返す。
+
+    端末でないとき（タスクスケジューラの自動同期・入力のリダイレクト）は聞かない。
+    聞くと誰も入力できないまま待ち続けるため（backlog 20261004-scheduled-sync-waits-for-input）。
+    入力が範囲外・数字でないときは、黙って全件にせず、最初から始めることを表示する。
+    """
+    stdin = sys.stdin
+    if stdin is None or not stdin.isatty():
+        print("[Start] 端末からの実行ではないため、開始番号を聞かずに最初から始めます（途中から始めるときは --start N）。")
+        return None
+    print(f"[Start] 開始するインデックス番号を入力してください (1 ~ {total}) [Enterで通常開始]: ", end="", flush=True)
+    try:
+        typed = input().strip()
+    except (EOFError, KeyboardInterrupt):
+        print()
+        return None
+    if not typed:
+        return None
+    if typed.isdigit() and 1 <= int(typed) <= total:
+        return int(typed)
+    print(f"[!] 開始番号「{typed}」は 1 ~ {total} の数字ではないため、最初から始めます。")
+    return None
+
+
 # ─── メインロジック ──────────────────────────────────────────────────────────
 
 async def run_integration(
@@ -206,16 +231,7 @@ async def run_integration(
     # 起動時のユーザー入力プロンプト (引数 start が指定されている場合はそれを優先しプロンプトをスキップ)
     manual_start = start
     if manual_start is None and not only_asins:
-        try:
-            print(f"[Start] 開始するインデックス番号を入力してください (1 ~ {len(samples)}) [Enterで通常開始]: ", end="", flush=True)
-            user_input = input().strip()
-            if user_input:
-                manual_start = int(user_input)
-                if manual_start < 1 or manual_start > len(samples):
-                    manual_start = None
-        except Exception:
-            # 数値以外の入力や EOFError 等は安全に通常開始へフォールバック
-            manual_start = None
+        manual_start = ask_start_index(len(samples))
 
     print("-" * 60)
 
