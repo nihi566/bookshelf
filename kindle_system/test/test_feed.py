@@ -195,6 +195,58 @@ class BuildFeedTest(unittest.TestCase):
         for entry in _entries(report.build_feed(_wishlist(back_to_low, above_low), SITE)):
             self.assertNotIn("過去最安値", entry["title"])
 
+    def test_picked_feed_has_its_own_address_and_title(self):
+        root = ET.fromstring(report.build_feed(_wishlist(), SITE, picked_only=True))
+        self.assertEqual(root.find(f"{ATOM}link[@rel='self']").get("href"), SITE + report.PICKED_FEED_FILE)
+        self.assertEqual(root.findtext(f"{ATOM}id"), SITE + report.PICKED_FEED_FILE)
+        self.assertIn("読みたい本", root.findtext(f"{ATOM}title"))
+
+    def test_picked_feed_entries_match_the_set_derived_from_wishlist(self):
+        """読みたい本の出来事・希望価格への到達・下げ幅が大きい値下がりだけが載る。wishlist.json の項目だけから集合を導いて照合する。"""
+        big = report.BIG_DROP_YEN
+        ku_history = [{"at": "2026-10-01T09:00:00", "price": 1000, "ku": False}, {"at": "2026-10-02T09:00:00", "price": None, "ku": True}]
+        target_history = [{"at": "2026-10-01T09:00:00", "price": 700, "ku": False}, {"at": "2026-10-02T09:00:00", "price": 450, "ku": False}]
+        books = [
+            # 読みたい本: 小さな値下がりでも載る
+            _book(asin="B0PICK0001", wanted=True, price=990, price_prev=1000, price_changed_at="2026-10-02T08:00:00"),
+            # 読みたい本: 読み放題入りも載る
+            _book(asin="B0PICK0002", wanted=True, price=None, ku=True, price_history=ku_history),
+            # 読みたい本でない: 下げ幅がちょうど閾値なら載る
+            _book(asin="B0PICK0003", wanted=False, price=1000, price_prev=1000 + big, price_changed_at="2026-10-02T08:00:00"),
+            # 読みたい本でない: 下げ幅が閾値未満なら載らない
+            _book(asin="B0PICK0004", wanted=False, price=1000, price_prev=1000 + big - 1, price_changed_at="2026-10-02T08:00:00"),
+            # 読みたい本でない: 読み放題入りは載らない
+            _book(asin="B0PICK0005", wanted=False, price=None, ku=True, price_history=ku_history),
+            # 読みたい本でない: 希望価格への到達は載る（本人が決めた基準なので）。同じ回の小さな値下がりは載らない
+            _book(asin="B0PICK0006", wanted=False, price=450, price_prev=700, price_changed_at="2026-10-02T09:00:00", target_price=500, price_history=target_history),
+        ]
+        wl = _wishlist(*books)
+        all_ids = {e["id"].split("#", 1)[1] for e in _entries(report.build_feed(wl, SITE))}
+
+        by_asin = {b["asin"]: b for b in wl["books"]}
+
+        def picked(event_id):
+            kind, asin = event_id.split(":")[:2]
+            book = by_asin[asin]
+            if book["wanted"] or kind == "target":
+                return True
+            return kind == "drop" and book["price_prev"] - book["price"] >= big
+
+        expected = {i for i in all_ids if picked(i)}
+        got = {e["id"].split("#", 1)[1] for e in _entries(report.build_feed(wl, SITE, picked_only=True))}
+        self.assertEqual(got, expected)
+        self.assertEqual({i.split(":")[0] + ":" + i.split(":")[1] for i in got}, {"drop:B0PICK0001", "ku:B0PICK0002", "drop:B0PICK0003", "target:B0PICK0006"})
+
+    def test_picked_feed_is_capped_after_filtering(self):
+        """全体の新しい 50 件から絞るのではなく、絞ってから新しい方の上限件数を載せる（細かい値下がりで押し出されない）。"""
+        small = [
+            _book(asin=f"B0SMAL{i:04d}", wanted=False, price=990, price_prev=1000, price_changed_at=f"2026-02-{1 + i % 28:02d}T00:00:00")
+            for i in range(report.MAX_FEED_ENTRIES)
+        ]
+        old_wanted = _book(asin="B0WANT0001", wanted=True, price=990, price_prev=1000, price_changed_at="2026-01-01T00:00:00")
+        entries = _entries(report.build_feed(_wishlist(*small, old_wanted), SITE, picked_only=True))
+        self.assertEqual([e["link"] for e in entries], ["https://www.amazon.co.jp/dp/B0WANT0001"])
+
     def test_titles_are_escaped_and_bad_asin_links_to_the_site(self):
         book = _book(asin="", title="A & B <C>", price=700, price_prev=1000, price_changed_at="2026-10-02T08:00:00")
         xml_text = report.build_feed(_wishlist(book), SITE)

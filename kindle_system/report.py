@@ -49,6 +49,11 @@ WISHLIST_FILE_FORMAT = "kindle-wishlist"
 WISHLIST_FILE_VERSION = 1
 # 値下がり・読み放題入りを知らせる Atom フィード（feed.xml）に載せる件数の上限（新しい方から）
 MAX_FEED_ENTRIES = 50
+# 読みたい本の出来事・希望価格への到達・大きな値下がりだけを載せるフィード（feed.xml と同じ場所に書き出す）。
+# 欲しい本すべての細かい値下がりで、買うか決めたい本の知らせが埋もれないように
+PICKED_FEED_FILE = "feed-wanted.xml"
+# 読みたい本でない本の値下がりを PICKED_FEED_FILE に載せる下げ幅（円。これ以上の値下がりだけ）
+BIG_DROP_YEN = 300
 ATOM_NS = "http://www.w3.org/2005/Atom"
 _ASIN_PATTERN = re.compile(r"^[A-Z0-9]{10}$")
 # 1 冊あたりに載せるスクレイピングの履歴の上限（新しい方から）。毎日取得しても wishlist.json が際限なく大きくならないように
@@ -269,12 +274,24 @@ def _campaign_started_at(history: list):
     return None
 
 
-def _feed_events(wishlist: dict) -> list:
-    """フィードに載せる出来事 [{"id", "title", "at", "asin"}]（値下がり・希望価格への到達・読み放題入り・読み放題の終了・キャンペーン開始。購入済みの本は除く）。"""
+def _is_picked(book: dict, event_id: str) -> bool:
+    """PICKED_FEED_FILE に載せる出来事か。読みたい本の出来事・希望価格への到達（本人が決めた基準）・
+    BIG_DROP_YEN 円以上の値下がり。"""
+    if book.get("wanted") or event_id.startswith("target:"):
+        return True
+    return event_id.startswith("drop:") and book["price_prev"] - book["price"] >= BIG_DROP_YEN
+
+
+def _feed_events(wishlist: dict, picked_only: bool = False) -> list:
+    """
+    フィードに載せる出来事 [{"id", "title", "at", "asin"}]（値下がり・希望価格への到達・読み放題入り・読み放題の終了・
+    キャンペーン開始。購入済みの本は除く）。picked_only なら _is_picked の出来事だけにしてから、新しい方から上限件数に絞る。
+    """
     events = []
     for book in wishlist["books"]:
         if book.get("purchased"):
             continue
+        start = len(events)
         title, asin = book.get("title") or UNKNOWN_TITLE, book.get("asin") or ""
         price, prev, changed_at = book.get("price"), book.get("price_prev"), book.get("price_changed_at")
         if price is not None and prev is not None and changed_at and price < prev:
@@ -299,18 +316,25 @@ def _feed_events(wishlist: dict) -> list:
             points = book.get("points") or 0
             detail = f"（{points:,} pt 還元）" if points > 0 else ""
             events.append({"id": f"campaign:{asin}:{started}", "title": f"キャンペーン「{campaign}」{detail}: {title}", "at": started, "asin": asin})
+        if picked_only:
+            events[start:] = [e for e in events[start:] if _is_picked(book, e["id"])]
     events.sort(key=lambda e: (e["at"], e["id"]), reverse=True)
     return events[:MAX_FEED_ENTRIES]
 
 
-def build_feed(wishlist: dict, site_url: str) -> str:
+def build_feed(wishlist: dict, site_url: str, picked_only: bool = False) -> str:
     """
-    欲しい本の値下がり・読み放題入りを知らせる Atom フィード（feed.xml）の文字列。画面を開かなくても
+    欲しい本の値下がり・読み放題・キャンペーンを知らせる Atom フィード（feed.xml）の文字列。画面を開かなくても
     フィードリーダーで気づけるようにする。生成時刻は載せない（wishlist.json と同じく、データが同じなら同じ内容）。
     リンクは ASIN の形を確かめてから Amazon の商品ページにし、ASIN が無ければ公開サイトにする。
+    picked_only なら読みたい本・希望価格・大きな値下がりだけのフィード（PICKED_FEED_FILE）にする。
     """
     site = site_url if site_url.endswith("/") else site_url + "/"
-    events = _feed_events(wishlist)
+    events = _feed_events(wishlist, picked_only=picked_only)
+    name = PICKED_FEED_FILE if picked_only else "feed.xml"
+    feed_title = (
+        f"欲しい本（読みたい本・希望価格・¥{BIG_DROP_YEN:,} 以上の値下がり）" if picked_only else "欲しい本の値下がり・読み放題・キャンペーン"
+    )
     ET.register_namespace("", ATOM_NS)
     feed = ET.Element(f"{{{ATOM_NS}}}feed")
 
@@ -320,15 +344,15 @@ def build_feed(wishlist: dict, site_url: str) -> str:
             el.text = text
         return el
 
-    sub(feed, "id", site + "feed.xml")
-    sub(feed, "title", "欲しい本の値下がり・読み放題・キャンペーン")
-    sub(feed, "link", rel="self", href=site + "feed.xml")
+    sub(feed, "id", site + name)
+    sub(feed, "title", feed_title)
+    sub(feed, "link", rel="self", href=site + name)
     sub(feed, "link", rel="alternate", href=site)
     sub(feed, "updated", _atom_time(events[0]["at"] if events else wishlist.get("last_scraped") or ""))
     sub(sub(feed, "author"), "name", "kindle_system")
     for event in events:
         entry = sub(feed, "entry")
-        sub(entry, "id", f"{site}feed.xml#{event['id']}")
+        sub(entry, "id", f"{site}{name}#{event['id']}")
         sub(entry, "title", event["title"])
         sub(entry, "updated", _atom_time(event["at"]))
         href = f"https://www.amazon.co.jp/dp/{event['asin']}" if _ASIN_PATTERN.match(event["asin"]) else site
@@ -472,6 +496,7 @@ def main(allow_shrink: bool = False) -> None:
     _write_replacing(wishlist_path, json.dumps(wishlist, ensure_ascii=False, indent=1) + "\n")
     # 値下がり・読み放題入りを画面を開かずに知らせるフィード（run.py の PUBLISHED_FILES で一緒に公開する）
     _write_replacing(os.path.join(public_site_dir, "feed.xml"), build_feed(wishlist, public_site_url))
+    _write_replacing(os.path.join(public_site_dir, PICKED_FEED_FILE), build_feed(wishlist, public_site_url, picked_only=True))
 
     print(f"生成しました: {wishlist_path}（{len(books)} 冊）")
 

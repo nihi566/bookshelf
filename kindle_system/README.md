@@ -37,7 +37,7 @@ python run.py sync [--workers N] [--limit N] [--start N] [--target kindle|bookme
 公開（`publish()`）は次の順に進み、途中で失敗したら終了コード 1 で止まる。
 
 0. 公開先（`PUBLIC_SITE_DIR` = bookshelf の作業ツリー）が **main ブランチ・rebase / merge の途中でない・
-   `wishlist.json` / `feed.xml` 以外に未コミットの変更が無い**ことを確かめる。どれかに当たれば git を何も変えずに止まる
+   `wishlist.json` / `feed.xml` / `feed-wanted.xml` 以外に未コミットの変更が無い**ことを確かめる。どれかに当たれば git を何も変えずに止まる
    （人や他のセッションの作業を壊したり、データのコミットに巻き込んだりしないため。作業は worktree で行う）
 1. 公開用クローン（`PUBLIC_SITE_DIR`）を `git pull --rebase` で origin の最新に合わせる
    （PR のマージ等で main が進んでいても push が拒否されないように）
@@ -101,8 +101,9 @@ python report.py [--allow-shrink]
 ```
 
 蔵書一覧（読みたい本 / 購入済み本 / 全部）を `PUBLIC_SITE_DIR`（bookshelf の `web/wishlist-site/`）の
-`wishlist.json`（データだけ。形式 `kindle-wishlist` v1）と `feed.xml`（値下がり・読み放題入り・読み放題の終了・キャンペーン開始の Atom フィード）として書き出す。
-この 2 つは生成物なので直接編集しない。
+`wishlist.json`（データだけ。形式 `kindle-wishlist` v1）と `feed.xml`（値下がり・読み放題入り・読み放題の終了・キャンペーン開始の Atom フィード）、`feed-wanted.xml`（そのうち読みたい本の出来事・希望価格への到達・
+¥300 以上の値下がりだけを載せる Atom フィード。欲しい本すべての細かい値下がりで埋もれないように）として書き出す。
+これらは生成物なので直接編集しない。
 
 画面は持たない。欲しい本の一覧は bookshelf アプリの本タブ「欲しい本」
 （https://nihi566.github.io/bookshelf/#/wishlist）が同じ場所からこの `wishlist.json` を読んで表示する。
