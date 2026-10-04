@@ -51,7 +51,7 @@ export const home = {
         <a class="stat plane" href="#/knowledge"><b>${a ? a.planes.length : '–'}</b><span>面</span></a>
         <a class="stat solid" href="#/knowledge"><b>${a ? 1 : '–'}</b><span>立体</span></a>
       </div>
-      <p class="small muted" style="margin-top:8px">本 ${s.books} 冊 ・ ${bySource.join(' ・ ')} ・ ★ ${s.favorites}${s.technical ? ` ・ 技術書の線 ${s.technical} 件は点に数えていません` : ''}</p>
+      <p class="small muted" style="margin-top:8px">${[`本 ${s.books} 冊`, ...bySource, `★ ${s.favorites}`].map((x, i) => html`${i ? ' ・ ' : ''}<span class="nowrap">${x}</span>`)}${s.technical ? ` ・ 技術書の線 ${s.technical} 件は点に数えていません` : ''}</p>
 
       ${discoveriesBlock(state)}
 

@@ -95,6 +95,9 @@ function render({ keepScroll = false } = {}) {
   // 別の画面に移ったとき、押したリンクは描き直しで消えてフォーカスが行方不明になる。
   // キーボード・読み上げで使う人が新しい画面の先頭から読めるよう、本文にフォーカスを移す
   if (path !== currentPath && !view.contains(document.activeElement)) view.focus({ preventScroll: true });
+  // 知識マップは横にスクロールする枠より広く描くので、最初は中心（核）を見せる
+  const mapWrap = document.getElementById('map-wrap');
+  if (mapWrap) mapWrap.scrollLeft = (mapWrap.scrollWidth - mapWrap.clientWidth) / 2;
   if (keepScroll || path === currentPath) window.scrollTo(0, y);
   else window.scrollTo(0, 0);
   currentPath = path;
@@ -804,6 +807,9 @@ document.addEventListener('submit', (e) => {
   Promise.resolve(forms[form.dataset.form]?.(form, e.submitter)).catch((err) => toast(err.message, 5000));
 });
 
+// 上のバーの高さ（状況の表示で変わることがある）を、その下に貼りつく検索欄の位置に使う
+const topbar = document.querySelector('.topbar');
+if (topbar && 'ResizeObserver' in window) new ResizeObserver(() => document.documentElement.style.setProperty('--topbar-h', `${topbar.offsetHeight}px`)).observe(topbar);
 window.addEventListener('hashchange', () => render());
 
 document.addEventListener('visibilitychange', () => {
