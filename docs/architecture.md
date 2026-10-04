@@ -24,7 +24,7 @@
 ## データモデル（`web/core/model.js`）
 
 ```
-Library = { version, books: { [id]: Book }, highlights: { [id]: Highlight }, feedback, thoughts: { [id]: Thought }, updatedAt }
+Library = { version, books: { [id]: Book }, highlights: { [id]: Highlight }, feedback, thoughts: { [id]: Thought }, discoveryReads: { [id]: readAt }, updatedAt }
 Book      = { id: 'b'+hash(書名の正規化), title, author, sources: ['kindle'|'playbooks'|'paper'|'memo'], asin?, volumeId?, cover?（アップロードした表紙の data URL）, technical?（技術書か。無ければ書名から推定）, updatedAt, deleted? }
 Highlight = { id: 'h'+hash(bookId+本文の正規化), bookId, source, kind: 'highlight'|'note',
               text, note, chapter, location, locationEnd, page, color, createdAt,
@@ -61,6 +61,7 @@ Analysis = { version: 2, createdAt, model: { chat, embed }, incremental, stats: 
   solid:  { title, core, relations: [{ from, to, type, description }], principles, questions, sig },  // 立体
   isolated: [highlightId],                                                           // まだつながらない点
   changes?: { previousAt, rebuilt?, addedLines, grownLines, removedLines, connectedPoints },  // 前回からの変化
+  discoveries: [{ id, kind: 'cross'|'line'|'isolated', lineId, lineName, reason, pointIds: [a, b], foundAt }],  // 発見（新しい順・最大 60）
   recommendations: [{ title, author, kind, planeId, reason, verified }] }
 ```
 
@@ -78,6 +79,7 @@ Analysis = { version: 2, createdAt, model: { chat, embed }, incremental, stats: 
   - 点を 1 件足した再分析で AI を呼ぶのは多くて 5 回（点の埋め込み・線・線の説明文の埋め込み・面・立体）。`stats.calls` に回数を残す
   - 前回と分析の版（`version`）か埋め込みの方法が違うとき・`full` を指定したときは最初から作り直す（`changes.rebuilt`）
 - **自動の分析**（`bh serve`。判断は `web/core/auto-analysis.js`）: 1 分ごとに確かめ、前回の分析のあとに点（思いつきを含む）が 10 件以上増えたか、24 時間以上たって 1 件以上増えたら、増分の分析を始める。手動の分析中・取り込みの最中（`/api/import` を受けている間・Google ドライブの確認中）は始めない。失敗しても `analysis.json` は書き換えず、`state.json` の `autoAnalysis` に理由と時刻を残し、30 分あけて試し直す。`bh config auto on|off` / `auto-points` / `auto-hours` で変えられる
+- **発見**（`web/core/analysis/discoveries.js`）: 前回を引き継いだ分析のたびに、前回との差から作る。cross = 既にある線に増えた点と、その線の別の本の点でいちばん近いもの / line = 新しい線（別の本の 2 点）/ isolated = 前回「まだつながらない点」だった点が線に入った。思いつきは 1 つずつ別の出どころとして数える。1 回の分析で最大 20 件、残すのは新しい順に 60 件（点が消えた発見は外す）。最初の分析・作り直しでは作らない（すべてが新しくなるため）。既読は `library.discoveryReads = { [ID]: 読んだ時刻 }` に持ち、同期ではどちらかで読んでいれば既読（時刻は早い方）
 - **履歴**: PC の `data/history/<分析した時刻>.json` に直近 12 回分を残す（`history/index.json` は要約）。`GET /api/history` で一覧、`GET /api/history/<id>` で 1 回分。スマホには最新の結果（`changes` 入り）だけを同期し、過去の分析は開いたときに PC から取る
 - **自分の言葉**: 埋め込みの文は「線を引いた文 + 取り込んだメモ + 自分のメモ + タグ」（`embedText`。印は付けない）。線を作る AI への入力では、取り込んだメモと分けて自分のメモ・タグを「読者自身の言葉」と示す。思いつきは書名の代わりに「思いつき」と示す
 - `response_format` は `json_schema` → `json_object` → なし の順に自動で緩める（LM Studio は `json_object` 非対応、古いサーバは `json_schema` 非対応）。壊れた JSON は 1 回だけ言い直させる

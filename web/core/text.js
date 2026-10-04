@@ -125,7 +125,10 @@ export function seededRandom(seed = 1) {
   };
 }
 
+/** n 文字（絵文字や一部の漢字のように 2 つの単位でできた文字も 1 文字と数える）を超えたら、末尾を「…」にして切る */
 export function truncate(s, n) {
   const str = String(s ?? '');
-  return str.length > n ? str.slice(0, n - 1) + '…' : str;
+  if (str.length <= n) return str;
+  const chars = Array.from(str);
+  return chars.length > n ? chars.slice(0, n - 1).join('') + '…' : str;
 }
