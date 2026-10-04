@@ -75,7 +75,7 @@ export function setFeedback(library, { title, author = '' }, status, now = new D
 /** 反応ごとの書名の一覧 { read: [...], want: [...], no: [...] } */
 export function feedbackByStatus(library) {
   const out = { read: [], want: [], no: [] };
-  for (const f of Object.values(library.feedback || {}).sort((a, b) => String(b.updatedAt).localeCompare(String(a.updatedAt)))) if (out[f.status]) out[f.status].push(f);
+  for (const f of Object.values(library.feedback || {}).sort((a, b) => String(b.updatedAt).localeCompare(String(a.updatedAt)))) if (Object.hasOwn(out, f.status)) out[f.status].push(f);
   return out;
 }
 
@@ -365,7 +365,10 @@ export function mergeLibraries(base, incoming) {
   for (const [kind, merge] of [['books', mergeBook], ['highlights', mergeHighlight]]) {
     out[kind] = out[kind] || {};
     for (const [id, item] of Object.entries(incoming[kind] || {})) {
-      const cur = out[kind][id];
+      // __proto__ を鍵にすると入れ物の継承元を書き換え、toString などは継承した値と取り違える
+      // 壊れたデータの null などの項目は統合しない
+      if (id === '__proto__' || !item || typeof item !== 'object') continue;
+      const cur = Object.hasOwn(out[kind], id) ? out[kind][id] : null;
       out[kind][id] = cur ? merge(cur, item) : structuredClone(item);
     }
   }
@@ -373,7 +376,7 @@ export function mergeLibraries(base, incoming) {
   for (const b of Object.values(out.books)) if ('cover' in b && !isUploadedCover(b.cover)) delete b.cover;
   // 置き換わった古い点に、置き換え先より新しい自分の編集（もう一方の端末で未同期だったもの）があれば引き継ぐ
   for (const h of Object.values(out.highlights)) {
-    const target = h.supersededBy && out.highlights[h.supersededBy];
+    const target = h.supersededBy && Object.hasOwn(out.highlights, h.supersededBy) && out.highlights[h.supersededBy];
     if (!target || target.deleted) continue;
     const hs = userStamp(h, USER_FIELDS);
     if (hs && hs > userStamp(target, USER_FIELDS)) {
@@ -383,9 +386,11 @@ export function mergeLibraries(base, incoming) {
     }
   }
   // おすすめへの反応は、付けた時刻が新しい方
-  out.feedback = { ...(base.feedback || {}) };
+  // base の分は out に複製済みのものを使う（結果が引数の項目を共有しないように）
+  out.feedback = { ...(out.feedback || {}) };
   for (const [key, f] of Object.entries(incoming.feedback || {})) {
-    const cur = out.feedback[key];
+    if (key === '__proto__') continue;
+    const cur = Object.hasOwn(out.feedback, key) ? out.feedback[key] : null;
     out.feedback[key] = structuredClone(cur ? order(cur, f, cur.updatedAt || '', f.updatedAt || '')[1] : f);
   }
   // 利用者が作る項目の時刻を整えるときの「今」（1 回の統合で同じ値にして、どちら向きに統合しても同じ結果にする）
@@ -585,5 +590,5 @@ export function dailyPicks(library, count = 3, date = new Date(), seed = '') {
   const key = seed ? `seed:${seed}` : `${date.getFullYear()}-${date.getMonth() + 1}-${date.getDate()}`;
   const scored = hs.map((h) => ({ h, s: hash(key + h.id) }));
   scored.sort((a, b) => a.s.localeCompare(b.s));
-  return scored.slice(0, count).map((x) => x.h);
+  return scored.slice(0, Math.max(0, count)).map((x) => x.h);
 }

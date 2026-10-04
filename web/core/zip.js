@@ -38,7 +38,8 @@ export async function readZip(input) {
   let ptr = view.getUint32(eocd + 16, true);
   const entries = [];
   for (let n = 0; n < count; n++) {
-    if (view.getUint32(ptr, true) !== 0x02014b50) throw new Error('zip の中央ディレクトリが壊れています');
+    // 途中で切れた zip・位置が範囲外の zip で DataView の RangeError にしない
+    if (ptr + 46 > bytes.length || view.getUint32(ptr, true) !== 0x02014b50) throw new Error('zip の中央ディレクトリが壊れています');
     const flags = view.getUint16(ptr + 8, true);
     const method = view.getUint16(ptr + 10, true);
     const compSize = view.getUint32(ptr + 20, true);
@@ -50,9 +51,11 @@ export async function readZip(input) {
     const name = decodeName(nameBytes, flags);
     ptr += 46 + nameLen + extraLen + commentLen;
     if (name.endsWith('/')) continue;
+    if (localOffset + 30 > bytes.length) throw new Error(`zip が壊れています: ${name}`);
     const lNameLen = view.getUint16(localOffset + 26, true);
     const lExtraLen = view.getUint16(localOffset + 28, true);
     const start = localOffset + 30 + lNameLen + lExtraLen;
+    if (start + compSize > bytes.length) throw new Error(`zip が途中で切れています: ${name}`);
     const data = bytes.subarray(start, start + compSize);
     let out;
     if (method === 0) out = data.slice();

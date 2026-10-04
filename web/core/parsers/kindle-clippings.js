@@ -23,17 +23,23 @@ export function parseClippingMeta(line) {
   if (/ハイライト|Highlight|Surlignement|Markierung|Subrayado|evidenziazione|destaque|标注/i.test(s)) kind = 'highlight';
   else if (/メモ|Note|Notiz|Nota|notitie|笔记/i.test(s)) kind = 'note';
   else if (/ブックマーク|Bookmark|Lesezeichen|Marcador|Signet|segnalibro|bladwijzer|书签/i.test(s)) kind = 'bookmark';
-  const loc = s.match(/(?:位置No\.|位置|Location|Loc\.|Pos\.|Position|Emplacement|posición|posizione|posição|locatie)\s*#?\s*(\d+)(?:\s*(?:-|t\/m)\s*(\d+))?/i);
+  const loc = s.match(/(?:位置No\.|位置|Location|Loc\.|Pos\.|Position|Emplacement|posición|posizione|posição|locatie)\s*#?\s*(\d[\d,]*)(?:\s*(?:-|t\/m)\s*(\d[\d,]*))?/i);
   const page = s.match(/(?:page|Seite|página|pagina|p\.)\s*(\d+|[ivxlcdm]+)(?:\s*-\s*\d+)?/i) || s.match(/(\d+|[ivxlcdm]+)\s*ページ/i) || s.match(/ページ\s*(\d+|[ivxlcdm]+)/i) || s.match(/第\s*(\d+)\s*页/);
   const date = s.match(/(?:Added on|作成日[:：]?|追加日[:：]?|Hinzugefügt am|Añadido el|Ajouté le|Aggiunto in data|Toegevoegd op|Adicionado:?|添加于)\s*(.+)$/i);
   let location = null;
   let locationEnd = null;
   if (loc) {
-    location = Number(loc[1]);
+    // 桁区切りのカンマ（"Location 1,234-1,236"）は外す
+    const start = loc[1].replace(/,/g, '');
+    location = Number(start);
     if (loc[2]) {
-      // 英語の古い形式 "Loc. 1234-56" は終端が省略される
-      let end = loc[2];
-      if (end.length < loc[1].length) end = loc[1].slice(0, loc[1].length - end.length) + end;
+      // 英語の古い形式 "Loc. 1234-56" は終端が省略される（"Loc. 1998-02" のように繰り上がると始端より小さくなる）
+      let end = loc[2].replace(/,/g, '');
+      if (end.length < start.length) {
+        const digits = end.length;
+        end = Number(start.slice(0, start.length - digits) + end);
+        if (end < location) end += 10 ** digits;
+      }
       locationEnd = Number(end);
     }
   }
@@ -84,7 +90,8 @@ export function parseKindleClippings(text) {
     if (!book.author && author) book.author = author;
     if (body) book.entries.push({ ...meta, text: body });
   }
-  return [...books.values()].map((b) => ({ title: b.title, author: b.author, source: 'kindle', highlights: attachNotes(b.entries) }));
+  // 本文の無いハイライト（画像など）しか無い本は、0 件の本として取り込まないよう外す
+  return [...books.values()].filter((b) => b.entries.length).map((b) => ({ title: b.title, author: b.author, source: 'kindle', highlights: attachNotes(b.entries) }));
 }
 
 /** メモは同じ位置（範囲の終端）のハイライトにくっつける。対応が無いメモは単独の点にする */

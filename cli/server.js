@@ -134,9 +134,13 @@ export function createCompanionServer({ store, log = console.log, catalogFetch, 
         // { files: [{ name, base64 }], auto? } を PC 側でパースして取り込む（auto: ブラウザ拡張の自動取り込み。削除した本を復活させない）
         // 本文を受け取り終えてから「取り込みの最中」に数える（ゆっくり送り続ける接続で自動の分析を止め続けられないように）
         const body = await readBody(req);
+        const list = body.files ?? [];
+        if (!Array.isArray(list) || !list.every((f) => f && typeof f === 'object' && typeof f.base64 === 'string')) {
+          return send(res, 400, { error: 'files は [{ name, base64 }] の形で送ってください' });
+        }
         activeImports++;
         try {
-          const files = (body.files || []).map((f) => ({ name: f.name, bytes: Buffer.from(f.base64, 'base64') }));
+          const files = list.map((f) => ({ name: String(f.name ?? ''), bytes: Buffer.from(f.base64, 'base64') }));
           const parsed = await parseFiles(files);
           const r = await store.lock(async () => {
             const out = applyImport({ library: await store.library(), analysis: await store.analysis() }, parsed, { reviveDeleted: !body.auto });
@@ -386,9 +390,13 @@ async function readRaw(req) {
 
 async function readBody(req) {
   const raw = await readRaw(req);
+  let body;
   try {
-    return JSON.parse(raw.toString('utf8') || '{}');
+    body = JSON.parse(raw.toString('utf8') || '{}');
   } catch {
     throw Object.assign(new Error('JSON を読めませんでした'), { status: 400 });
   }
+  // API の本文はどれもオブジェクト（null・配列・数値などは形が違う）
+  if (!body || typeof body !== 'object' || Array.isArray(body)) throw Object.assign(new Error('本文は JSON のオブジェクトで送ってください'), { status: 400 });
+  return body;
 }

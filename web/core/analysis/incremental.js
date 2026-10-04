@@ -47,7 +47,7 @@ function leaveOneOut(v, sum) {
  * @param {string[]} [p.previousIsolated] 前回の「まだつながらない点」（増えた点と見分けるため）
  * @returns {{ lines: { id: string|null, members: number[] }[], isolated: number[] }} id が null の線は新しい線
  */
-export function carryLines({ ids, vectors, previousLines = [], previousIsolated = [], targetSize, maxSize, maxGroups, minSize = 2 }) {
+export function carryLines({ ids, vectors, previousLines = [], previousIsolated = [], targetSize, maxSize, maxGroups = 60, minSize = 2 }) {
   const index = new Map(ids.map((id, i) => [id, i]));
   const known = new Set([...previousLines.flatMap((l) => l.highlightIds || []), ...previousIsolated]);
   const isNew = (i) => !known.has(ids[i]);

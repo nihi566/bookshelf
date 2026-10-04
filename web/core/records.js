@@ -63,7 +63,8 @@ export function parseRecordsFile(json) {
   assertRecordsShape(json);
   const records = {};
   for (const [bookId, entry] of Object.entries(json.records)) {
-    if (!isPlainObject(entry) || !isValidDate(entry.read_on)) continue;
+    // __proto__ を鍵にすると、入れ物の継承元を書き換えてしまう
+    if (bookId === '__proto__' || !isPlainObject(entry) || !isValidDate(entry.read_on)) continue;
     records[bookId] = {
       title: text(entry.title, 200),
       author: text(entry.author, 100),
@@ -75,7 +76,7 @@ export function parseRecordsFile(json) {
     };
   }
   const excluded = {};
-  if (isPlainObject(json.excluded)) for (const [bookId, at] of Object.entries(json.excluded)) if (typeof at === 'string') excluded[bookId] = at;
+  if (isPlainObject(json.excluded)) for (const [bookId, at] of Object.entries(json.excluded)) if (bookId !== '__proto__' && typeof at === 'string') excluded[bookId] = at;
   return { version: RECORDS_VERSION, records, excluded };
 }
 

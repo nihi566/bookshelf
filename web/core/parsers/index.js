@@ -27,6 +27,9 @@ export const ACCEPT = '.txt,.html,.htm,.docx,.md,.markdown,.json,.zip';
 
 export function decodeText(bytes) {
   const b = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
+  // メモ帳で「Unicode」として保存し直したファイル（UTF-16、BOM 付き）
+  if (b[0] === 0xff && b[1] === 0xfe) return new TextDecoder('utf-16le').decode(b.subarray(2));
+  if (b[0] === 0xfe && b[1] === 0xff) return new TextDecoder('utf-16be').decode(b.subarray(2));
   try {
     return new TextDecoder('utf-8', { fatal: true }).decode(b).replace(/^﻿/, '');
   } catch {
@@ -96,21 +99,24 @@ async function parseOne(name, bytes) {
       if (isNotebookJson(data)) return { format: 'kindle-notebook', books: parseNotebookJson(data) };
       const backup = readBackup(data);
       if (backup) return { format: 'library', backup };
-      const arr = Array.isArray(data) ? data : data.books;
+      const arr = Array.isArray(data) ? data : data?.books;
       if (Array.isArray(arr) && arr.every((b) => b && b.title && Array.isArray(b.highlights))) {
         return { format: 'parsed', books: arr.map((b) => ({ ...b, source: b.source === 'playbooks' ? 'playbooks' : b.source === 'kindle' ? 'kindle' : 'manual' })) };
       }
       return { error: '対応していない JSON です' };
     }
   }
-  if (/<html|<body|<div|<table|<p[\s>]/i.test(text)) {
+  // .txt / .md の本文には <div> などが普通に出てくる（技術書のハイライト・読書メモのインライン HTML）ので、文書の頭が HTML のときだけ HTML として読む
+  const textExt = e === 'txt' || e === 'md' || e === 'markdown';
+  if (textExt ? /^\s*<(!doctype|html)/i.test(text) : /<html|<body|<div|<table|<p[\s>]/i.test(text)) {
     if (looksLikeKindleExport(text)) return { format: 'kindle-export', books: parseKindleExportHtml(text) };
     const books = parsePlayBooksHtml(text, titleFromFileName(base));
     if (books.length) return { format: 'playbooks', books };
     return { error: 'ハイライトが見つからない HTML です（Kindle のエクスポートか Play ブックスのメモを選んでください）' };
   }
-  if (looksLikeClippings(text)) return { format: 'kindle-clippings', books: parseKindleClippings(text) };
+  // .md は読書メモを先に見る（Setext 見出しの ===== と「作成日」などで Clippings に見えることがある）
   if (e === 'md' || e === 'markdown') return parseMarkdown(text, base);
+  if (looksLikeClippings(text)) return { format: 'kindle-clippings', books: parseKindleClippings(text) };
   if (looksLikePlayBooksMarkdown(text)) return { format: 'playbooks', books: parsePlayBooksMarkdown(text, titleFromFileName(base)) };
   if (e === 'txt') return { error: 'My Clippings.txt の形式ではありません（Play ブックスのメモは .docx か .html で書き出してください）' };
   return { error: '対応していない形式です' };
