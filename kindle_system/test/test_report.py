@@ -78,8 +78,22 @@ class BuildWishlistTest(unittest.TestCase):
                 "price_history": [],
                 "price_reason": None,
                 "bookmeter_id": None,
+                "sell_price": None,
+                "points": 0,
+                "campaign": "",
             },
         )
+
+    def test_sell_price_points_and_campaign_are_published_for_paid_book(self):
+        """ポイント差し引き前の販売価格・還元ポイント・キャンペーン文を載せる（実質価格 price だけではキャンペーンが分からない）。"""
+        book = report.build_wishlist([self._book(sell_price=1500, point_value=600, actual_price=900, campaign_text="期間限定キャンペーン")])["books"][0]
+        self.assertEqual((book["price"], book["sell_price"], book["points"], book["campaign"]), (900, 1500, 600, "期間限定キャンペーン"))
+
+    def test_sell_price_points_and_campaign_are_dropped_when_book_has_no_price(self):
+        """読み放題の本（ページに読み放題の宣伝文が出る）と価格の取れなかった本には載せない。"""
+        for overrides in ({"is_unlimited": 1, "actual_price": 0}, {"actual_price": None}):
+            book = report.build_wishlist([self._book(sell_price=1500, point_value=15, campaign_text="この本を含む500万冊", **overrides)])["books"][0]
+            self.assertEqual((book["sell_price"], book["points"], book["campaign"]), (None, 0, ""), overrides)
 
     def test_sources_list_where_the_book_came_from(self):
         """Kindle（サンプル）と読書メーター（読みたい本）のどちらから来た本か。両方なら両方、決まった順で載せる。"""
@@ -191,6 +205,22 @@ class SummarizePriceHistoryTest(unittest.TestCase):
                 ],
                 "B0BBBBBBB2": [{"at": "2026-01-01T00:00:00", "price": 500, "ku": False}],
             },
+        )
+
+    def test_campaign_is_kept_only_on_paid_rows_that_have_one(self):
+        """キャンペーン文は有料の回だけ、文があるときだけ載せる（読み放題の回の宣伝文で公開データを大きくしない）。"""
+        points = [
+            {"paid_asin": "B0AAAAAAA1", "actual_price": 1000, "is_unlimited": 0, "campaign_text": "", "timestamp": "2026-01-01T00:00:00"},
+            {"paid_asin": "B0AAAAAAA1", "actual_price": 500, "is_unlimited": 0, "campaign_text": "期間限定キャンペーン", "timestamp": "2026-01-02T00:00:00"},
+            {"paid_asin": "B0AAAAAAA1", "actual_price": 0, "is_unlimited": 1, "campaign_text": "この本を含む500万冊", "timestamp": "2026-01-03T00:00:00"},
+        ]
+        self.assertEqual(
+            report.summarize_price_history(points)["B0AAAAAAA1"],
+            [
+                {"at": "2026-01-01T00:00:00", "price": 1000, "ku": False},
+                {"at": "2026-01-02T00:00:00", "price": 500, "ku": False, "campaign": "期間限定キャンペーン"},
+                {"at": "2026-01-03T00:00:00", "price": None, "ku": True},
+            ],
         )
 
     def test_keeps_only_latest_rows_per_book(self):

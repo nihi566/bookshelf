@@ -635,7 +635,7 @@ def get_all_price_points() -> list:
     KU の行（価格が 0 で保存される）と価格取得に失敗した行（actual_price が None）も含める（履歴として見せるため）。
     """
     query = text("""
-        SELECT paid_asin, actual_price, is_unlimited, timestamp
+        SELECT paid_asin, actual_price, is_unlimited, campaign_text, timestamp
         FROM price_history
         ORDER BY paid_asin ASC, timestamp ASC, id ASC
     """)

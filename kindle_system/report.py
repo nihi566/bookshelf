@@ -94,13 +94,19 @@ def summarize_price_history(points: list, limit: int = MAX_PRICE_HISTORY_PER_BOO
     """
     価格の記録（repository.get_all_price_points() の戻り値。本ごと・時刻順）から、本ごとの
     スクレイピングの履歴 [{"at": 取得日時, "price": 価格（KU・取得失敗は None）, "ku": KU か}] を返す。
+    価格のある回でキャンペーン文があれば "campaign" も付ける（KU の回はページに読み放題の宣伝文が出るだけなので
+    載せない。文の無い回に空文字を載せないのは、毎日の取得で公開データを大きくしないため）。
     古い順で、新しい方から limit 件だけ残す。
     """
     result = {}
     for point in points:
         is_ku = bool(point["is_unlimited"])
         price = None if is_ku else point["actual_price"]
-        result.setdefault(point["paid_asin"], []).append({"at": str(point["timestamp"]), "price": price, "ku": is_ku})
+        row = {"at": str(point["timestamp"]), "price": price, "ku": is_ku}
+        campaign = point.get("campaign_text") or ""
+        if price is not None and campaign:
+            row["campaign"] = campaign
+        result.setdefault(point["paid_asin"], []).append(row)
     return {asin: rows[-limit:] for asin, rows in result.items()}
 
 
@@ -144,6 +150,8 @@ def build_wishlist(books: list) -> dict:
     スクレイピングの履歴（book["price_history"] = summarize_price_history の 1 件）は全冊に載せる（無ければ空）。
     価格が null の本には理由（price_reason。_price_reason）を載せる。
     どこから来た本か（sources。_sources）を載せる（画面が Kindle / 読書メーターで分類する）。
+    ポイント差し引き前の販売価格（sell_price）・還元ポイント（points）・キャンペーン文（campaign）は、
+    今の価格がある本にだけ載せる（KU の本のキャンペーン文は読み放題の宣伝文なので載せない）。
     """
     timestamps = [str(book["timestamp"]) for book in books if book.get("timestamp")]
     items = []
@@ -153,6 +161,7 @@ def build_wishlist(books: list) -> dict:
         kind, tag, rating = _resolve_mark(book)
         price = None if is_ku or actual_price is None else actual_price
         trend = (book.get("price_trend") or {}) if price is not None else {}
+        has_price = price is not None
         items.append(
             {
                 "asin": book.get("asin") or "",
@@ -173,6 +182,9 @@ def build_wishlist(books: list) -> dict:
                 "price_reason": _price_reason(book, price, is_ku),
                 # 読書メーターの本 ID（数字だけ。bookshelf が https://bookmeter.com/books/<ID> を開く）
                 "bookmeter_id": _bookmeter_id(book.get("bookmeter_id")),
+                "sell_price": book.get("sell_price") if has_price else None,
+                "points": (book.get("point_value") or 0) if has_price else 0,
+                "campaign": (book.get("campaign_text") or "") if has_price else "",
             }
         )
     return {
@@ -206,8 +218,23 @@ def _joined_ku_at(history: list):
     return None
 
 
+def _campaign_started_at(history: list):
+    """
+    スクレイピングの履歴（古い順）から、今のキャンペーンが付いた取得の時刻を返す（無ければ None）。
+    価格のある回だけを見る（取得失敗・KU の回は飛ばす）。キャンペーン文の無い回の次に文が付いたときだけを
+    「新しく付いた」とみなし、文が変わっただけ（ポイント数の表記の揺れなど）や記録の初めから付いていた本は None。
+    """
+    rows = [r for r in history if r.get("price") is not None and not r.get("ku")]
+    if not rows or not rows[-1].get("campaign"):
+        return None
+    for prev, row in zip(reversed(rows[:-1]), reversed(rows)):
+        if not prev.get("campaign"):
+            return row["at"]
+    return None
+
+
 def _feed_events(wishlist: dict) -> list:
-    """フィードに載せる出来事 [{"id", "title", "at", "asin"}]（購入済みの本は除く）。"""
+    """フィードに載せる出来事 [{"id", "title", "at", "asin"}]（値下がり・読み放題入り・キャンペーン開始。購入済みの本は除く）。"""
     events = []
     for book in wishlist["books"]:
         if book.get("purchased"):
@@ -219,6 +246,12 @@ def _feed_events(wishlist: dict) -> list:
         joined = _joined_ku_at(book.get("price_history") or []) if book.get("ku") else None
         if joined:
             events.append({"id": f"ku:{asin}:{joined}", "title": f"読み放題（Kindle Unlimited）に入りました: {title}", "at": joined, "asin": asin})
+        campaign = book.get("campaign") or ""
+        started = _campaign_started_at(book.get("price_history") or []) if price is not None and campaign else None
+        if started:
+            points = book.get("points") or 0
+            detail = f"（{points:,} pt 還元）" if points > 0 else ""
+            events.append({"id": f"campaign:{asin}:{started}", "title": f"キャンペーン「{campaign}」{detail}: {title}", "at": started, "asin": asin})
     events.sort(key=lambda e: (e["at"], e["id"]), reverse=True)
     return events[:MAX_FEED_ENTRIES]
 
@@ -241,7 +274,7 @@ def build_feed(wishlist: dict, site_url: str) -> str:
         return el
 
     sub(feed, "id", site + "feed.xml")
-    sub(feed, "title", "欲しい本の値下がり・読み放題入り")
+    sub(feed, "title", "欲しい本の値下がり・読み放題・キャンペーン")
     sub(feed, "link", rel="self", href=site + "feed.xml")
     sub(feed, "link", rel="alternate", href=site)
     sub(feed, "updated", _atom_time(events[0]["at"] if events else wishlist.get("last_scraped") or ""))
