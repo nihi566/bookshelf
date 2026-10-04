@@ -9,6 +9,8 @@ import { loadWishlist } from '../wishlist-data.js';
 import { bookRow, bookSpine, emptyBooksBlock, highlightCard, kindleAlertBlock, lineIndex, pointCard, sourceBadge } from '../ui.js';
 import { inboxBlock } from './thoughts.js';
 import { discoveriesBlock, partnerBlock } from './discoveries.js';
+import { noteRow } from './notes.js';
+import { searchNotes } from '../../core/notes.js';
 
 const flow = html`<div class="flow" aria-label="点から立体へ">
   <div class="f-point"><b>点</b>線を引いた一文</div>
@@ -223,7 +225,12 @@ function renderResults(root, ctx, q) {
   };
   root.querySelector('#search-filters').innerHTML = String(html`${link({ source: '' }, 'すべて', !source)}${link({ source: 'kindle' }, 'Kindle', source === 'kindle')}${link({ source: 'playbooks' }, 'Play Books', source === 'playbooks')}${link({ source: 'paper' }, '紙の本', source === 'paper')}${link({ source: 'memo' }, '読書メモ', source === 'memo')}${link({ source: 'thought' }, THOUGHT_LABEL, source === 'thought')}${link({ fav: fav ? '' : '1' }, '★ お気に入り', fav)}`);
   const shown = results.slice(0, 200);
-  root.querySelector('#search-results').innerHTML = String(html`<p class="small muted">${results.length} 件${results.length > shown.length ? `（先頭 ${shown.length} 件を表示）` : ''}</p>
+  // 検索語に当たる永久ノート（先頭 5 件。ノートは点ではないので、点の件数とは分けて出す）
+  const notes = q.trim() ? searchNotes(state.library, q) : [];
+  root.querySelector('#search-results').innerHTML = String(html`${notes.length
+      ? html`<section class="note-hits"><div class="section"><h2>永久ノート</h2><a class="small" href="#/notes?q=${encodeURIComponent(q)}">永久ノートで見る（${notes.length} 件）</a></div><ul class="note-list">${notes.slice(0, 5).map((n) => noteRow(state.library, n))}</ul></section>`
+      : ''}
+    <p class="small muted">${results.length} 件${results.length > shown.length ? `（先頭 ${shown.length} 件を表示）` : ''}</p>
     ${shown.map((p) => pointCard(p, { library: state.library, lines: idx.get(p.id), query: q }))}
     ${!results.length ? html`<p class="empty">見つかりませんでした</p>` : ''}`);
   renderWishlistHits(root, q);

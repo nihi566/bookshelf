@@ -6,6 +6,9 @@
 import { pointHighlights, searchHighlights } from './model.js';
 import { THOUGHT_LABEL, isThoughtId, pointThoughts, searchThoughts, thoughtsOf } from './thoughts.js';
 
+// Kindle で伸ばしたハイライトの置き換え先をたどる（永久ノートの根拠・リンクに書いた点を見失わない）
+export { currentPointId } from './point-ids.js';
+
 /** 分析の点（技術書の線・捨てた思いつきを除く）。ID 順 */
 export function analysisPoints(library) {
   return [...pointHighlights(library), ...pointThoughts(library)].sort((a, b) => a.id.localeCompare(b.id));

@@ -25,7 +25,7 @@
 
 ```
 Library = { version, books: { [id]: Book }, highlights: { [id]: Highlight }, feedback, thoughts: { [id]: Thought }, discoveryReads: { [id]: readAt },
-            farReactions: { [id]: FarReaction }, updatedAt }
+            farReactions: { [id]: FarReaction }, notes: { [id]: Note }, updatedAt }
 Book      = { id: 'b'+hash(書名の正規化), title, author, sources: ['kindle'|'playbooks'|'paper'|'memo'], asin?, volumeId?, cover?（アップロードした表紙の data URL）, technical?（技術書か。無ければ書名から推定）, updatedAt, deleted? }
 Highlight = { id: 'h'+hash(bookId+本文の正規化), bookId, source, kind: 'highlight'|'note',
               text, note, chapter, location, locationEnd, page, color, createdAt,
@@ -33,13 +33,19 @@ Highlight = { id: 'h'+hash(bookId+本文の正規化), bookId, source, kind: 'hi
 Thought   = { id: 't'+時刻+乱数, text, status: 'inbox'|'done'|'discarded', answerTo?: { kind, id?, question },
               createdAt, updatedAt }                    // 消したものは { id, deleted: true, createdAt, updatedAt } だけ残す
 FarReaction = { id: 'f'+hash(2 点の ID), a, b, idea, explanation, status: 'interesting'|'wrong'|'', updatedAt }  // 遠いつながりへの反応
+Note      = { id: 'n'+時刻+乱数, title, body, pointIds: [点の ID], from?: { kind: 'line'|'thought', id, name? }, createdAt, updatedAt }
+            // 永久ノート。消したものは { id, deleted: true, createdAt, updatedAt } だけ残す
 ```
 
 - **思いつき（Thought）**は本に属さないメモ（フリートノート。`web/core/thoughts.js`）。「メモ」と呼ぶものが他にもある（読書メモ = source `memo` の点 / 取り込んだメモ = `note` / 自分のメモ = `userNote`）ので、コードでは thought と呼ぶ。本文を直しても ID は変わらない
   - 状態: 未整理（受け箱に出る）・整理済み・捨てた。捨てたもの以外は分析の点になり、今日の点・検索にも出る
   - 同期（`mergeLibraries`）では `updatedAt` が新しい方を採る。消したもの（墓標）はどちらから来ても消えたまま（`web/core/collections.js` の `mergeCollections`）。外から来た項目は形を確かめ、壊れたものは捨てる
   - 古い版のデータ（`thoughts` が無い）は空として読む（`thoughtsOf()`）
-- **点の共通の形**（`web/core/points.js`）: 分析の点 = 技術書を除くハイライト + 捨てていない思いつき（`analysisPoints`）。分析結果の `highlightIds` には思いつきの ID も入る（`pointById` で引く）
+- **点の共通の形**（`web/core/points.js`）: 分析の点 = 技術書を除くハイライト + 捨てていない思いつき（`analysisPoints`）。分析結果の `highlightIds` には思いつきの ID も入る（`pointById` で引く）。Kindle で伸ばしたハイライトに置き換わった点は `currentPointId` で置き換わった先をたどる（永久ノートの根拠に書いた点を見失わない）
+- **永久ノート（Note）**（`web/core/notes.js`）は「1 ノート = 1 アイデア」を自分の言葉で書いたもの。題・本文・根拠の点（0 件以上）を持つ。AI は書き換えない（分析は library を書かない）
+  - 線から作る（`noteDraftFromLine`: 名前を題に、説明と問いを本文に、線の点を根拠に写す）・受け箱のメモから作る（`noteFromThought`: メモを根拠にし、メモは整理済みにする）・点の画面から作る／根拠に足す
+  - 根拠の点が消えたら、ノートは残したまま「根拠の点が消えた」と出す（`note-evidence.js` の `missingEvidence`）。点・線・面の画面には、その点を根拠にしているノートを出す（`notesCiting`）
+  - 同期では `updatedAt` が新しい方を採り、消したものはどちらから来ても消えたまま（`mergeCollections` の `stickyDelete`）。外から来たノートは形を確かめる（ID・題か本文のどちらか・点の ID の形・最大 200 点）。古い版のデータ（`notes` が無い）は空として読む（`notesOf()`）
 
 - ID は内容から決まるので、何度取り込んでも・どの端末で取り込んでも同じ点は同じ ID になる
 - 取り込み（`mergeParsed`）は空欄を補うだけで、ユーザーの編集（★・メモ・タグ・削除）は変えない
@@ -74,6 +80,7 @@ Analysis = { version: 2, createdAt, model: { chat, embed }, incremental,
 - 点 → 線：球面 k-means（k ≒ 点の数 / 8、上限 400。1 本の線は目安の 2.5 倍まで）。中心から外れすぎた点（類似度が平均 − 1.5σ 未満）と 1 点だけの束は「まだつながらない点」にする。点 1,000 件で線 1 本の点の数の中央値は 7 前後（前の版の「点 5 件で 1 本・上限 40 本」では 22。大きすぎる線は AI が中心の 12 点しか見ず、ぼやけた概念になった）
 - 線 → 面：線の中心ベクトル + 線の説明文の埋め込みで k-means（k ≒ √線の数、2〜12）
 - LLM への依頼は線 1 本・面 1 つずつに分け、プロンプトには中心に近い点から最大 12 件だけ入れる（★の点は優先して入れる）。面には中心に近い線を最大 12 本、立体には面ごとに線の名前を最大 12 本だけ見せる（小さなモデルの読める長さを超えないように）
+- **永久ノートを分析の材料にする**（G3-5）: 面を作る AI には、その面の線の点を根拠にしたノート（最大 6 件）を、立体を作る AI には新しく直したノート（最大 12 件）を「人間がまとめた線」として見せ、AI の線より重く見るよう頼む（`humanLines`）。ノートの ID と題・本文のハッシュを面・立体の指紋に入れるので、ノートを書き直すとその面と立体だけを作り直す。ノートが無いときの依頼文と指紋は前と同じ（キャッシュが無駄にならない）
 - **増分の分析**（`web/core/analysis/incremental.js`）: 前回の分析を渡すと、線・面を ID ごと引き継ぐ
   - 前回の線は残っている点だけで残す（2 点未満ならほどく）。増えた点（前回の線にも「まだつながらない点」にも無い点）は、いちばん近い線の中心に十分近ければその線に加える（上限に達した線には加えない）。「十分近い」= 引き継いだ点が「自分を除いた線の中心」にどれだけ近いかの平均 − 1.5σ 以上（自分を含めた中心で測ると線の点だけが近く出て、増えた点が入りにくい）
   - 前回の「まだつながらない点」は、今回点が加わった線（中心が動いた線）に十分近ければ加える。残った点で新しい線を作るのは、増えた点を 1 つ以上含み、十分近い点だけでできる組に限る（何も増えていなければ何も変えない。線の数は上限まで）

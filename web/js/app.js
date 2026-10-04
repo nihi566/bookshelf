@@ -8,6 +8,9 @@ import { book, books, home, search } from './views/library.js';
 import { autoStatusBlock, historyView, isolatedView, knowledge, lineView, planeView } from './views/knowledge.js';
 import { discoveriesView, discoveryView } from './views/discoveries.js';
 import { farView } from './views/far.js';
+import { noteView, notesView } from './views/notes.js';
+import { pointView } from './views/point.js';
+import { noteActions } from './note-actions.js';
 import { markDiscoveryRead } from '../core/discovery-reads.js';
 import { FAR_REACTIONS, farConnectionById, reactFar } from '../core/far-reactions.js';
 import { importView, kindleSyncBlock, settingsView } from './views/settings.js';
@@ -45,6 +48,10 @@ const ROUTES = [
   [/^\/knowledge\/isolated$/, isolatedView, 'knowledge'],
   // 遠いつながり（別の本・別の面の点の組を AI が読み、共通する考えがあったもの）
   [/^\/knowledge\/far$/, farView, 'knowledge'],
+  // 永久ノート（1 ノート = 1 アイデア）と、点 1 つ（それを根拠にしている永久ノート）
+  [/^\/notes$/, notesView, 'knowledge'],
+  [/^\/note\/(?<id>[\w-]+)$/, noteView, 'knowledge'],
+  [/^\/point\/(?<id>[\w-]+)$/, pointView, 'knowledge'],
   // 過去の分析（履歴は PC にだけある）
   [/^\/knowledge\/history\/(?<id>[0-9TZ]+)$/, historyView, 'knowledge'],
   // 発見（ホームの「発見」から開く）
@@ -409,7 +416,8 @@ async function refreshPcInfo() {
 
 let syncTimer;
 function autoSyncAfterChange() {
-  if (state.settings.ai.mode !== 'companion' || !state.settings.autoSync) return;
+  // PC の場所が分かっているときだけ（GitHub Pages や試験用に別の所で開いた画面が、既定の localhost の PC に書き込まないように）
+  if (!canAutoSync()) return;
   clearTimeout(syncTimer);
   syncTimer = setTimeout(() => sync({ quiet: true }), 1500);
 }
@@ -623,6 +631,8 @@ const actions = {
     render({ keepScroll: true });
     autoSyncAfterChange();
   },
+  // ---- 永久ノート（書く・直す・線やメモから作る・点を根拠にする。中身は note-actions.js） ----
+  ...noteActions({ state, openSheet, toast, persist: persistLibrary, sync: autoSyncAfterChange, render, go: (hash) => (location.hash = hash), confirm: (message) => confirm(message) }),
   async 'delete-book'(el) {
     const b = state.library.books[el.dataset.id];
     if (!confirm(`『${b.title}』とその点をすべて削除しますか？`)) return;
@@ -744,6 +754,13 @@ const forms = {
     if (q) query.set('q', q);
     else query.delete('q');
     location.hash = `#/thoughts?${query}`;
+  },
+  'note-filter'(form) {
+    const q = new FormData(form).get('q');
+    const { query } = parseHash();
+    if (q) query.set('q', q);
+    else query.delete('q');
+    location.hash = `#/notes?${query}`;
   },
   async 'ai-settings'(form, submitter) {
     const d = new FormData(form);

@@ -13,6 +13,7 @@ import { loadWishlist } from '../wishlist-data.js';
 import { companion } from '../services.js';
 import { answerBlock } from './thoughts.js';
 import { farBlock } from './far.js';
+import { citingNotesBlock, notesSummaryBlock } from './notes.js';
 
 const STAGES = [
   ['embed', '点'],
@@ -130,7 +131,8 @@ export const knowledge = {
           <li><b style="color:var(--layer-plane)">面</b> — 近い線を束ね、LLM がテーマとしてまとめます。</li>
           <li><b style="color:var(--layer-solid)">立体</b> — 面どうしの関係から、知識の核・行動の原則・まだ答えの無い問いを組み立てます。</li>
           <li><b>本</b> — 立体と「問い」から次に読む本を選び、書誌データベースで実在を確認します。</li>
-        </ol>`;
+        </ol>
+        ${notesSummaryBlock(state)}`;
     }
     const recs = a.recommendations || [];
     return html`${head}
@@ -143,6 +145,8 @@ export const knowledge = {
         ${a.solid.principles?.length ? html`<div><h3 class="small">行動の原則</h3><ul class="plain">${a.solid.principles.map((p) => html`<li>${p}</li>`)}</ul></div>` : ''}
         ${a.solid.questions?.length ? html`<div><h3 class="small">これからの問い（知識の空白）</h3><p class="small muted">答え（考えたこと・やってみたこと）は思いつきとして、次の分析から点になります。</p><ul class="plain questions">${a.solid.questions.map((q) => html`<li>${q}${answerBlock(state.library, { question: q, kind: 'solid' })}</li>`)}</ul></div>` : ''}
       </section>
+
+      ${notesSummaryBlock(state)}
 
       <div class="section"><h2>知識マップ</h2><span class="small muted">面と線をタップ</span></div>
       ${mapSvg(a)}
@@ -375,7 +379,9 @@ export const lineView = {
         <p style="font-family:var(--serif);line-height:1.9">${l.summary}</p>
         ${l.insight ? html`<p class="notice ok">問い: ${l.insight}</p>${answerBlock(state.library, { question: l.insight, kind: 'line', ref: l.id })}` : ''}
         ${l.keywords?.length ? html`<div class="chips">${l.keywords.map((k) => html`<a class="chip" href="#/search?q=${encodeURIComponent(k)}">${k}</a>`)}</div>` : ''}
+        <div class="row"><button type="button" class="btn small primary" data-action="line-to-note" data-id="${l.id}">この線を永久ノートにする</button><span class="small muted">AI の線を下書きにして、自分の言葉に直せます</span></div>
       </section>
+      ${citingNotesBlock(state.library, new Set(l.highlightIds), 'この線の点を根拠にしている永久ノート')}
       <div class="section"><h2>つながっている点</h2><span class="small muted">${hs.length}</span></div>
       ${hs.map((h) => pointCard(h, { library: state.library, lines: (idx.get(h.id) || []).filter((x) => x.id !== l.id) }))}
       ${siblings.length ? html`<div class="section"><h2>同じ面の線</h2></div><div class="lines-of-plane">${siblings.map((s) => html`<a class="line-row" href="#/knowledge/line/${s.id}"><b>${s.name}</b><span>${s.summary}</span></a>`)}</div>` : ''}`;
@@ -396,6 +402,7 @@ export const planeView = {
       <section class="card"><p style="font-family:var(--serif);line-height:1.9">${p.summary}</p></section>
       <div class="section"><h2>線</h2><span class="small muted">${lines.length}</span></div>
       <div class="lines-of-plane">${lines.map((l) => html`<a class="line-row" href="#/knowledge/line/${l.id}"><b>${l.name}</b><span>${l.summary}</span><em>点 ${l.highlightIds.length}</em></a>`)}</div>
+      ${citingNotesBlock(state.library, new Set(lines.flatMap((l) => l.highlightIds)), 'この面の点を根拠にしている永久ノート')}
       ${rels.length ? html`<div class="section"><h2>他の面との関係</h2></div><ul class="card plain">${rels.map((r) => {
         const other = a.planes.find((x) => x.id === (r.from === p.id ? r.to : r.from));
         return other ? html`<li><b>${r.type}</b> <a href="#/knowledge/plane/${other.id}">${other.name}</a> — ${r.description}</li>` : '';

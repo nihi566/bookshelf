@@ -233,6 +233,21 @@ details li { margin: 4px 0; }
 .partner-label { display: block; font-size: 0.75rem; color: var(--ink-3); }
 .partner-text { font-family: var(--serif); font-size: 0.92rem; line-height: 1.7; margin: 2px 0; overflow-wrap: anywhere; }
 
+/* 永久ノート（1 ノート = 1 アイデア。人間がまとめた線） */
+.layer-label.note { color: var(--accent); }
+.note-list { list-style: none; margin: 0; padding: 0; }
+.note-item { display: flex; flex-direction: column; gap: 2px; padding: 10px 12px; margin-bottom: 8px; border-radius: 12px; border: 1px solid var(--line); border-left: 4px solid var(--accent); background: var(--surface); color: var(--ink); }
+.note-item:hover { text-decoration: none; background: var(--surface-2); }
+.note-title { font-family: var(--serif); font-weight: 700; overflow-wrap: anywhere; }
+.note-excerpt { font-size: 0.85rem; color: var(--ink-2); overflow-wrap: anywhere; }
+.note-meta { font-size: 0.75rem; color: var(--ink-3); }
+.warn-text { color: var(--warn); }
+.note-h1 { margin: 4px 0 4px; font-family: var(--serif); overflow-wrap: anywhere; }
+.note-body p { margin: 0; font-family: var(--serif); line-height: 1.9; white-space: pre-wrap; overflow-wrap: anywhere; }
+.sheet fieldset { margin: 12px 0 0; padding: 8px 10px; border: 1px solid var(--line); border-radius: 10px; max-height: 14em; overflow: auto; }
+.sheet legend { padding: 0 4px; font-size: 0.85rem; color: var(--ink-2); }
+.sheet fieldset label.check span { overflow-wrap: anywhere; }
+
 /* 遠いつながり（別の本・別の面の点の組に、AI が共通する考えを見つけたもの） */
 .layer-label.far, .disc-item.far .disc-kind { color: var(--layer-solid); }
 .disc-item.far { border-left-color: var(--layer-solid); }

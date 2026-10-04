@@ -4,7 +4,7 @@
 export function normalizeText(s) {
   return String(s ?? '')
     .normalize('NFKC')
-    .replace(/[​-‍﻿]/g, '')
+    .replace(/[\u200b-\u200d\ufeff]/g, '')
     .replace(/\s+/g, ' ')
     .trim()
     .toLowerCase();
@@ -13,7 +13,7 @@ export function normalizeText(s) {
 /** 表示用の整形（前後の空白と BOM を除き、行末の空白を落とし、連続する空行を詰める） */
 export function cleanText(s) {
   return String(s ?? '')
-    .replace(/[​-‍﻿]/g, '')
+    .replace(/[\u200b-\u200d\ufeff]/g, '')
     .replace(/\r\n?/g, '\n')
     .split('\n')
     .map(trimSpacesEnd)
@@ -30,6 +30,30 @@ function trimSpacesEnd(line) {
   let i = line.length;
   while (i > 0 && (line[i - 1] === ' ' || line[i - 1] === '\t')) i--;
   return i === line.length ? line : line.slice(0, i);
+}
+
+// 時刻として受け入れる先の範囲（端末の時計のずれは受け入れ、それより先の時刻は now に直す）
+const FUTURE_TOLERANCE_MS = 24 * 3600 * 1000;
+
+/**
+ * 同期で届いた時刻を整える。toISOString の形で実在する時刻だけを通し、ほかは ''（いちばん古い扱い）にする。
+ * now より 24 時間以上先の時刻は now に直す（時計の進んだ端末の時刻・壊れた時刻が、統合の「新しい方を採る」で
+ * いつまでも勝ち続けないように。消すとその端末の操作が負けるので、消さずに直す）
+ * now は 1 回の統合で同じ値を渡す（どちら向きに統合しても同じ結果になるように）
+ */
+export function isoStamp(v, now = new Date().toISOString()) {
+  if (typeof v !== 'string' || v.length > 40 || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z$/.test(v)) return '';
+  const t = Date.parse(v);
+  if (!Number.isFinite(t) || new Date(t).toISOString().slice(0, 19) !== v.slice(0, 19)) return '';
+  return t > Date.parse(now) + FUTURE_TOLERANCE_MS ? now : v;
+}
+
+/** 文字数 max までに切る（2 つで 1 文字の文字を半分にしない。印は付けない） */
+export function sliceChars(s, max) {
+  const str = String(s ?? '');
+  if (str.length <= max) return str;
+  const code = str.charCodeAt(max - 1);
+  return str.slice(0, code >= 0xd800 && code <= 0xdbff ? max - 1 : max);
 }
 
 /**
@@ -156,6 +180,7 @@ export function truncate(s, n) {
   const str = String(s ?? '');
   if (str.length <= n) return str;
   if (!(n > 0)) return '';
-  const chars = Array.from(str);
+  // 先に切ってから 1 文字ずつに分ける（同期で届いた長い文 1 つで時間とメモリを使い切らないように。結果は変わらない）
+  const chars = Array.from(str.slice(0, 2 * n + 2));
   return chars.length > n ? chars.slice(0, n - 1).join('') + '…' : str;
 }

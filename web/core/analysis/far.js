@@ -6,6 +6,7 @@
 // FarConnection = { id: 'f…', a, b, idea, explanation, foundAt }（a・b は点の ID。a < b）
 
 import { hash, truncate } from '../text.js';
+import { isPointId } from '../point-ids.js';
 import { dot } from './vectors.js';
 
 // 1 回の分析で AI に判定させる組の数（AI を呼ぶ回数の上限）と、残しておく遠いつながりの数
@@ -26,10 +27,9 @@ export const IDEA_MAX = 40;
 export const EXPLANATION_MAX = 300;
 
 const FAR_ID = /^f[0-9a-z]{1,40}$/;
-// 点の ID（ハイライトは 'h'、思いつきは 't' で始まる）
-const POINT_ID = /^[ht][0-9a-z]{1,40}$/;
 export const isFarId = (v) => typeof v === 'string' && FAR_ID.test(v);
-export const isPointId = (v) => typeof v === 'string' && POINT_ID.test(v);
+// 点の ID の形（ハイライトは 'h'、思いつきは 't'）は point-ids.js にまとめている
+export { isPointId };
 
 /** 2 点の組の ID（並びに依らない） */
 export function farId(a, b) {
