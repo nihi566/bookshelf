@@ -5,7 +5,7 @@ import { analysisStamp } from '../core/importing.js';
 
 // ---- コンパニオンサーバ ----
 
-// 意味で探す・問いかけるを待つ長さ（問いかけは PC の AI が答えを書くので長め。切れると PC 側の処理も止まる）
+// 意味で探す・問いかける・骨組みを作るを待つ長さ（問いかけ・骨組みは PC の AI が文を書くので長め。切れると PC 側の処理も止まる）
 const SEARCH_TIMEOUT_MS = 30 * 1000;
 const ASK_TIMEOUT_MS = 3 * 60 * 1000;
 
@@ -60,6 +60,8 @@ export const companion = {
   // 意味で探す・問いかける（PC の埋め込みモデルとローカル LLM。本文は送り返さず、点・ノートの ID が返る）
   search: (q) => call('/api/search', { method: 'POST', body: { q }, timeoutMs: SEARCH_TIMEOUT_MS }),
   ask: (question) => call('/api/ask', { method: 'POST', body: { question }, timeoutMs: ASK_TIMEOUT_MS }),
+  // 文章の骨組みを作る（材料の面・線・永久ノートの ID を送り、保存前の下書きが返る）
+  outline: (sources) => call('/api/outline', { method: 'POST', body: { sources }, timeoutMs: ASK_TIMEOUT_MS }),
   // 分析の履歴は PC にだけ置く（一覧は要約だけ。開いたときに 1 回分を取りに行く）
   history: () => call('/api/history').then((r) => r?.items || []),
   historyEntry: (id) => call(`/api/history/${encodeURIComponent(id)}`),

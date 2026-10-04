@@ -14,6 +14,15 @@ export function analysisPoints(library) {
   return [...pointHighlights(library), ...pointThoughts(library)].sort((a, b) => a.id.localeCompare(b.id));
 }
 
+/**
+ * この端末に届いている点か（消した点は墓標があるので届いている）。PC で取り込んだ直後の点はまだ無いことがある。
+ * 引くことのできない点を「消えた」と「まだ無い（同期すると出る）」に分けるために使う
+ */
+export function pointArrived(library, id) {
+  const all = isThoughtId(id) ? thoughtsOf(library) : library.highlights || {};
+  return Object.hasOwn(all, id);
+}
+
 /** ID から点を引く（消したもの・無いものは null。捨てた思いつきは返す: コピー・戻すなどの操作のため） */
 export function pointById(library, id) {
   const all = isThoughtId(id) ? thoughtsOf(library) : library.highlights || {};

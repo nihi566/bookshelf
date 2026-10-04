@@ -248,6 +248,16 @@ details li { margin: 4px 0; }
 .sheet legend { padding: 0 4px; font-size: 0.85rem; color: var(--ink-2); }
 .sheet fieldset label.check span { overflow-wrap: anywhere; }
 
+/* 文章の骨組み（引用は点の文そのまま。改行も残す） */
+.outline-section h2 { margin: 0; font-size: 1.05rem; }
+.outline-quote { margin: 0; padding: 6px 0 6px 12px; border-left: 3px solid var(--line); }
+.outline-quote p { margin: 0; font-family: var(--serif); line-height: 1.8; white-space: pre-wrap; overflow-wrap: anywhere; }
+.outline-quote footer { margin-top: 4px; font-size: 0.78rem; color: var(--ink-3); }
+.outline-quote.gone p { color: var(--ink-3); }
+.outline-edit { border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; }
+/* シートの fieldset は高さを絞っているが、骨組みの節は中身が多いので絞らない（節ごとに小さなスクロール枠を作らない） */
+.sheet .outline-edit { max-height: none; overflow: visible; }
+
 /* 問いかける（答えの本文は改行を残す） */
 .answer-text { font-family: var(--serif); line-height: 1.9; white-space: pre-wrap; overflow-wrap: anywhere; }
 .search-modes { margin-top: 10px; }

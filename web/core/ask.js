@@ -172,8 +172,8 @@ export function askPrompt(question, points) {
   };
 }
 
-// 番号として読めるもの（数か、数字だけの文字列。true などを 1 番にしない）
-const asNumber = (v) => (typeof v === 'number' ? v : typeof v === 'string' && /^\d{1,2}$/.test(v.trim()) ? Number(v) : NaN);
+/** 番号として読めるもの（数か、数字だけの文字列。true などを 1 番にしない。骨組みの答えでも使う） */
+export const asNumber = (v) => (typeof v === 'number' ? v : typeof v === 'string' && /^\d{1,2}$/.test(v.trim()) ? Number(v) : NaN);
 
 /**
  * AI の答えを読む。答えられるのは answerable が true（構造化出力が使えないサーバでは "true" の文字）のときだけ
@@ -187,8 +187,8 @@ export function readAnswer(r, count) {
   return { answerable: yes && Boolean(answer), answer, used };
 }
 
-/** 前に問いかけた答えを保存したメモか（AI が書いた文なので、次の答えの根拠にはしない。点としては残る） */
-const isAskAnswer = (library, id) => pointById(library, id)?.answerTo?.kind === 'ask';
+/** 前に問いかけた答えを保存したメモか（AI が書いた文なので、次の答えの根拠や骨組みの引用にはしない。点としては残る） */
+export const isAskAnswer = (library, id) => pointById(library, id)?.answerTo?.kind === 'ask';
 
 /**
  * 問いかける（G8-2・G8-3）

@@ -15,6 +15,8 @@ import { linkPickerView } from './views/links.js';
 import { linkActions } from './link-actions.js';
 import { askResultBlock, askView, semanticAvailability } from './views/ask.js';
 import { askActions } from './ask-actions.js';
+import { outlineNewView, outlineStatusBlock, outlineView, outlinesView } from './views/outlines.js';
+import { outlineActions } from './outline-actions.js';
 import { markDiscoveryRead } from '../core/discovery-reads.js';
 import { FAR_REACTIONS, farConnectionById, reactFar } from '../core/far-reactions.js';
 import { importView, kindleSyncBlock, settingsView } from './views/settings.js';
@@ -60,6 +62,10 @@ const ROUTES = [
   [/^\/link\/(?<id>[\w-]+)$/, linkPickerView, 'knowledge'],
   // 問いかける（PC の AI が、自分の点を根拠に答える）
   [/^\/ask$/, askView, 'knowledge'],
+  // 文章の骨組み（一覧・材料を選んで作る・骨組み 1 つ）
+  [/^\/outlines$/, outlinesView, 'knowledge'],
+  [/^\/outline\/new$/, outlineNewView, 'knowledge'],
+  [/^\/outline\/(?<id>[\w-]+)$/, outlineView, 'knowledge'],
   // 過去の分析（履歴は PC にだけある）
   [/^\/knowledge\/history\/(?<id>[0-9TZ]+)$/, historyView, 'knowledge'],
   // 発見（ホームの「発見」から開く）
@@ -521,8 +527,37 @@ function renderAskResult() {
 // 問いかける（質問を PC に送る・答えをメモにする。中身は ask-actions.js）
 const askOps = askActions({ state, ask: (question) => companion.ask(question), persist: persistLibrary, sync: autoSyncAfterChange, render: renderAskResult, toast });
 
+/** 骨組みを作っている間・失敗の表示。作る画面の欄とボタンだけを差し替える（選んだ材料のチェックを描き直さない） */
+function renderOutlineStatus() {
+  if (parseHash().path !== '/outline/new') return;
+  const box = document.querySelector('#view #outline-status');
+  if (box) box.innerHTML = String(outlineStatusBlock(state));
+  const btn = document.querySelector('#view #outline-submit');
+  if (btn) btn.disabled = semanticAvailability(state) !== 'ok' || state.outlineDraft?.status === 'pending';
+}
+
+// 文章の骨組み（作る・直す・Markdown をコピー・消す。中身は outline-actions.js）
+const { create: createOutline, ...outlineButtons } = outlineActions({
+  state,
+  generate: (picks) => companion.outline(picks),
+  openSheet,
+  toast,
+  persist: persistLibrary,
+  sync: autoSyncAfterChange,
+  render: renderOutlineStatus,
+  renderPage: render,
+  go: (hash) => (location.hash = hash),
+  here: () => parseHash().path,
+  confirm: (message) => confirm(message),
+  copy: async (text) => {
+    if (!navigator.clipboard) throw new Error('この画面ではコピーできません（https か localhost で開いてください）');
+    await navigator.clipboard.writeText(text);
+  },
+});
+
 const actions = {
   'ask-save': () => askOps.save(),
+  ...outlineButtons,
   'register-book'() {
     openSheet(
       html`<h2>紙の本を登録</h2>
@@ -756,6 +791,10 @@ const forms = {
     // 検索の画面から引き継いだ言葉（?q=）を URL から外す（描き直しても、送った質問の欄が引き継いだ言葉に戻らないように）
     if (location.hash !== '#/ask') history.replaceState(null, '', '#/ask');
     return askOps.submit(new FormData(form).get('question'));
+  },
+  'outline-new'(form) {
+    const d = new FormData(form);
+    return createOutline(['plane', 'line', 'note'].flatMap((kind) => d.getAll(kind).map((id) => ({ kind, id: String(id) }))));
   },
   async 'add-highlight'(form) {
     const d = new FormData(form);

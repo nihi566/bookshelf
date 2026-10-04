@@ -108,7 +108,7 @@ export const noteView = {
       <h1 class="note-h1">${n.title || '（題なし）'}</h1>
       <p class="small muted">${isoDate(n.createdAt)} に作成 ・ ${isoDate(n.updatedAt)} に更新${from ? html` ・ ${from}` : ''}</p>
       <section class="card note-body">${n.body ? html`<p>${n.body}</p>` : html`<p class="muted">（本文なし）</p>`}</section>
-      <div class="row" style="margin-top:12px"><button class="btn small" data-action="edit-note" data-id="${n.id}">編集</button></div>
+      <div class="row" style="margin-top:12px"><button class="btn small" data-action="edit-note" data-id="${n.id}">編集</button><a class="btn small" href="#/outline/new?note=${n.id}">文章の骨組みを作る</a></div>
       ${missing ? html`<p class="notice">根拠の点が ${missing} 件消えました（本や点を消したため）。ノートはそのまま残っています。</p>` : ''}
       <div class="section"><h2>根拠の点</h2><span class="small muted">${ev.length}</span></div>
       ${ev.length
