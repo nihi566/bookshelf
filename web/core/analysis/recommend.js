@@ -1,7 +1,7 @@
 // おすすめの本と書誌データベース
 //
 // ローカル LLM は存在しない本をもっともらしく挙げることがある。そこで
-//   1. 書誌 DB で「実在する候補」を集め、LLM にはその中から選ばせる（Google Books の検索。関連度順）
+//   1. 書誌 DB で「実在する候補」を集め、LLM にはその中から選ばせる（Google Books → CiNii Books → 国立国会図書館サーチ）
 //   2. 検索できないときは LLM に書名を挙げさせ、Google Books → 国立国会図書館サーチ の順で実在を確認する
 // どちらもブラウザ（CORS 対応）と PC の両方から呼べる。
 
@@ -9,6 +9,7 @@ import { bookKey } from '../text.js';
 
 const GOOGLE = 'https://www.googleapis.com/books/v1/volumes';
 const NDL = 'https://ndlsearch.ndl.go.jp/api/opensearch';
+const CINII = 'https://ci.nii.ac.jp/books/opensearch/search';
 
 function fetcher(fetchImpl) {
   return fetchImpl || globalThis.fetch?.bind(globalThis);
@@ -39,10 +40,11 @@ function fromGoogle(it) {
 }
 
 /**
- * キーワードで本を探す。Google Books（関連度順）で探し、使えないとき（回数制限など）は
- * 国立国会図書館サーチで書名にキーワードを含む本（ISBN あり・新しい順）を探す。どちらも通信できなければ例外
+ * キーワードで本を探す。Google Books（関連度順）→ CiNii Books（所蔵館の多い順）→ 国立国会図書館サーチ
+ * （書名にキーワードを含む本・新しい順）の順に、使えるところで探す。どこにも通信できなければ例外。
+ * 鍵なしの Google Books は回数制限で使えないことが多い（2026-10 に 1 日の上限が 0 になっているのを確認）
  */
-export async function searchBooks(query, { fetchImpl, signal, max = 6, lang = 'ja' } = {}) {
+export async function searchBooks(query, { fetchImpl, signal, max = 6, lang = 'ja', now = new Date() } = {}) {
   const doFetch = fetcher(fetchImpl);
   try {
     const url = `${GOOGLE}?q=${encodeURIComponent(query)}&maxResults=${max}&printType=books&orderBy=relevance${lang ? `&langRestrict=${lang}` : ''}`;
@@ -50,8 +52,50 @@ export async function searchBooks(query, { fetchImpl, signal, max = 6, lang = 'j
     return (data.items || []).map(fromGoogle).filter((b) => b.title);
   } catch (e) {
     if (signal?.aborted) throw e;
-    return searchNdl(doFetch, query, { signal, max });
   }
+  try {
+    const found = await searchCinii(doFetch, query, { signal, max, now });
+    if (found.length) return found;
+  } catch (e) {
+    if (signal?.aborted) throw e;
+  }
+  // CiNii に通信できない・条件に合う本が無いときは国立国会図書館サーチ
+  return searchNdl(doFetch, query, { signal, max });
+}
+
+// CiNii Books で候補にする出版年の幅（古い専門書ばかりにならないように）
+const CINII_MAX_AGE_YEARS = 25;
+
+/**
+ * CiNii Books（大学図書館の総合目録）。国立国会図書館サーチと違ってキーワードの関連度で探せる。
+ * 関連度の高い 40 件のうち、ISBN があって新しすぎず古すぎない本を、所蔵館の多い順（=定番の本）に並べる
+ */
+async function searchCinii(doFetch, query, { signal, max, now }) {
+  const data = await getJson(doFetch, `${CINII}?${new URLSearchParams({ q: query, format: 'json', count: '40' })}`, signal);
+  const minYear = now.getFullYear() - CINII_MAX_AGE_YEARS;
+  return parseCinii(data)
+    .filter((b) => b.isbn && (parseInt(b.publishedDate, 10) || 0) >= minYear)
+    .sort((a, b) => b.owners - a.owners)
+    .slice(0, max)
+    .map(({ owners, ...b }) => b);
+}
+
+/** CiNii Books OpenSearch の JSON を読む */
+export function parseCinii(data) {
+  const items = data?.['@graph']?.[0]?.items;
+  return (Array.isArray(items) ? items : [])
+    .map((it) => ({
+      title: String(it.title || '').trim(),
+      // 「山田太郎著」「佐藤花子編」の役割表示を外す
+      authors: String(it['dc:creator'] || '').replace(/\s*[著編訳監修]+(?=\s*(;|$))/g, '').replace(/\s*;\s*/g, ', ').trim(),
+      publishedDate: String(it['dc:date'] || ''),
+      link: httpsOnly(it['@id']),
+      thumbnail: '',
+      isbn: ([].concat(it['dcterms:hasPart'] || []).map((p) => String(p?.['@id'] || '').match(/^urn:isbn:([\dX]{10,13})$/i)?.[1]).find(Boolean) || '').toUpperCase(),
+      owners: parseInt(it['cinii:ownerCount'], 10) || 0,
+      source: 'CiNii Books',
+    }))
+    .filter((b) => b.title);
 }
 
 async function searchNdl(doFetch, query, { signal, max }) {

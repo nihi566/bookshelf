@@ -19,7 +19,7 @@ import { SOURCES, listBooks, libraryStats, searchHighlights } from '../web/core/
 import { applyImport } from '../web/core/importing.js';
 import { parseFiles } from '../web/core/parsers/index.js';
 import { createLlmClient } from '../web/core/analysis/llm.js';
-import { analyzeLibrary, recommendBooks, recommendationNote } from '../web/core/analysis/pipeline.js';
+import { TFIDF_HINT, analyzeLibrary, recommendBooks, recommendationNote } from '../web/core/analysis/pipeline.js';
 import { truncate } from '../web/core/text.js';
 
 const HELP = `使い方: bh <コマンド> [オプション]
@@ -125,6 +125,7 @@ async function main() {
         }
         await store.saveAnalysis(analysis);
         process.stdout.write('\n');
+        if (analysis.model.embed === 'tfidf') console.log(`\n! ${TFIDF_HINT}（bh config embed bge-m3）`);
         console.log(`\n■ 立体: ${analysis.solid.title}\n${analysis.solid.core}\n`);
         for (const p of analysis.planes) {
           console.log(`■ 面: ${p.name}`);

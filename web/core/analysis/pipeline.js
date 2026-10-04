@@ -20,6 +20,10 @@ const WISHLIST_CANDIDATES = 8;
 
 export const ANALYSIS_VERSION = 1;
 
+// 埋め込みモデル無し（文字 n-gram）で分析したときの案内。実データ（点 920）で試すと、ありふれた言葉を共有する点が
+// 1 本の線に集まり、面の名前も「知識の〜」ばかりになった。bge-m3 にすると面がテーマごとに分かれた
+export const TFIDF_HINT = '埋め込みモデルを使わず、文字の並びだけで点をつないでいます。ありふれた言葉でつながりやすく、面の名前が似通いがちです。PC で ollama pull bge-m3 を実行し、埋め込みモデルに bge-m3 を設定すると、意味の近さでつなげます。';
+
 export function emptyCache() {
   return { embeddings: { model: '', vectors: {} }, llm: {} };
 }
@@ -222,12 +226,12 @@ export async function recommendBooks({ library, analysis, llm, signal, onProgres
       const picked = new Set();
       const recs = [];
       for (const p of Array.isArray(r?.picks) ? r.picks : []) {
-        const c = candidates[Number(p.candidate) - 1];
+        const c = namedCandidate(p.reason, candidates) || candidates[Number(p.candidate) - 1];
         if (!c || picked.has(c)) continue;
         picked.add(c);
         // 欲しい本だけから来た候補は書誌 DB で確かめていない（search が無い）
         const { search, description, wishlist: wished, ...verified } = c;
-        recs.push({ title: c.title, author: c.authors, planeId: planeRef(p.plane) || planeRef(search?.plane), kind: kindOf(p.kind || search?.kind), reason: clean(p.reason, 400), ...(search ? { query: search.query, verified } : {}), ...(wished ? { wishlist: wished } : {}) });
+        recs.push({ title: c.title, author: c.authors, planeId: planeRef(p.plane) || planeRef(search?.plane), kind: kindOf(p.kind || search?.kind), reason: clean(stripPlaneRefs(p.reason), 400), ...(search ? { query: search.query, verified } : {}), ...(wished ? { wishlist: wished } : {}) });
       }
       onProgress({ stage: 'recommend', done: 3, total: 3, message: `おすすめの本を ${recs.length} 冊選びました` });
       if (recs.length) return recs.slice(0, count);
@@ -244,7 +248,7 @@ export async function recommendBooks({ library, analysis, llm, signal, onProgres
     const p = recommendPrompt({ solid: analysis.solid, planes: analysis.planes, readTitles, count: count + 2, avoid: rejected, prefs });
     const r = await llm.chatJson({ ...p, signal, temperature: 0.5 + round * 0.2 });
     for (const b of Array.isArray(r?.books) ? r.books : []) {
-      const rec = { title: clean(b.title, 120), author: clean(b.author, 80), planeId: planeRef(b.plane), kind: kindOf(b.kind), reason: clean(b.reason, 400) };
+      const rec = { title: clean(b.title, 120), author: clean(b.author, 80), planeId: planeRef(b.plane), kind: kindOf(b.kind), reason: clean(stripPlaneRefs(b.reason), 400) };
       const key = bookKey(rec.title);
       if (!rec.title || seen.has(key)) continue;
       seen.add(key);
@@ -269,6 +273,21 @@ export function recommendationNote(recs) {
   if (!recs.length) return 'おすすめを選べませんでした。モデルが既に読んだ本しか挙げなかった可能性があります。より大きなモデル（7B 以上）で「おすすめを選び直す」を試してください。';
   if (recs.every((r) => r.verified === false)) return '挙がった本はどれも書誌データベースで見つかりませんでした。実在しない本の可能性が高いので、より大きなモデルで選び直してください。';
   return '';
+}
+
+/**
+ * 理由が『書名』で挙げている候補。小さなモデルは候補の番号を 1 つずらして答えることがあり、
+ * そのまま番号を信じると書名と理由が別の本を指す（理由の方が本人の意図に近い）
+ */
+function namedCandidate(reason, candidates) {
+  const named = String(reason || '').match(/『([^』]+)』/)?.[1];
+  const key = named && titleKey(named);
+  return key ? candidates.find((c) => titleKey(c.title) === key) : undefined;
+}
+
+/** 理由の文から、プロンプトの中だけの面の記号（P2「…」の P2）を外す（利用者には意味が無く、番号がずれていることもある） */
+function stripPlaneRefs(s) {
+  return String(s ?? '').replace(/P\d+\s*(?:の\s*)?(?=「)/g, '');
 }
 
 function clean(v, max) {
