@@ -175,6 +175,8 @@ export function createGoogleClient({ store, fetchImpl = fetch }) {
     async sync() {
       const docs = await listDocs(await findFolders());
       const synced = await store.googleSync();
+      // 記録の files が無い・形が違う（手で書き換えた・壊れた）ときは、取り込み済みの記録なしとして扱う
+      if (!synced.files || typeof synced.files !== 'object') synced.files = {};
       if (!docs.length) {
         // フォルダが作り直された（設定のオフ → オン等）かもしれないので、次の確認で探し直す。
         // 取り込み済みの記録は消さない（消すと全部を取り込み直すことになる）
@@ -256,7 +258,8 @@ export function startDriveWatcher({ store, client, log = console.log }) {
       status.checking = false;
       if (!stopped) {
         const { google } = await store.config().catch(() => ({ google: {} }));
-        timer = setTimeout(tick, Math.max(MIN_INTERVAL_SEC, Number(google.intervalSec) || 60) * 1000);
+        // 設定を読んでいる間に stop されたら予約しない
+        if (!stopped) timer = setTimeout(tick, Math.max(MIN_INTERVAL_SEC, Number(google.intervalSec) || 60) * 1000);
       }
     }
   }

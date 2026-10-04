@@ -93,7 +93,9 @@ export function createStore(dataDir = process.env.BH_DATA || path.join(REPO_ROOT
     lock,
     async config() {
       // vault / root / autoExport は Obsidian への書き出しを削除する前の設定。次に保存したときに消えるよう読み捨てる
-      const { vault, root, autoExport, ...c } = await readJson('config.json', {});
+      // JSON として正しくても null・配列などオブジェクトでない中身なら、既定の設定で読む
+      const saved = await readJson('config.json', {});
+      const { vault, root, autoExport, ...c } = saved && typeof saved === 'object' && !Array.isArray(saved) ? saved : {};
       return { ...DEFAULT_CONFIG, ...c, llm: { ...DEFAULT_CONFIG.llm, ...(c.llm || {}) }, google: { ...DEFAULT_CONFIG.google, ...(c.google || {}) }, autoAnalyze: { ...DEFAULT_CONFIG.autoAnalyze, ...(c.autoAnalyze || {}) } };
     },
     saveConfig: (c) => writeJson('config.json', c),

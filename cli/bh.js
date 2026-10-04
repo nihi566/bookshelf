@@ -85,7 +85,9 @@ function parseArgs(argv) {
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a.startsWith('--')) {
-      const [k, v] = a.slice(2).split('=');
+      // 値の中の = はそのまま残す（--data=/path/a=b）
+      const eq = a.indexOf('=');
+      const [k, v] = eq < 0 ? [a.slice(2), undefined] : [a.slice(2, eq), a.slice(eq + 1)];
       if (v !== undefined) args[k] = v;
       else if (argv[i + 1] && !argv[i + 1].startsWith('--') && ['port', 'host', 'data'].includes(k)) args[k] = argv[++i];
       else args[k] = true;
@@ -229,7 +231,11 @@ async function main() {
         embed: () => (cfg.llm.embedModel = value),
         origin: () => (cfg.allowedOrigins = [...new Set([...(cfg.allowedOrigins || []), value.replace(/\/+$/, '')])]),
         token: () => (cfg.token = value),
-        port: () => (cfg.port = Number(value)),
+        port: () => {
+          const port = Number(value);
+          if (!value || !Number.isInteger(port) || port < 1 || port > 65535) throw new Error('ポートは 1〜65535 の整数で指定してください');
+          cfg.port = port;
+        },
         host: () => (cfg.host = value),
         'google-client': () => {
           const [clientId, clientSecret = ''] = vals;
