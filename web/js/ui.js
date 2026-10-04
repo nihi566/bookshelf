@@ -110,12 +110,20 @@ export function openSheet(content, onSubmit) {
   const dialog = document.getElementById('sheet');
   dialog.innerHTML = String(html`<form method="dialog">${content}</form>`);
   const form = dialog.querySelector('form');
+  // 保存が終わるまでは次の送信を受け付けない（連打・Enter の二重送信で同じ記録が 2 件できないように）
+  let busy = false;
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
     const action = e.submitter?.value || 'save';
     if (action === 'cancel') return dialog.close();
-    const keep = await onSubmit(new FormData(form), action);
-    if (keep !== true) dialog.close();
+    if (busy) return;
+    busy = true;
+    try {
+      const keep = await onSubmit(new FormData(form), action);
+      if (keep !== true) dialog.close();
+    } finally {
+      busy = false;
+    }
   });
   dialog.showModal();
   dialog.addEventListener('click', (e) => {

@@ -31,13 +31,15 @@ function storeToken(token) {
 const rec = { status: 'idle', file: null, error: null };
 let loadSeq = 0;
 let loading = Promise.resolve();
+// いま表示している記録画面の描き直し（読み込み中に月を移ると画面が作り直されるので、読み終えたら新しい方を描く）
+let redraw = () => {};
 
 /** 読み直す。古い問い合わせの結果で新しい結果を上書きしない。戻り値は読み終わる Promise */
-function reload(onDone) {
+function reload() {
   const seq = ++loadSeq;
   rec.status = 'loading';
   rec.error = null;
-  onDone();
+  redraw();
   loading = fetchRecords(loadToken())
     .then((file) => {
       if (seq === loadSeq) Object.assign(rec, { status: 'ready', file, error: null });
@@ -45,8 +47,14 @@ function reload(onDone) {
     .catch((error) => {
       if (seq === loadSeq) Object.assign(rec, { status: 'error', error });
     })
-    .finally(() => seq === loadSeq && onDone());
+    .finally(() => seq === loadSeq && redraw());
   return loading;
+}
+
+/** 保存した結果を反映する（読み込み途中の古い結果で上書きされないよう、その読み込みは捨てる） */
+function applySaved(file) {
+  loadSeq++;
+  Object.assign(rec, { status: 'ready', file, error: null });
 }
 
 function periodOf(query) {
@@ -148,8 +156,9 @@ function body(ctx) {
 
 /** 記録のシート。bookId を渡すとその本で開く（記録済みなら中身を入れて開く） */
 function openRecordSheet(state, { bookId = '', onSaved }) {
-  const existing = bookId ? rec.file?.records[bookId] : null;
-  const libBook = bookId ? state.library.books[bookId] : null;
+  // 継承されたプロパティ名（constructor など）を本の ID として拾わない
+  const existing = bookId && rec.file && Object.hasOwn(rec.file.records, bookId) ? rec.file.records[bookId] : null;
+  const libBook = bookId && Object.hasOwn(state.library.books, bookId) ? state.library.books[bookId] : null;
   const fixed = existing || libBook;
   const books = listBooks(state.library);
   openSheet(
@@ -172,6 +181,9 @@ function openRecordSheet(state, { bookId = '', onSaved }) {
         } else {
           const pick = fixed ? bookId : String(data.get('book') || '');
           const b = pick ? state.library.books[pick] || existing : null;
+          // 記録は 1 冊 1 件。追加のシートで記録済みの本を選んだら、上書きしてよいか確かめる
+          const prior = !fixed && pick && Object.hasOwn(rec.file.records, pick) ? rec.file.records[pick] : null;
+          if (prior && !confirm(`『${prior.title}』は ${prior.read_on} に読んだ記録があります。読んだ日・ページ数を置き換えますか？`)) return true;
           const title = b ? b.title : String(data.get('title') || '').trim();
           if (!title) throw new Error('書名を入れてください');
           change = {
@@ -185,8 +197,7 @@ function openRecordSheet(state, { bookId = '', onSaved }) {
             pages: parsePagesInput(data.get('pages')),
           };
         }
-        rec.file = await saveChange(token, change);
-        rec.status = 'ready';
+        applySaved(await saveChange(token, change));
       } catch (err) {
         toast(err.kind ? recordsErrorMessage(err) : err.message, 5000);
         return true;
@@ -210,6 +221,7 @@ export const records = {
     const draw = () => {
       if (box.isConnected) box.innerHTML = String(body(ctx));
     };
+    redraw = draw;
     // 追加・編集した記録が今の月から外れるときは、その月へ移る
     const showRecord = (change) => {
       const [y, m] = (change.read_on || '').split('-').map(Number);
@@ -220,7 +232,7 @@ export const records = {
     page.addEventListener('click', (e) => {
       const el = e.target.closest('[data-rec]');
       if (!el) return;
-      if (el.dataset.rec === 'reload') reload(draw);
+      if (el.dataset.rec === 'reload') reload();
       else if (rec.status !== 'ready') toast('記録を読み込んでから操作してください');
       else if (el.dataset.rec === 'add') openRecordSheet(ctx.state, { onSaved: showRecord });
       else if (el.dataset.rec === 'edit') openRecordSheet(ctx.state, { bookId: el.dataset.id, onSaved: showRecord });
@@ -234,9 +246,9 @@ export const records = {
       if (!clear && !token) return toast('トークンを貼ってください');
       if (!storeToken(token)) return toast('このブラウザには保存できませんでした（プライベートブラウズなど）', 5000);
       toast(clear ? 'この端末からトークンを消しました' : 'トークンを保存しました');
-      reload(draw);
+      reload();
     });
-    if (rec.status === 'idle' || rec.status === 'error') reload(draw);
+    if (rec.status === 'idle' || rec.status === 'error') reload();
     else draw();
     // 本の画面の「読書記録をつける」から来たら、その本で記録のシートを開く（開いたら URL から外す）
     const bookId = ctx.query.get('book');
