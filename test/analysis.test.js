@@ -7,7 +7,6 @@ import { analyzeLibrary, deserializeCache, emptyCache, serializeCache } from '..
 import { dot, groupPoints, kmeans, tfidfEmbed } from '../web/core/analysis/vectors.js';
 import { matchVolume, parseNdlRss, verifyBooks } from '../web/core/analysis/recommend.js';
 import { recommendBooks } from '../web/core/analysis/pipeline.js';
-import { renderVault } from '../web/core/obsidian.js';
 import { startFakeLlm } from './helpers/fake-llm.js';
 
 function sampleLibrary() {
@@ -111,10 +110,6 @@ test('analyzeLibrary: 点→線→面→立体→おすすめ。キャッシュ�
     assert.equal(fake.calls.chat, before.chat);
     assert.equal(fake.calls.embed, before.embed + 1, '線の説明の埋め込みだけ');
     assert.deepEqual(again.analysis.lines.map((l) => l.name), analysis.lines.map((l) => l.name));
-
-    // Vault 出力まで通る
-    const files = renderVault(lib, analysis);
-    assert.ok(files.some((f) => f.path === 'Highlights/Knowledge Map.md' && f.content.includes('知識の核')));
   } finally {
     await fake.close();
   }

@@ -1,10 +1,9 @@
-// 取り込み・書き出し・設定の画面
+// 取り込み・設定の画面
 import { html } from '../html.js';
 import { libraryStats } from '../../core/model.js';
 import { ACCEPT } from '../../core/parsers/index.js';
 import { isoDate } from '../../core/text.js';
-import { fsSupported } from '../services.js';
-import { kindleSyncLines, lastExportText } from '../ui.js';
+import { kindleSyncLines } from '../ui.js';
 
 /** 取り込み画面の Kindle 自動取り込みの状態欄の中身。拡張からの確認結果は PC が持っているので、PC モードで PC の情報を取れているときだけ出す */
 export function kindleSyncBlock(state) {
@@ -81,38 +80,6 @@ export const importView = {
   },
 };
 
-export const exportView = {
-  render({ state }) {
-    const pcAvailable = state.settings.ai.mode === 'companion';
-    return html`<a class="back" href="#/settings">‹ 設定</a>
-      <div class="page-head"><div><h1>Obsidian に写す</h1><div class="sub">本ごとのノート・線・面・立体（Canvas）・おすすめ</div></div></div>
-      <form class="card" data-form="export-settings">
-        <label class="field"><span>Vault 内のフォルダ名</span><input type="text" name="root" value="${state.settings.root}" required></label>
-        <label class="field"><span>Vault の名前（「Obsidian で開く」リンク用・任意）</span><input type="text" name="vaultName" value="${state.settings.vaultName}" placeholder="例: MyVault"></label>
-        <button class="btn small" type="submit">保存</button>
-      </form>
-
-      <div class="section"><h2>書き出し方</h2></div>
-      <div class="card stack">
-        ${pcAvailable ? html`<div><h3>PC の Vault に書き出す</h3><p class="help">PC のコンパニオンサーバが、設定済みの Vault に直接書き込みます（スマホからでも可）。先に PC と同期します。</p><button class="btn primary" data-action="export-pc">PC に書き出す</button>${pcExportStatus(state)}</div>` : ''}
-        ${fsSupported ? html`<div><h3>この PC のフォルダに直接書き出す</h3><p class="help">Vault のフォルダを選ぶと、以後はワンタップで更新できます（Chrome / Edge）。</p><div class="row"><button class="btn ${pcAvailable ? '' : 'primary'}" data-action="export-fs">Vault に書き出す</button><button class="btn small" data-action="pick-vault">フォルダを選び直す</button></div>
-          <dl class="kv small"><dt>最後に書き出した時刻</dt><dd>${lastExportText(state.folderExport)}${state.folderExport?.name ? `（${state.folderExport.name}）` : ''}</dd></dl>
-          <label class="check small"><input type="checkbox" data-action="toggle-autoexport-folder" ${state.settings.autoExportFolder ? 'checked' : ''}> 取り込み・同期・編集のあと自動で書き出す（書き込みを許可したフォルダだけ）</label></div>` : ''}
-        <div><h3>zip でダウンロード</h3><p class="help">展開して Vault のフォルダに入れます（iPhone は「ファイル」アプリで展開して Obsidian のフォルダへ）。</p><button class="btn" data-action="export-zip">zip をダウンロード</button></div>
-      </div>
-      <div id="export-result"></div>
-      <div class="section"><h2>書き出されるもの</h2></div>
-      <ul class="card plain help">
-        <li><span class="code">${state.settings.root}/Books/書名.md</span> — 点。ハイライトごとにブロック ID（^h…）付き</li>
-        <li><span class="code">${state.settings.root}/Lines/</span> — 線。つながる点をブロック埋め込みで引用</li>
-        <li><span class="code">${state.settings.root}/Planes/</span> — 面。線を束ねたテーマ</li>
-        <li><span class="code">${state.settings.root}/Knowledge Map.md / .canvas</span> — 立体</li>
-        <li><span class="code">${state.settings.root}/Recommendations.md</span> — おすすめの本</li>
-      </ul>
-      <p class="help" style="margin-top:8px">各ノートの <span class="code">bh:end</span> より下に書いた自分のメモは、書き出し直しても消えません。グラフビューで点と線のつながりが見えます。</p>`;
-  },
-};
-
 export const settingsView = {
   render({ state }) {
     const ai = state.settings.ai;
@@ -120,7 +87,6 @@ export const settingsView = {
     return html`<div class="page-head"><h1>設定</h1></div>
       <div class="card stack">
         <a class="row spread" href="#/import"><b>取り込み</b><span class="muted">Kindle・Play ブックス ›</span></a>
-        <a class="row spread" href="#/export"><b>Obsidian に写す</b><span class="muted">Vault へ書き出し ›</span></a>
       </div>
 
       <div class="section"><h2>AI（ローカル LLM）</h2></div>
@@ -151,7 +117,6 @@ export const settingsView = {
         <p class="help">スマホで取り込んだ点や編集を PC に送り、PC の分析結果を受け取ります（コンパニオンサーバ経由）。</p>
         <label class="check"><input type="checkbox" data-action="toggle-autosync" ${state.settings.autoSync ? 'checked' : ''}> 自動で同期する（起動時と、開いている間 PC に新しい線が入ったとき）</label>
         <div class="row"><button class="btn" data-action="sync">今すぐ同期</button><span class="small muted">${state.lastSync ? `最終: ${isoDate(state.lastSync)} ${new Date(state.lastSync).toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' })}` : '未同期'}</span></div>
-        ${state.pcInfo ? html`<p class="small muted">PC の Vault に最後に書き出した時刻: ${lastExportText(state.pcInfo.lastExport)}</p>` : ''}
       </div>
 
       <div class="section"><h2>データ</h2></div>
@@ -170,16 +135,3 @@ export const settingsView = {
     });
   },
 };
-
-/** PC の書き出し先と、最後に書き出した結果 */
-function pcExportStatus(state) {
-  const info = state.pcInfo;
-  if (!info) return html`<p class="small muted" style="margin-top:8px">PC に接続すると、出力先と最後に書き出した時刻がここに出ます。</p>`;
-  return html`<dl class="kv small">
-      <dt>出力先</dt><dd>${info.vaultPath ? html`<span class="code">${info.vaultPath}</span>` : 'PC で Vault が未設定です（bh config vault <パス>）'}</dd>
-      <dt>最後に書き出した時刻</dt><dd>${lastExportText(info.lastExport)}</dd>
-      <dt>自動の書き出し</dt><dd>${info.autoExport ? '同期・取り込み・分析のあとに自動で書き出します' : 'オフ（PC で bh config autoexport on にすると有効）'}</dd>
-    </dl>
-    ${info.root && info.root !== state.settings.root && state.settings.rootExplicit ? html`<p class="notice">PC の出力先のフォルダは「${info.root}」です。「PC に書き出す」を押すと、この画面の設定「${state.settings.root}」に合わせます。</p>` : ''}`;
-}
-

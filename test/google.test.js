@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { execFile } from 'node:child_process';
-import { mkdtempSync, readFileSync, readdirSync } from 'node:fs';
+import { mkdtempSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
@@ -56,29 +56,27 @@ function fakeGoogle({ docs = [], folders = [{ id: FOLDER_ID, name: 'Play ブッ�
   return { fetchImpl, calls };
 }
 
-async function setup({ loggedIn = true, vault = false, ...opts } = {}) {
+async function setup({ loggedIn = true, ...opts } = {}) {
   const store = createStore(tmp('bh-google-'));
-  const vaultDir = vault ? tmp('bh-google-vault-') : '';
-  await store.saveConfig({ vault: vaultDir, google: { clientId: 'cid.apps.googleusercontent.com', clientSecret: 'secret' } });
+  await store.saveConfig({ google: { clientId: 'cid.apps.googleusercontent.com', clientSecret: 'secret' } });
   if (loggedIn) await store.saveGoogleToken({ refreshToken: 'rt-1' });
   const google = fakeGoogle(opts);
-  return { store, google, vaultDir, client: createGoogleClient({ store, fetchImpl: google.fetchImpl }) };
+  return { store, google, client: createGoogleClient({ store, fetchImpl: google.fetchImpl }) };
 }
 
 const doc = (modifiedTime, body = PLAYBOOKS_HTML) => ({ id: 'doc1', name: '「深い集中」のメモ', modifiedTime, body });
 
-test('Google ドライブ: 更新されたドキュメントだけを書き出して取り込み、Vault にも書く', async () => {
+test('Google ドライブ: 更新されたドキュメントだけを書き出して取り込む', async () => {
   const docs = [doc('2026-09-27T01:00:00.000Z')];
-  const { store, google, client, vaultDir } = await setup({ docs, vault: true });
+  const { store, google, client } = await setup({ docs });
 
   const first = await client.sync();
   assert.equal(first.changed, 1);
   assert.ok(first.added > 0, '新しい点が入る');
   assert.equal(first.errors.length, 0);
-  assert.ok(first.vault.written > 0, 'Vault に書き出す');
+  assert.equal('vault' in first, false, 'Obsidian には書き出さない');
   const lib = await store.library();
   assert.ok(Object.values(lib.books).some((b) => b.title === '深い集中'));
-  assert.ok(readdirSync(path.join(vaultDir, 'Highlights', 'Books')).length > 0);
 
   // ドキュメントが変わっていなければ書き出さない
   const second = await client.sync();
