@@ -111,7 +111,7 @@ function fakeGitHub({ file = emptyRecordsFile(), status = 200, conflicts = 0, mi
       missingFile = false;
       return new Response(JSON.stringify({ content: { sha: state.sha } }));
     }
-    assert.match(String(url), /\/repos\/nihi566\/book-highlights\/contents\/records\.json\?ref=records$/);
+    assert.match(String(url), /\/repos\/nihi566\/bookshelf\/contents\/records\.json\?ref=records$/);
     if (missingFile) return new Response('{}', { status: 404 });
     return new Response(JSON.stringify({ sha: state.sha, content: encodeBase64Utf8(JSON.stringify(state.file)) }));
   };

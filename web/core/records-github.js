@@ -4,7 +4,7 @@
 import { applyChange, assertRecordsShape, decodeBase64Utf8, emptyRecordsFile, encodeBase64Utf8, parseRecordsFile } from './records.js';
 
 export const OWNER = 'nihi566';
-export const REPO = 'book-highlights';
+export const REPO = 'bookshelf';
 export const BRANCH = 'records';
 export const PATH = 'records.json';
 
