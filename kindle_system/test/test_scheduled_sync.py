@@ -99,6 +99,31 @@ class ScheduledSyncScriptTest(unittest.TestCase):
         self.assertTrue(text.startswith("前回の記録"), "ログは上書きせず追記する")
         self.assertIn("終了（終了コード 0）", text)
 
+    def test_python_does_not_inherit_stdin_so_it_never_waits_for_input(self):
+        # タスクスケジューラのタスクは隠れたコンソールで動き、標準入力に誰もいない。
+        # python が標準入力を読むと永久に待つので、本体は標準入力を NUL にして渡す
+        # （backlog 20261004-scheduled-sync-waits-for-input）。
+        # 偽の python は 1 行読もうとする。標準入力を開いたまま閉じない親から起動し、待たずに終わることを確かめる。
+        path = os.path.join(self.tmp, "reading_python.cmd")
+        with open(path, "w", encoding="ascii", newline="\r\n") as f:
+            f.write("@echo off\nset /p LINE=\necho READ_DONE\nexit /b 0\n")
+        process = subprocess.Popen(
+            [POWERSHELL, "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", SYNC_SCRIPT,
+             "-Python", path, "-LogPath", self.log],
+            stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+        )
+        try:
+            returncode = process.wait(timeout=60)
+        except subprocess.TimeoutExpired:
+            process.kill()
+            process.wait()
+            self.fail("run.py が標準入力を待ち続けた（標準入力が NUL になっていない）")
+        finally:
+            process.stdin.close()
+        self.assertEqual(returncode, 0)
+        with open(self.log, encoding="utf-8") as f:
+            self.assertIn("READ_DONE", f.read())
+
 
 if __name__ == "__main__":
     unittest.main()
