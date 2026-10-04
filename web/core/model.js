@@ -68,6 +68,7 @@ export function mergeParsed(library, parsedBooks, { now = new Date().toISOString
     if (!title) continue;
     const bookId = bookIdFor(title);
     let book = library.books[bookId];
+    const isNew = !book;
     if (!book) {
       book = library.books[bookId] = {
         id: bookId,
@@ -101,7 +102,7 @@ export function mergeParsed(library, parsedBooks, { now = new Date().toISOString
     // 表紙に使う ID。既にある本に後から付いたときも保存し直せるよう数える
     const coverIds = ['asin', 'volumeId'].filter((k) => pb[k] && !book[k]);
     for (const k of coverIds) book[k] = pb[k];
-    if (coverIds.length && book.createdAt !== now) {
+    if (coverIds.length && !isNew) {
       book.updatedAt = now;
       stats.booksUpdated++;
     }
