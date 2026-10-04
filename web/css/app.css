@@ -5,7 +5,7 @@
   --surface-2: #efeadf;
   --ink: #23211d;
   --ink-2: #5d5a52;
-  --ink-3: #8b877d;
+  --ink-3: #6b675e; /* 背景・カード・surface-2 のどれの上でも 4.5:1 以上（WCAG AA） */
   --line: #e2dccd;
   --accent: #1f6f5c;
   --accent-ink: #ffffff;
@@ -40,7 +40,7 @@
     --surface-2: #2a2e33;
     --ink: #ebe7de;
     --ink-2: #b9b4a8;
-    --ink-3: #8a867d;
+    --ink-3: #9a968c;
     --line: #34383e;
     --accent: #5cc3a4;
     --accent-ink: #0f1a16;
@@ -101,6 +101,7 @@ mark { background: var(--mark); color: inherit; border-radius: 2px; padding: 0 1
 
 /* 本文 */
 main { max-width: 760px; margin: 0 auto; padding: 16px 16px 32px; outline: none; }
+#view:focus { outline: none; } /* 画面を移ったときに本文へ移すフォーカスは枠を出さない（読み上げの起点にするだけ） */
 .loading { text-align: center; color: var(--ink-3); padding: 48px 0; }
 .page-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin: 4px 0 16px; }
 .page-head .sub { color: var(--ink-2); font-size: 0.9rem; margin-top: 2px; }
@@ -287,8 +288,10 @@ a.wl-main:hover .title { text-decoration: underline; }
 .drop { display: block; border: 2px dashed var(--line); border-radius: var(--radius); padding: 24px 16px; text-align: center; background: var(--surface); cursor: pointer; }
 .drop.over { border-color: var(--accent); background: var(--accent-soft); }
 .drop input { position: absolute; width: 1px; height: 1px; opacity: 0; }
+.drop:focus-within { outline: 2px solid var(--accent); outline-offset: 2px; } /* 中の input は見えないので、キーボードで選んだことを枠で見せる */
 label.check { display: flex; align-items: flex-start; gap: 8px; margin: 6px 0; cursor: pointer; }
 label.check input { flex: none; margin-top: 0.35em; width: 18px; height: 18px; }
+.chips-label { align-self: center; font-size: 0.8rem; color: var(--ink-2); margin-right: 2px; }
 dl.kv { display: grid; grid-template-columns: auto 1fr; gap: 2px 12px; margin: 10px 0 4px; }
 dl.kv dt { color: var(--ink-3); white-space: nowrap; }
 dl.kv dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
@@ -318,6 +321,7 @@ dl.kv dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
 .line-row span { font-size: 0.85rem; color: var(--ink-2); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .line-row em { font-style: normal; font-size: 0.75rem; color: var(--ink-3); flex: none; margin-left: auto; }
 ul.plain { padding-left: 1.2em; margin: 6px 0; }
+ul.card.plain { padding-left: calc(16px + 1.2em); } /* カードの余白の内側に箇条の点を置く（点がカードの外にはみ出さない） */
 ul.plain li { margin: 4px 0; }
 .map-wrap { position: relative; overflow: auto; border-radius: var(--radius); border: 1px solid var(--line); background: var(--surface); max-height: 70vh; -webkit-overflow-scrolling: touch; }
 .map-wrap svg { display: block; }

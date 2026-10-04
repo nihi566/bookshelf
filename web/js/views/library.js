@@ -112,13 +112,13 @@ export const books = {
       if (value) params.set(key, value);
       else params.delete(key);
       const on = (query.get(key) || '') === value || (!query.get(key) && key === 'sort' && value === 'recent');
-      return html`<a class="chip ${on ? 'on' : ''}" href="#/books?${params}">${label}</a>`;
+      return html`<a class="chip ${on ? 'on' : ''}" href="#/books?${params}" ${on ? html`aria-current="true"` : ''}>${label}</a>`;
     };
     return html`<div class="page-head"><div><h1>読んだ本</h1><div class="sub">${list.length} 冊</div></div><a class="btn small" href="#/import">＋ 取り込む</a></div>
       <div class="row" style="margin-bottom:12px"><a class="btn small" href="#/search">ハイライトを検索</a></div>
       <form class="search-box" data-form="book-filter" role="search"><input type="search" name="q" value="${query.get('q') || ''}" placeholder="書名・著者で絞り込む" aria-label="書名・著者で絞り込む"></form>
-      <div class="chips">${chip('source', '', 'すべて')}${chip('source', 'kindle', 'Kindle')}${chip('source', 'playbooks', 'Play Books')}</div>
-      <div class="chips" style="margin-top:6px">${chip('sort', 'recent', '最近')}${chip('sort', 'title', '書名')}${chip('sort', 'count', '点の数')}</div>
+      <div class="chips" role="group" aria-label="読み方で絞り込む">${chip('source', '', 'すべて')}${chip('source', 'kindle', 'Kindle')}${chip('source', 'playbooks', 'Play Books')}</div>
+      <div class="chips" style="margin-top:6px" role="group" aria-labelledby="books-sort-label"><span class="chips-label" id="books-sort-label">並び順</span>${chip('sort', 'recent', '最近')}${chip('sort', 'title', '書名')}${chip('sort', 'count', '点の数')}</div>
       ${list.length ? html`<ul class="book-list">${list.map(bookRow)}</ul>` : emptyBooksBlock(state)}`;
   },
 };
@@ -168,7 +168,7 @@ export const search = {
       <form class="search-box" data-form="search" role="search">
         <input type="search" name="q" value="${q}" placeholder="言葉・書名・#タグ（空白で AND）" aria-label="ハイライトを検索" autocomplete="off" ${q ? '' : 'autofocus'}>
       </form>
-      <div class="chips" id="search-filters"></div>
+      <div class="chips" id="search-filters" role="group" aria-label="絞り込み"></div>
       <div id="search-wishlist"></div>
       <div id="search-results"></div>`;
   },
@@ -200,7 +200,7 @@ function renderResults(root, ctx, q) {
   const link = (patch, label, on) => {
     const p = new URLSearchParams(query);
     for (const [k, v] of Object.entries(patch)) v ? p.set(k, v) : p.delete(k);
-    return html`<a class="chip ${on ? 'on' : ''}" href="#/search?${p}">${label}</a>`;
+    return html`<a class="chip ${on ? 'on' : ''}" href="#/search?${p}" ${on ? html`aria-current="true"` : ''}>${label}</a>`;
   };
   root.querySelector('#search-filters').innerHTML = String(html`${link({ source: '' }, 'すべて', !source)}${link({ source: 'kindle' }, 'Kindle', source === 'kindle')}${link({ source: 'playbooks' }, 'Play Books', source === 'playbooks')}${link({ fav: fav ? '' : '1' }, '★ お気に入り', fav)}`);
   const shown = results.slice(0, 200);
