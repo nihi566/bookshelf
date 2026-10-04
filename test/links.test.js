@@ -352,6 +352,12 @@ test('G4-2・G4-3: 分析すると、どの点にも別の本の意味の近い�
     const again = await run();
     assert.deepEqual(again.neighbors, second.neighbors);
     assert.deepEqual(again.lines.map((l) => l.relatedIds), second.lines.map((l) => l.relatedIds));
+    // 埋め込みモデルが無いときも、文字 n-gram のベクトルで意味の近い点を作る（黙って空にしない）
+    const plain = createLlmClient({ baseUrl: fake.url, chatModel: 'fake-chat', embedModel: '' });
+    const tf = (await analyzeLibrary({ library: sampleLibrary(), llm: plain, cache: emptyCache(), options: { recommend: false } })).analysis;
+    assert.equal(tf.model.embed, 'tfidf');
+    const tfAll = [...tf.lines.flatMap((l) => l.highlightIds), ...tf.isolated];
+    assert.ok(tfAll.length > 40 && tfAll.every((id) => (tf.neighbors[id] || []).length >= 1));
   } finally {
     await fake.close();
   }
