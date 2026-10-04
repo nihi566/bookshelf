@@ -110,7 +110,10 @@ export function createLlmClient({ baseUrl, chatModel, embedModel = '', apiKey = 
         throw e;
       }
       const msg = r.choices?.[0]?.message || {};
-      const content = msg.content || '';
+      // 本文を部品の配列で返すサーバもあるので、文字列にそろえる
+      const content = Array.isArray(msg.content)
+        ? msg.content.map((part) => (typeof part === 'string' ? part : part?.text || '')).join('')
+        : typeof msg.content === 'string' ? msg.content : '';
       if (!content.trim() && jsonMode !== 'none') {
         // 構造化出力が思考側にだけ適用されて本文が空になるサーバへの対策
         jsonMode = jsonMode === 'json_schema' ? 'json_object' : 'none';
@@ -134,6 +137,7 @@ export function createLlmClient({ baseUrl, chatModel, embedModel = '', apiKey = 
       const r = await request('/v1/embeddings', { model: embedModel, input: batch }, { signal });
       const data = (r.data || []).slice().sort((a, b) => (a.index ?? 0) - (b.index ?? 0));
       if (data.length !== batch.length) throw new LlmError('埋め込みの件数が一致しません');
+      if (!data.every((d) => Array.isArray(d?.embedding) && d.embedding.length)) throw new LlmError('埋め込みの応答の形式が正しくありません');
       for (const d of data) out.push(l2normalize(Float32Array.from(d.embedding)));
       onProgress?.(Math.min(texts.length, i + batch.length), texts.length);
     }

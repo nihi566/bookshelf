@@ -837,3 +837,24 @@ test('edge pipeline: 埋め込みモデルありでも分析でき、2 回目は
   assert.ok(n > 0);
   assert.equal(embeds, n);
 });
+
+// ---------- 取り残しの修正 ----------
+
+test('edge llm: content が部品の配列でも JSON を読める', async () => {
+  const fetchImpl = async () => Response.json({ choices: [{ message: { content: [{ type: 'text', text: '{"name":' }, { type: 'text', text: '"線"}' }] } }] });
+  const llm = createLlmClient({ baseUrl: 'http://llm', chatModel: 'm', fetchImpl });
+  assert.deepEqual(await llm.chatJson({ system: 's', user: 'u' }), { name: '線' });
+});
+
+test('edge llm: embedding の無い応答は LlmError になる', async () => {
+  const fetchImpl = async () => Response.json({ data: [{ index: 0 }] });
+  const llm = createLlmClient({ baseUrl: 'http://llm', chatModel: 'm', embedModel: 'e', fetchImpl });
+  await assert.rejects(llm.embed(['a']), LlmError);
+});
+
+test('edge incremental: maxGroups を省いても新しい線を作れる', () => {
+  const ids = ['a', 'b', 'c', 'd'];
+  const vectors = [axis(0), near(0, 0.1), axis(1), near(1, 0.1)];
+  const r = carryLines({ ids, vectors, targetSize: 2, maxSize: 10 });
+  assert.ok(r.lines.length > 0);
+});
