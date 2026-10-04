@@ -29,7 +29,8 @@ const TECH_PHRASES = /データベース|db設計|プログラミング|プロ�
 
 /** 書名から IT の教科書かどうかを推定する */
 export function guessTechnical(title) {
-  const t = normalizeText(title);
+  // 「PHP新書」「PHP文庫」は出版社（PHP研究所）の名前で、プログラミング言語ではない
+  const t = normalizeText(title).replace(/php(?:新書|文庫|研究所|ビジネス新書|文芸文庫|エディターズ)/g, '');
   return TECH_WORDS.test(t) || TECH_PHRASES.test(t);
 }
 
