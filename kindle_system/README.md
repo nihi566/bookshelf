@@ -76,6 +76,16 @@ python run.py purchase <asin> --on
 python run.py purchase <asin> --off
 ```
 
+### 読書メーターの本に ASIN を手で対応づける
+
+```
+python run.py bookmeter-asin "読書メーターの書名" B0XXXXXXXX
+```
+
+書名から Kindle 版を見つけられなかった読書メーターの本は、`run.py sync` の `[スキップ一覧]` に出て、毎回飛ばされる。
+その書名（一覧に出たとおり）と Kindle 版の ASIN を指定すると、読書メーターの読みたい本（`from_bookmeter=1`）として登録し、
+次の `run.py sync` からは検索せずにその ASIN で価格を取る。同じ書名でもう一度実行すると ASIN を置き換える。
+
 ### 希望価格（買い時）の設定
 
 ```

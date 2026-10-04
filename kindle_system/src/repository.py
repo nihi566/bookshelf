@@ -24,7 +24,7 @@ from sqlmodel import Session, select, text
 from src import database as database_module
 from src.book_kind import KINDS, classify_kind
 from src.database import DB_PATH, get_session, init_db_orm
-from src.models import UNPRICED_REASONS, BookMapping, BookMark, PriceHistory, TargetPrice, UnpricedReason
+from src.models import UNPRICED_REASONS, BookMapping, BookmeterAsinOverride, BookMark, PriceHistory, TargetPrice, UnpricedReason
 
 logger = logging.getLogger(__name__)
 
@@ -1080,3 +1080,46 @@ def get_target_prices() -> dict:
         if not _target_prices_table_exists(session):
             return {}
         return {row.paid_asin: row.price for row in session.exec(select(TargetPrice)).all()}
+
+
+_BOOKMETER_ASIN_PATTERN = re.compile(r"[A-Z0-9]{10}")
+
+
+def set_bookmeter_asin(title: str, paid_asin: str) -> None:
+    """
+    読書メーターの書名に Kindle 版 ASIN を手で対応づけ、その本を読書メーターの読みたい本（from_bookmeter=1・
+    is_wanted=1）として登録する（既に同じ ASIN の行があれば作らずに印を付ける。get_or_create_by_paid_asin）。
+    対応づけは書名（前後の空白を除く）ごとに 1 つで、同じ書名でもう一度呼ぶと置き換える。
+    書名が空・ASIN の形が違えば ValueError。表が無ければ作る（init_db() を経ない経路からも書き込めるように）。
+    """
+    title = (title or "").strip()
+    if not title:
+        raise ValueError("書名が空です")
+    if not isinstance(paid_asin, str) or not _BOOKMETER_ASIN_PATTERN.fullmatch(paid_asin):
+        raise ValueError(f"ASIN は英大文字・数字 10 文字で指定してください: {paid_asin!r}")
+    BookmeterAsinOverride.__table__.create(bind=database_module.engine, checkfirst=True)
+    now = datetime.now().isoformat()
+    with get_session() as session:
+        override = session.get(BookmeterAsinOverride, title)
+        if override:
+            override.paid_asin = paid_asin
+            override.updated_at = now
+        else:
+            override = BookmeterAsinOverride(title=title, paid_asin=paid_asin, updated_at=now)
+        session.add(override)
+        get_or_create_by_paid_asin(session, paid_asin, title=title, source="bookmeter", is_wanted=1)
+        session.commit()
+
+
+def get_bookmeter_asin_overrides() -> dict:
+    """
+    手動の対応づけを {書名: ASIN} で返す。読書メーター同期から読むだけなので、
+    表が未作成なら作らずに空の dict を返す（get_book_marks と同じ）。
+    """
+    with get_session() as session:
+        row = session.exec(
+            text("SELECT name FROM sqlite_master WHERE type='table' AND name='bookmeter_asin_overrides'")
+        ).first()
+        if row is None:
+            return {}
+        return {o.title: o.paid_asin for o in session.exec(select(BookmeterAsinOverride)).all()}

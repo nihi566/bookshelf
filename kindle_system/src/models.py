@@ -71,6 +71,19 @@ class TargetPrice(SQLModel, table=True):
     updated_at: str = Field()
 
 
+class BookmeterAsinOverride(SQLModel, table=True):
+    """
+    読書メーターの書名と Kindle 版 ASIN の手動の対応づけ（`run.py bookmeter-asin` で決める）。
+    書名から ASIN を見つけられずに毎回スキップされる本を、次回以降の同期で検索せずにこの ASIN で扱う。
+    既存テーブルに列を足さないためマイグレーションは不要（BookMark と同じく create_all / set_bookmeter_asin が新規作成する）。
+    """
+    __tablename__ = "bookmeter_asin_overrides"
+
+    title: str = Field(primary_key=True)
+    paid_asin: str = Field()
+    updated_at: str = Field()
+
+
 # 価格が取れなかった理由（src/crawler.py の classify_unpriced と BAN 検知・例外）
 #   not_found:  商品ページが無い（404。販売終了・削除の可能性）
 #   no_price:   ページは開けたが価格の表示が無い（販売停止・予約前など。買えない可能性）

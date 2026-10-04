@@ -1725,3 +1725,47 @@ class TargetPriceTest(unittest.TestCase):
         from src.models import TargetPrice
         TargetPrice.__table__.drop(bind=self.engine)
         self.assertEqual(repository.get_target_prices(), {})
+
+
+class BookmeterAsinOverrideTest(unittest.TestCase):
+    """repository.set_bookmeter_asin / get_bookmeter_asin_overrides（読書メーターの書名と ASIN の手動の対応づけ）のテスト。"""
+
+    setUp = GetPriceHistoryTest.setUp
+    tearDown = GetPriceHistoryTest.tearDown
+
+    def _books(self):
+        from sqlmodel import Session, select
+        from src.models import BookMapping
+        with Session(self.engine) as session:
+            return [(b.paid_asin, b.title, b.from_bookmeter, b.is_wanted, b.source) for b in session.exec(select(BookMapping)).all()]
+
+    def test_registers_book_from_bookmeter_and_remembers_title(self):
+        repository.set_bookmeter_asin("見つからない本", "B0MANUAL01")
+        self.assertEqual(self._books(), [("B0MANUAL01", "見つからない本", True, 1, "bookmeter")])
+        self.assertEqual(repository.get_bookmeter_asin_overrides(), {"見つからない本": "B0MANUAL01"})
+
+    def test_existing_book_is_marked_as_from_bookmeter_without_duplicate(self):
+        from sqlmodel import Session
+        from src.models import BookMapping
+        with Session(self.engine) as session:
+            session.add(BookMapping(sample_asin="B0SAMPLE01", paid_asin="B0MANUAL01", title="Kindle の書名", from_kindle_sample=True, is_wanted=0))
+            session.commit()
+        repository.set_bookmeter_asin("見つからない本", "B0MANUAL01")
+        [(asin, _title, from_bookmeter, is_wanted, _source)] = self._books()
+        self.assertEqual((asin, from_bookmeter, is_wanted), ("B0MANUAL01", True, 1))
+
+    def test_same_title_can_be_reassigned_and_title_is_trimmed(self):
+        repository.set_bookmeter_asin(" 見つからない本 ", "B0MANUAL01")
+        repository.set_bookmeter_asin("見つからない本", "B0MANUAL02")
+        self.assertEqual(repository.get_bookmeter_asin_overrides(), {"見つからない本": "B0MANUAL02"})
+
+    def test_rejects_empty_title_and_malformed_asin(self):
+        for title, asin in (("", "B0MANUAL01"), ("  ", "B0MANUAL01"), ("本", "b0manual01"), ("本", "")):
+            with self.assertRaises(ValueError):
+                repository.set_bookmeter_asin(title, asin)
+        self.assertEqual(self._books(), [])
+
+    def test_get_returns_empty_when_table_is_missing(self):
+        from src.models import BookmeterAsinOverride
+        BookmeterAsinOverride.__table__.drop(bind=self.engine)
+        self.assertEqual(repository.get_bookmeter_asin_overrides(), {})
