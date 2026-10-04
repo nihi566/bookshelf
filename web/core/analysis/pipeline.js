@@ -17,6 +17,7 @@ import { bookKey, hash, maskSecrets, truncate } from '../text.js';
 import { PROMPT_VERSION, RECOMMEND_KINDS, RELATION_TYPES, farPrompt, humanLine, linePrompt, pickPrompt, planePrompt, recommendPrompt, searchPrompt, solidPrompt } from './prompts.js';
 import { centroid, dot, l2normalize, tfidfEmbed } from './vectors.js';
 import { carryLines, carryPlanes } from './incremental.js';
+import { nearPoints } from './neighbors.js';
 import { diffAnalyses } from './changes.js';
 import { farDiscovery, findDiscoveries, mergeDiscoveries } from './discoveries.js';
 import { FAR_MAX_UNREADABLE, farCandidates, farId, judgeFarPairs, mergeFarConnections, pickReps } from './far.js';
@@ -194,6 +195,8 @@ export async function analyzeLibrary({ library, llm: rawLlm, cache = emptyCache(
   onProgress({ stage: 'lines', done: groups.length, total: groups.length, message: `線を ${lines.length} 本引きました` });
   if (!lines.length) throw new Error('点どうしのつながりが見つかりませんでした。ハイライトを増やしてから試してください。');
   dedupeNames(lines);
+  // 線の点の中心（面を作るときは線の説明文の埋め込みを混ぜるので、その前に取っておく。意味の近い点・関わる点に使う）
+  const lineCentroids = lines.map((l) => l.vector);
 
   // 3. 線 → 面（線の説明文の埋め込みがあればそれも使う。説明文が変わった線だけ埋め込む）
   const summaryKeys = lines.map((l) => 's' + hash(`${l.name}\n${l.summary}`));
@@ -297,6 +300,20 @@ export async function analyzeLibrary({ library, llm: rawLlm, cache = emptyCache(
   const alive = (id) => indexOf.has(id);
   // 点の出どころ（本の ID。思いつきは 1 つずつ別の出どころ）
   const sourceOf = (id) => (isThought(points[indexOf.get(id)]) ? id : points[indexOf.get(id)]?.bookId || id);
+
+  // 意味の近い点（G4-2。点の画面からリンクにできる）と、2 番目に近い線にも十分近い点（G4-3。その線の「関わる点」）
+  const near = nearPoints({
+    ids: points.map((p) => p.id),
+    vectors,
+    lines: groups.map((g, j) => ({ id: lines[j].id, members: g.members, centroid: lineCentroids[j] })),
+    isolated,
+    sourceOf: (i) => sourceOf(points[i].id),
+  });
+  analysis.neighbors = near.neighbors;
+  for (const l of analysis.lines) {
+    const related = near.related.get(l.id);
+    if (related?.length) l.relatedIds = related;
+  }
 
   // 4.5 遠いつながり（別の本・別の面にある、近さが低めの点の組を AI に判定させる。おすすめの本と同じく、線・面・立体の回数には数えない）
   check();

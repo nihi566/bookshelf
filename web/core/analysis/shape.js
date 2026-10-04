@@ -35,6 +35,8 @@ export function analysisShapeError(a, now = Date.now()) {
   if (a.discoveries != null && (!Array.isArray(a.discoveries) || !a.discoveries.every(isDiscovery))) return '発見（discoveries）の形が違います';
   if (a.farConnections != null && (!Array.isArray(a.farConnections) || !a.farConnections.every(isFarConnection))) return '遠いつながり（farConnections）の形が違います';
   if (a.farNote != null && !isStr(a.farNote, 1000)) return '遠いつながりの説明（farNote）の形が違います';
+  if (a.neighbors != null && (typeof a.neighbors !== 'object' || Array.isArray(a.neighbors) || !Object.values(a.neighbors).every(isIdList))) return '意味の近い点（neighbors）の形が違います';
+  if (!a.lines.every((l) => l.relatedIds == null || isIdList(l.relatedIds))) return '線の関わる点（relatedIds）の形が違います';
   const far = a.stats?.far;
   if (far != null && (typeof far !== 'object' || !['candidates', 'calls', 'found'].every((k) => Number.isInteger(far[k]) && far[k] >= 0))) return '遠いつながりの件数（stats.far）の形が違います';
   return '';

@@ -11,6 +11,8 @@ import { farView } from './views/far.js';
 import { noteView, notesView } from './views/notes.js';
 import { pointView } from './views/point.js';
 import { noteActions } from './note-actions.js';
+import { linkPickerView } from './views/links.js';
+import { linkActions } from './link-actions.js';
 import { markDiscoveryRead } from '../core/discovery-reads.js';
 import { FAR_REACTIONS, farConnectionById, reactFar } from '../core/far-reactions.js';
 import { importView, kindleSyncBlock, settingsView } from './views/settings.js';
@@ -52,6 +54,8 @@ const ROUTES = [
   [/^\/notes$/, notesView, 'knowledge'],
   [/^\/note\/(?<id>[\w-]+)$/, noteView, 'knowledge'],
   [/^\/point\/(?<id>[\w-]+)$/, pointView, 'knowledge'],
+  // リンクを張る相手を選ぶ（点・メモ・永久ノートから）
+  [/^\/link\/(?<id>[\w-]+)$/, linkPickerView, 'knowledge'],
   // 過去の分析（履歴は PC にだけある）
   [/^\/knowledge\/history\/(?<id>[0-9TZ]+)$/, historyView, 'knowledge'],
   // 発見（ホームの「発見」から開く）
@@ -633,6 +637,8 @@ const actions = {
   },
   // ---- 永久ノート（書く・直す・線やメモから作る・点を根拠にする。中身は note-actions.js） ----
   ...noteActions({ state, openSheet, toast, persist: persistLibrary, sync: autoSyncAfterChange, render, go: (hash) => (location.hash = hash), confirm: (message) => confirm(message) }),
+  // ---- リンク（張る・理由を書く・外す。中身は link-actions.js） ----
+  ...linkActions({ state, openSheet, toast, persist: persistLibrary, sync: autoSyncAfterChange, render, go: (hash) => (location.hash = hash), confirm: (message) => confirm(message) }),
   async 'delete-book'(el) {
     const b = state.library.books[el.dataset.id];
     if (!confirm(`『${b.title}』とその点をすべて削除しますか？`)) return;
@@ -754,6 +760,11 @@ const forms = {
     if (q) query.set('q', q);
     else query.delete('q');
     location.hash = `#/thoughts?${query}`;
+  },
+  'link-search'(form) {
+    const q = String(new FormData(form).get('q') || '');
+    const params = new URLSearchParams(q ? { q } : {});
+    location.hash = `#/link/${encodeURIComponent(form.dataset.from)}${params.toString() ? `?${params}` : ''}`;
   },
   'note-filter'(form) {
     const q = new FormData(form).get('q');
