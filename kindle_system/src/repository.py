@@ -763,7 +763,7 @@ def _is_fuller_title(current: Optional[str], incoming: Optional[str]) -> bool:
     return incoming.startswith(prefix) and len(incoming) > len(prefix)
 
 
-_BOOKMETER_ID_PATTERN = re.compile(r"^\d{1,12}$")
+_BOOKMETER_ID_PATTERN = re.compile(r"[0-9]{1,12}")
 
 
 def _valid_bookmeter_id(value) -> bool:

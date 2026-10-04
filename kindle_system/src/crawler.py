@@ -12,6 +12,7 @@ Kindle 本編 ASIN（EBOK）の Amazon.co.jp 商品ページから
 
 import asyncio
 import re
+import unicodedata
 import random
 import sys
 import io
@@ -45,6 +46,8 @@ def clean_price(text: str) -> Optional[int]:
     """
     if not text:
         return None
+    # 全角の数字・カンマ（"１，２３４"）も半角にそろえてから読む
+    text = unicodedata.normalize("NFKC", text)
     m = PRICE_NUM_RE.search(text.replace(",", ""))
     return int(m.group()) if m else None
 
@@ -56,8 +59,8 @@ def clean_points(text: str) -> int:
     """
     if not text:
         return 0
-    # 数字部分だけを抽出（最初の連続数字群）
-    nums = re.findall(r"[\d,]+", text)
+    # 数字部分だけを抽出（最初の連続数字群。数字で始まるものだけ。"獲得, 25pt" の "," を拾わない）
+    nums = re.findall(r"\d[\d,]*", unicodedata.normalize("NFKC", text))
     if not nums:
         return 0
     return int(nums[0].replace(",", ""))

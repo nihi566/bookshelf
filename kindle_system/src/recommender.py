@@ -211,10 +211,10 @@ def build_messages(kind: str, inputs: dict, *, count: int, new_count: int) -> li
 
 def load_llm_settings(env, *, model: Optional[str] = None, timeout: Optional[int] = None) -> dict:
     """環境変数（LOCAL_LLM_API / LOCAL_LLM_URL / LOCAL_LLM_MODEL）と引数から接続設定を作る。"""
-    api = (env.get("LOCAL_LLM_API") or "ollama").strip().lower()
+    api = (env.get("LOCAL_LLM_API") or "").strip().lower() or "ollama"
     if api not in LLM_APIS:
         raise LocalLlmError(f"LOCAL_LLM_API は ollama / openai のどちらかにしてください（現在: {api!r}）。")
-    url = (env.get("LOCAL_LLM_URL") or DEFAULT_LLM_URL).strip().rstrip("/")
+    url = (env.get("LOCAL_LLM_URL") or "").strip().rstrip("/") or DEFAULT_LLM_URL
     if api == "openai" and url.endswith("/v1"):
         url = url[: -len("/v1")]
     return {
@@ -330,6 +330,10 @@ def _extract_json_object(text: str) -> Optional[dict]:
     return None
 
 
+def _as_list(value) -> list:
+    return value if isinstance(value, list) else []
+
+
 def _is_known_title(title: str, known_titles: set) -> bool:
     """読んだ・候補・読みたくない作品と同じ（片方がもう片方を含む場合も）なら True。"""
     key = _normalize_title(title)
@@ -355,9 +359,12 @@ def parse_recommendations(text: str, inputs: dict, *, count: int, new_count: int
         return {"taste": "", "from_list": [], "new_titles": [], "raw": text.strip()}
 
     candidates_by_asin = {item["asin"]: item for item in inputs["candidates"]}
+    # 空白だけの書名の候補を、題名の無い項目と取り違えないよう空のキーは作らない
     candidates_by_title = {_normalize_title(item["title"]): item for item in inputs["candidates"]}
+    candidates_by_title.pop("", None)
     from_list, picked = [], set()
-    for item in data.get("from_list") or []:
+    # LLM の出力なので、配列でない値（数値・文字列・オブジェクト）は空として扱う
+    for item in _as_list(data.get("from_list")):
         if not isinstance(item, dict) or len(from_list) >= count:
             continue
         asin = str(item.get("asin") or "").strip().strip("[]").upper()
@@ -373,7 +380,7 @@ def parse_recommendations(text: str, inputs: dict, *, count: int, new_count: int
         | {_normalize_title(title) for title in inputs["unwanted"]}
     )
     new_titles = []
-    for item in data.get("new_titles") or []:
+    for item in _as_list(data.get("new_titles")):
         if not isinstance(item, dict) or len(new_titles) >= new_count:
             continue
         title = _clean_text(item.get("title"))

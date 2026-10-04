@@ -119,7 +119,7 @@ def summarize_price_history(points: list, limit: int = MAX_PRICE_HISTORY_PER_BOO
 
 def _bookmeter_id(value):
     """読書メーターの本 ID を数字だけのときに限って返す（URL に組み立てられるので、形の合わない値は載せない）。"""
-    return value if isinstance(value, str) and re.fullmatch(r"\d{1,12}", value) else None
+    return value if isinstance(value, str) and re.fullmatch(r"[0-9]{1,12}", value) else None
 
 
 def _price_reason(book: dict, price, is_ku: bool):
@@ -374,7 +374,8 @@ def _load_env_file(env_path: str) -> None:
     """
     if not os.path.isfile(env_path):
         return
-    with open(env_path, encoding="utf-8") as f:
+    # Windows のメモ帳で保存した .env は先頭に BOM が付き、最初のキー名が化けるため utf-8-sig で読む
+    with open(env_path, encoding="utf-8-sig") as f:
         for raw_line in f:
             line = raw_line.strip()
             if not line or line.startswith("#") or "=" not in line:

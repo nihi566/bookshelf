@@ -105,6 +105,7 @@ class _KindleSearchCardParser(HTMLParser):
 
         if not is_void:
             self._stack.append({
+                "tag": tag,
                 "card": current_card,
                 "is_container_root": is_container_root,
                 "sponsored": is_sponsored,
@@ -125,11 +126,17 @@ class _KindleSearchCardParser(HTMLParser):
         del self._stack[depth:]
 
     def handle_endtag(self, tag) -> None:
-        if not self._stack:
+        # 開いていないタグの終了タグ（迷子の </span> 等）は無視し、閉じ忘れ（<p> / <li> の
+        # 終了タグ省略等）は対応する開始タグまでまとめて閉じる。終了タグの数だけ無条件に
+        # pop するとスタックがずれ、コンテナの終端を早すぎ・遅すぎに誤検知する。
+        if not any(frame["tag"] == tag for frame in self._stack):
             return
-        popped = self._stack.pop()
-        if popped.get("is_container_root"):
-            self._in_container = False
+        while self._stack:
+            popped = self._stack.pop()
+            if popped.get("is_container_root"):
+                self._in_container = False
+            if popped["tag"] == tag:
+                break
 
     def handle_data(self, data: str) -> None:
         if self.lasttag in ("script", "style"):
