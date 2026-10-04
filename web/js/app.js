@@ -515,8 +515,8 @@ const actions = {
           location.hash = `#/book/${b.id}`;
           autoSyncAfterChange();
         } catch (e) {
-          toast(e.message, 5000);
-          return true;
+          // シートの上ではトーストが隠れて見えないので、投げてシートの中に出す
+          throw e;
         }
       },
     );
@@ -546,8 +546,8 @@ const actions = {
           render({ keepScroll: true });
           autoSyncAfterChange();
         } catch (e) {
-          toast(e.message, 5000);
-          return true;
+          // シートの上ではトーストが隠れて見えないので、投げてシートの中に出す
+          throw e;
         }
       },
     );

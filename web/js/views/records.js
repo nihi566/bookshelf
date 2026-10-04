@@ -221,8 +221,8 @@ function openRecordSheet(state, { bookId = '', onSaved }) {
         }
         applySaved(await saveChange(token, change));
       } catch (err) {
-        toast(err.kind ? recordsErrorMessage(err) : err.message, 5000);
-        return true;
+        // シートの上ではトーストが隠れて見えないので、投げてシートの中に出す
+        throw new Error(err.kind ? recordsErrorMessage(err) : err.message);
       }
       toast(change.type === 'exclude' ? '記録から外しました' : change.type === 'remove' ? '記録を消しました' : '記録しました');
       onSaved(change);

@@ -66,7 +66,7 @@ body {
   margin: 0;
   background: var(--bg);
   color: var(--ink);
-  font: 16px/1.7 var(--font);
+  font: 1rem/1.7 var(--font); /* 端末の文字の大きさの設定に合わせる */
   padding-bottom: calc(var(--tabbar-h) + env(safe-area-inset-bottom));
   overflow-x: hidden;
 }
@@ -110,11 +110,14 @@ main { max-width: 760px; margin: 0 auto; padding: 16px max(16px, env(safe-area-i
 .loading { text-align: center; color: var(--ink-3); padding: 48px 0; }
 .page-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin: 4px 0 16px; }
 .page-head > :first-child { min-width: 0; }
-.page-head h1 { word-break: keep-all; overflow-wrap: anywhere; }
+.page-head h1 { overflow-wrap: anywhere; }
+.page-head > :last-child:not(:first-child) { flex-shrink: 10; } /* 狭いときは横のボタンを先に折り返し、見出しは縮めない */
 .page-head .sub { color: var(--ink-2); font-size: 0.9rem; margin-top: 2px; overflow-wrap: anywhere; }
 .section { margin: 28px 0 12px; display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
 .section h2 { font-size: 1rem; color: var(--ink-2); letter-spacing: 0.04em; }
 .back { display: inline-flex; align-items: center; gap: 4px; font-size: 0.9rem; margin-bottom: 8px; }
+
+@media (max-height: 480px) { .search-box { position: static; } } /* 横向きの低い画面では、貼りつく欄で本文が隠れないようにする */
 
 /* 下部タブ */
 .tabbar {
@@ -125,6 +128,7 @@ main { max-width: 760px; margin: 0 auto; padding: 16px max(16px, env(safe-area-i
   background: var(--surface);
   border-top: 1px solid var(--line);
 }
+.tabbar a span { white-space: nowrap; font-size: min(0.7rem, 3.3vw); }
 .tabbar a { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; color: var(--ink-3); font-size: 0.7rem; }
 .tabbar a:hover { text-decoration: none; }
 .tabbar svg { width: 24px; height: 24px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
@@ -152,7 +156,7 @@ main { max-width: 760px; margin: 0 auto; padding: 16px max(16px, env(safe-area-i
 .btn.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
 .btn.primary:hover { filter: brightness(1.06); }
 .btn.danger { color: var(--danger); }
-.stack > .btn { max-width: 100%; white-space: normal; }
+.stack > .btn { max-width: 100%; white-space: normal; text-wrap: balance; }
 .btn.small { min-height: 34px; padding: 4px 12px; font-size: 0.85rem; border-radius: 10px; }
 .btn.block { width: 100%; }
 .btn:disabled { opacity: 0.5; cursor: not-allowed; }
@@ -181,7 +185,7 @@ main { max-width: 760px; margin: 0 auto; padding: 16px max(16px, env(safe-area-i
 label.field { display: block; margin: 12px 0; }
 label.field > span { display: block; font-size: 0.85rem; color: var(--ink-2); margin-bottom: 4px; font-weight: 600; }
 input[type="text"], input[type="search"], input[type="url"], input[type="password"], input[type="date"], input[type="number"], select, textarea {
-  width: 100%; min-height: 44px; padding: 8px 12px; border-radius: 10px; border: 1px solid var(--line); background: var(--surface); font-size: 16px;
+  width: 100%; min-height: 44px; padding: 8px 12px; border-radius: 10px; border: 1px solid var(--line); background: var(--surface); font-size: max(16px, 1rem);
 }
 input[type="file"] { max-width: 100%; }
 textarea { min-height: 96px; resize: vertical; line-height: 1.6; }
@@ -279,7 +283,7 @@ details li { margin: 4px 0; }
 .wl-field > span:first-child { display: block; font-size: 0.8rem; color: var(--ink-2); font-weight: 600; margin-bottom: 2px; }
 .wl-price { grid-column: 1 / -1; }
 .wl-price .row { flex-wrap: nowrap; }
-.wl-price input { width: 100%; min-width: 0; min-height: 44px; padding: 8px 12px; border-radius: 10px; border: 1px solid var(--line); background: var(--surface); font-size: 16px; }
+.wl-price input { width: 100%; min-width: 0; min-height: 44px; padding: 8px 12px; border-radius: 10px; border: 1px solid var(--line); background: var(--surface); font-size: max(16px, 1rem); }
 .wl-check { grid-column: 1 / -1; display: flex; align-items: center; gap: 8px; min-height: 36px; font-size: 0.9rem; }
 .wl-check input { width: 20px; height: 20px; }
 .wl-price-error { margin: 8px 0; }
@@ -414,6 +418,9 @@ html:has(dialog[open]) { overflow: hidden; } /* シートを開いている間�
 .sheet::backdrop { background: rgba(0, 0, 0, 0.35); }
 .sheet form { padding: 16px 16px calc(16px + env(safe-area-inset-bottom)); }
 .sheet h2 { margin-bottom: 8px; }
+/* 保存・やめるの並びは、シートが画面より高いとき（横向き・キーボード）も下に見せておく */
+.sheet form > .row:has(+ .sheet-msg) { position: sticky; bottom: 0; margin: 0 -16px calc(-16px - env(safe-area-inset-bottom)); padding: 10px 16px calc(16px + env(safe-area-inset-bottom)); background: var(--surface); }
+.sheet form:has(.sheet-msg:not([hidden])) > .row:has(+ .sheet-msg) { margin-bottom: 0; padding-bottom: 10px; }
 .sheet .quote { font-family: var(--serif); color: var(--ink-2); font-size: 0.92rem; max-height: 7.5em; overflow: auto; border-left: 3px solid var(--line); padding-left: 10px; }
 .sheet .sheet-msg { margin-top: 10px; } /* 保存できなかった理由（シートの上ではトーストが隠れて見えないため、ここに出す） */
 
@@ -442,7 +449,7 @@ a.mb:hover { text-decoration: none; background: var(--surface-2); }
 .rec-token { margin-top: 24px; }
 
 /* トースト */
-#toast { position: fixed; left: 50%; width: max-content; bottom: calc(var(--tabbar-h) + 16px + env(safe-area-inset-bottom)); transform: translateX(-50%) translateY(20px); z-index: 30; max-width: calc(100vw - 32px); padding: 10px 16px; border-radius: 12px; background: var(--ink); color: var(--bg); font-size: 0.9rem; opacity: 0; pointer-events: none; transition: opacity 0.2s, transform 0.2s; }
+#toast { position: fixed; left: 50%; width: max-content; bottom: calc(var(--tabbar-h) + 16px + env(safe-area-inset-bottom)); transform: translateX(-50%) translateY(20px); z-index: 30; max-width: min(560px, calc(100vw - 32px)); padding: 10px 16px; border-radius: 12px; background: var(--ink); color: var(--bg); font-size: 0.9rem; opacity: 0; pointer-events: none; transition: opacity 0.2s, transform 0.2s; }
 #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
 
 @media (prefers-reduced-motion: reduce) {

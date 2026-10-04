@@ -162,7 +162,7 @@ export const book = {
       <div class="page-head">
         <div class="row" style="flex-wrap:nowrap;align-items:flex-start;gap:12px">
           ${bookSpine(b)}
-          <div><h1>${b.title}</h1><div class="sub">${b.author || '著者不明'} ${b.sources.map(sourceBadge)} ・ ${hs.length} ${technical ? '件' : '点'}${technical ? html` <span class="badge tech">技術書</span>` : ''}</div>
+          <div><h1>${b.title}</h1><div class="sub">${b.author || '著者不明'} ${b.sources.map(sourceBadge)} <span class="nowrap">・ ${hs.length} ${technical ? '件' : '点'}</span>${technical ? html` <span class="badge tech">技術書</span>` : ''}</div>
             ${technical ? html`<p class="small muted" style="margin:4px 0 0">技術書の線は点に数えません（点の数・今日の点・AI 分析から外します）</p>` : ''}</div>
         </div>
       </div>
