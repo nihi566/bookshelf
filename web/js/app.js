@@ -8,6 +8,7 @@ import { book, books, home, search } from './views/library.js';
 import { isolatedView, knowledge, lineView, planeView } from './views/knowledge.js';
 import { exportView, importView, kindleSyncBlock, settingsView } from './views/settings.js';
 import { wishlist } from './views/wishlist.js';
+import { records } from './views/records.js';
 import { FEEDBACK_LABELS, deleteBook, emptyLibrary, listBooks, mergeParsed, setFeedback, updateHighlight } from '../core/model.js';
 import { parseFiles } from '../core/parsers/index.js';
 import { applyImport, makeBackup } from '../core/importing.js';
@@ -29,6 +30,8 @@ const ROUTES = [
   [/^\/wishlist$/, wishlist, 'price'],
   // ハイライトの検索は「読んだ本」の中の画面（タブは持たない）
   [/^\/search$/, search, 'books'],
+  // 読書記録も「読んだ本」の中の画面
+  [/^\/records$/, records, 'books'],
   [/^\/knowledge$/, knowledge, 'knowledge'],
   [/^\/knowledge\/line\/(?<id>[\w-]+)$/, lineView, 'knowledge'],
   [/^\/knowledge\/plane\/(?<id>[\w-]+)$/, planeView, 'knowledge'],

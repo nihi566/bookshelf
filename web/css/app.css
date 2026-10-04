@@ -352,6 +352,30 @@ svg a:hover text { fill: var(--accent); }
 .sheet h2 { margin-bottom: 8px; }
 .sheet .quote { font-family: var(--serif); color: var(--ink-2); font-size: 0.92rem; max-height: 7.5em; overflow: auto; border-left: 3px solid var(--line); padding-left: 10px; }
 
+/* 読書記録 */
+.rec-nav { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 12px; }
+.rec-nav h2 { font-size: 1.1rem; }
+.rec-summary { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.rec-summary .card { padding: 12px; }
+.rec-summary .card + .card { margin-top: 0; }
+.rec-summary p { margin: 4px 0 0; }
+.rec-label { font-size: 0.8rem; color: var(--ink-3); font-weight: 600; }
+.rec-num { color: var(--ink-2); font-size: 0.85rem; }
+.rec-num b { font-size: 1.5rem; color: var(--ink); font-variant-numeric: tabular-nums; }
+.month-bars { display: grid; grid-template-columns: repeat(12, 1fr); gap: 2px; margin-top: 12px; }
+.mb { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 4px 0; border-radius: 6px; color: var(--ink-3); font-size: 0.7rem; font-variant-numeric: tabular-nums; }
+a.mb:hover { text-decoration: none; background: var(--surface-2); }
+.mb.on { color: var(--accent); font-weight: 700; }
+.mb.future { opacity: 0.4; }
+.mb-count { min-height: 1em; font-weight: 700; color: var(--ink-2); }
+.mb-track { height: 56px; width: 70%; display: flex; align-items: flex-end; }
+.mb-bar { width: 100%; border-radius: 3px 3px 0 0; background: color-mix(in srgb, var(--accent) 45%, transparent); }
+.mb.on .mb-bar { background: var(--accent); }
+.mb-bar.zero { background: var(--line); }
+.rec-item button.book-item { width: 100%; text-align: left; background: none; border: 0; border-bottom: 1px solid var(--line); font: inherit; cursor: pointer; }
+.rec-edit { flex: none; color: var(--ink-3); }
+.rec-token { margin-top: 24px; }
+
 /* トースト */
 #toast { position: fixed; left: 50%; bottom: calc(var(--tabbar-h) + 16px + env(safe-area-inset-bottom)); transform: translateX(-50%) translateY(20px); z-index: 30; max-width: calc(100vw - 32px); padding: 10px 16px; border-radius: 12px; background: var(--ink); color: var(--bg); font-size: 0.9rem; opacity: 0; pointer-events: none; transition: opacity 0.2s, transform 0.2s; }
 #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }

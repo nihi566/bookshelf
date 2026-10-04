@@ -115,7 +115,7 @@ export const books = {
       return html`<a class="chip ${on ? 'on' : ''}" href="#/books?${params}">${label}</a>`;
     };
     return html`<div class="page-head"><div><h1>読んだ本</h1><div class="sub">${list.length} 冊</div></div><a class="btn small" href="#/import">＋ 取り込む</a></div>
-      <div class="row" style="margin-bottom:12px"><a class="btn small" href="#/search">ハイライトを検索</a></div>
+      <div class="row" style="margin-bottom:12px"><a class="btn small" href="#/search">ハイライトを検索</a><a class="btn small" href="#/records">読書記録（冊数・ページ数）</a></div>
       <form class="search-box" data-form="book-filter" role="search"><input type="search" name="q" value="${query.get('q') || ''}" placeholder="書名・著者で絞り込む" aria-label="書名・著者で絞り込む"></form>
       <div class="chips">${chip('source', '', 'すべて')}${chip('source', 'kindle', 'Kindle')}${chip('source', 'playbooks', 'Play Books')}</div>
       <div class="chips" style="margin-top:6px">${chip('sort', 'recent', '最近')}${chip('sort', 'title', '書名')}${chip('sort', 'count', '点の数')}</div>
@@ -152,6 +152,7 @@ export const book = {
         </div>
       </div>
       <div class="row">
+        <a class="btn small" href="#/records?book=${encodeURIComponent(b.id)}">読み終えた日を記録</a>
         ${obsidianUrl ? html`<a class="btn small" href="${obsidianUrl}">Obsidian で開く</a>` : html`<a class="btn small" href="#/export">Obsidian に写す</a>`}
         <button class="btn small danger" data-action="delete-book" data-id="${b.id}">この本を削除</button>
       </div>
