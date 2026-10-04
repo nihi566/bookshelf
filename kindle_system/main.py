@@ -181,8 +181,8 @@ async def run_integration(
     start: int = None,
     workers: int = 1,
     only_asins: set = None,
-) -> None:
-    """統合フローの実行
+) -> bool:
+    """統合フローの実行。XML の解析に失敗したら False、最後まで進んだら True を返す。
 
     only_asins（Sample ASIN の集合）を渡すと、その本だけを処理し直す（scraping-hub の実行画面で
     失敗した本だけを再実行するため）。この場合はレジューム（前回処理済みのスキップ）を使わず、
@@ -213,7 +213,7 @@ async def run_integration(
         samples = extract_samples(xml_path)
     except Exception as e:
         print(f"  [Error] XML パースに失敗しました: {e}")
-        return
+        return False
 
     print(f"  [OK] サンプル本を {len(samples)} 件取得しました。")
 
@@ -403,6 +403,7 @@ async def run_integration(
     if not only_asins:
         clear_session()
         print("  [OK] セッションをクリアしました。次回実行時は全件処理されます。")
+    return True
 
 
 

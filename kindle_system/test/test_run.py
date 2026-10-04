@@ -428,6 +428,49 @@ class SyncCommandTest(_SkipPublishPreflightMixin, unittest.TestCase):
         _, kwargs = mock_run_integration.call_args
         self.assertEqual(kwargs["workers"], 1)
 
+    def _run_sync_expecting_failure(self, target, kindle_ok=True, bookmeter_result=None):
+        """sync を回し、0 以外で終わること・公開は行うことを確かめて標準エラーの内容を返す。
+
+        README は自動同期の失敗を「終了コードが 0 以外か」で判断するよう案内している
+        （backlog 20261004-sync-exit-zero-on-failure）。
+        """
+        result = bookmeter_result or dict(self._EMPTY_SYNC_RESULT)
+        err = io.StringIO()
+        with patch("run.os.path.exists", return_value=True), \
+             patch("run.publish") as mock_publish, \
+             patch("run.sync_bookmeter_wishlist", new=AsyncMock(return_value=result)), \
+             patch("run.main_module.run_integration", new=AsyncMock(return_value=kindle_ok)), \
+             contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(err):
+            with self.assertRaises(SystemExit) as cm:
+                run.cmd_sync(argparse.Namespace(workers=1, limit=None, start=None, target=target))
+        self.assertNotEqual(cm.exception.code, 0)
+        mock_publish.assert_called_once()
+        return err.getvalue()
+
+    def test_exits_non_zero_when_kindle_xml_parse_fails(self):
+        stderr = self._run_sync_expecting_failure("both", kindle_ok=False)
+
+        lines = stderr.strip().splitlines()
+        self.assertEqual(len(lines), 1, stderr)
+        self.assertIn("Kindle", lines[0])
+
+    def test_exits_non_zero_when_bookmeter_fetch_fails(self):
+        failed = dict(self._EMPTY_SYNC_RESULT, fetch_failed=True)
+        stderr = self._run_sync_expecting_failure("bookmeter", bookmeter_result=failed)
+
+        lines = stderr.strip().splitlines()
+        self.assertEqual(len(lines), 1, stderr)
+        self.assertIn("読書メーター", lines[0])
+
+    def test_reports_both_failed_stages_in_one_line(self):
+        failed = dict(self._EMPTY_SYNC_RESULT, fetch_failed=True)
+        stderr = self._run_sync_expecting_failure("both", kindle_ok=False, bookmeter_result=failed)
+
+        lines = stderr.strip().splitlines()
+        self.assertEqual(len(lines), 1, stderr)
+        self.assertIn("Kindle", lines[0])
+        self.assertIn("読書メーター", lines[0])
+
     @patch("run.publish")
     @patch("run.sync_bookmeter_wishlist", new_callable=AsyncMock)
     @patch("run.main_module.run_integration", new_callable=AsyncMock)
@@ -864,6 +907,10 @@ class SyncOnlyAsinsTest(_SkipPublishPreflightMixin, unittest.TestCase):
     def test_without_asins_runs_everything_as_before(
         self, mock_run_integration, mock_sync, mock_publish, mock_exists
     ):
+        # 戻り値は sync_bookmeter_wishlist の契約どおりの dict にする（Mock のままだと取得失敗と区別できない）
+        mock_sync.return_value = {
+            "total": 0, "registered": 0, "skipped": 0, "failed_titles": [], "fetch_failed": False,
+        }
         run.cmd_sync(run.build_parser().parse_args(["sync"]))
 
         _, kwargs = mock_run_integration.call_args

@@ -47,6 +47,9 @@ python run.py sync [--workers N] [--limit N] [--start N] [--target kindle|bookme
    で書き出してから、もう一度 `python run.py sync` を実行する
 3. 差分があれば commit し、push する
 
+Kindle の XML 解析、または読書メーターの一覧取得に失敗したときも、うまくいった段階の結果は公開する。
+そのうえで失敗した段階を標準エラーに 1 行出し、終了コード 1 で終わる。
+
 ### 毎日の自動更新（Windows のタスクスケジューラ）
 
 `python run.py sync` を毎日 1 回、タスクスケジューラから実行する。登録・解除は PowerShell で行う（管理者権限は不要）。

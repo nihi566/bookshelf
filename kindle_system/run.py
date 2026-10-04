@@ -226,17 +226,29 @@ async def _run_sync(
     を接続し、スキップ一覧を明示する（無音のまま公開してしまうことを防ぐ）。
 
     公開できない状態（設定漏れ・公開先が main 以外・作業中の変更あり）なら、クロールを始める前に止める。
+
+    Kindle の XML 解析や読書メーターの一覧取得に失敗しても、うまくいった段階の結果は公開する。
+    そのうえで失敗した段階を標準エラーに 1 行出し、終了コード 1 で終わる（自動同期の失敗は
+    タスクスケジューラの「前回の実行結果」が 0 以外かで判断するため。README 参照）。
     """
     _prepare_publish()
+    failed_stages = []
     if target in ("kindle", "both"):
-        await main_module.run_integration(
+        kindle_ok = await main_module.run_integration(
             xml_path=xml_path, limit=limit, start=start, workers=workers, only_asins=only_asins
         )
+        if kindle_ok is False:  # run_integration は XML の解析に失敗したときだけ False を返す
+            failed_stages.append("Kindle の XML 解析")
     if target in ("bookmeter", "both"):
         result = await sync_bookmeter_wishlist(progress_cb=print)
         if result["failed_titles"]:
             print(f"[スキップ一覧] {', '.join(result['failed_titles'])}")
+        if result.get("fetch_failed"):
+            failed_stages.append("読書メーターの一覧取得")
     publish()
+    if failed_stages:
+        print(f"エラー: 同期の一部が失敗しました（{'、'.join(failed_stages)}）。ログで原因を確かめてください。", file=sys.stderr)
+        sys.exit(1)
 
 
 _ASIN_RE = re.compile(r"[A-Z0-9]{10}")
