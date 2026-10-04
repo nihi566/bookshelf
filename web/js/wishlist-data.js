@@ -8,6 +8,10 @@ export const WISHLIST_URLS = [
   'https://nihi566.github.io/bookshelf/wishlist-site/wishlist.json',
 ];
 
+// 値下がり・読み放題入りを知らせるフィード（kindle_system/report.py が wishlist.json と一緒に書き出す）。
+// フィードリーダーに登録する URL なので、bh serve で開いていても公開先の URL を案内する
+export const FEED_URL = 'https://nihi566.github.io/bookshelf/wishlist-site/feed.xml';
+
 let loaded = null; // 成功した結果だけを覚える（開いている間は読み直さない）
 let loading = null;
 

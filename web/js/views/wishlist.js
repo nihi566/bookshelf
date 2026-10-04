@@ -6,7 +6,7 @@ import { spineColor, toast } from '../ui.js';
 import { applyImportedMarks, bookmeterUrl, browserStore, cleanupSyncedMarks, collectMarks, filterWishlist, formatPrice, inShelf, KEYS, loadMarks, marksFile, memoryStore, openWishlistFilters, parseMarksFile, priceChange, priceSparkline, priceTotal, readingCounts, readingLookup, saveMarks, shelfCounts, TAG_FILTER_LABELS, TAG_LABELS, tagCounts, toggleMark } from '../../core/wishlist.js';
 import { listBooks } from '../../core/model.js';
 import { isoDate } from '../../core/text.js';
-import { cachedWishlist, loadWishlist } from '../wishlist-data.js';
+import { cachedWishlist, FEED_URL, loadWishlist } from '../wishlist-data.js';
 
 const SORTS = { default: '標準（書名）', 'price-asc': '価格が安い順', 'price-desc': '価格が高い順', 'price-drop': '値下がり額が大きい順', 'scraped-desc': 'スクレイピングの最新順', rating: '評価が高い順' };
 const SHELVES = { all: 'すべて', kindle: 'Kindle', bookmeter: '読書メーター', purchased: '購入済み' };
@@ -95,7 +95,7 @@ function mountList(root, body, items, store, lastScraped) {
   }
   root.querySelector('#wl-sub').textContent = `スクレイピングした本の価格 ${items.length} 冊`;
   body.innerHTML = String(html`
-    <p class="small muted">価格の最終取得: ${lastScrapedText(lastScraped)}</p>
+    <p class="small muted">価格の最終取得: ${lastScrapedText(lastScraped)}・<a href="${FEED_URL}" target="_blank" rel="noopener noreferrer" type="application/atom+xml">値下がり・読み放題入りをフィードで受け取る</a></p>
     <div class="chips" role="group" aria-label="表示する分類">${Object.entries(SHELVES).map(([k, label]) => html`<button type="button" class="chip" data-wl-shelf="${k}" aria-pressed="${String(filters.shelf === k)}">${shelfLabel(k, shelfCount[k])}</button>`)}</div>
     <div class="chips" role="group" aria-label="購入済みの内訳" id="wl-reading" ${filters.shelf === 'purchased' ? '' : 'hidden'}>${Object.keys(READINGS).map((k) => html`<button type="button" class="chip" data-wl-reading="${k}" aria-pressed="${String(filters.reading === k)}"></button>`)}</div>
     <div class="search-box wl-search" role="search"><input type="search" id="wl-q" value="${filters.q}" placeholder="書名・ASIN で絞り込む（空白で AND）" aria-label="書名・ASIN で絞り込む" autocomplete="off"></div>
