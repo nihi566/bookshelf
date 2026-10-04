@@ -242,7 +242,7 @@ export async function analyzeLibrary({ library, llm: rawLlm, cache = emptyCache(
     solid = {
       title: clean(s.title, 60) || '知識の核',
       core: clean(s.core, 1200),
-      relations: (Array.isArray(s.relations) ? s.relations : [])
+      relations: objects(s.relations)
         .map((r) => ({ from: planeRef(r.from), to: planeRef(r.to), type: RELATION_TYPES.find((t) => String(r.type).includes(t)) || '関連する', description: clean(r.description, 300) }))
         .filter((r) => r.from && r.to && r.from !== r.to),
       principles: strList(s.principles, 8, 300),
@@ -511,6 +511,11 @@ function clean(v, max) {
   return s.length > max ? s.slice(0, max - 1) + '…' : s;
 }
 
+/** LLM の出力の配列のうち、オブジェクトの要素だけ（null や文字列が混ざっても落ちないように） */
+function objects(v) {
+  return (Array.isArray(v) ? v : []).filter((x) => x && typeof x === 'object');
+}
+
 function strList(v, n, max) {
   return (Array.isArray(v) ? v : [])
     .map((x) => clean(typeof x === 'string' ? x : x?.text ?? JSON.stringify(x), max))
@@ -624,7 +629,15 @@ export function deserializeCache(data) {
   if (!data) return emptyCache();
   const vectors = {};
   for (const [id, b64] of Object.entries(data.embeddings?.vectors || {})) {
-    const bytes = fromBase64(b64);
+    // 壊れたベクトルはその点だけ捨てる（埋め込み直せばよい。キャッシュのせいで分析を毎回失敗させない）
+    if (typeof b64 !== 'string') continue;
+    let bytes;
+    try {
+      bytes = fromBase64(b64);
+    } catch {
+      continue;
+    }
+    if (bytes.byteLength % 4) continue;
     vectors[id] = new Float32Array(bytes.buffer, bytes.byteOffset, bytes.byteLength / 4);
   }
   // keys が壊れていたら持たない（前の版のキャッシュと同じに扱い、文が同じ点は使い続ける）

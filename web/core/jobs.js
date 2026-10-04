@@ -16,8 +16,10 @@ export async function followJob({ fetchJob, onUpdate = () => {}, sleep = (ms) =>
       failures = 0;
     } catch (e) {
       failures++;
-      if (failures >= maxFailures) return { lost: true, error: e.message };
-      onUpdate({ reconnecting: failures, maxFailures, error: e.message });
+      // Error 以外（文字列・undefined など）が投げられても落ちない
+      const error = e instanceof Error ? e.message : String(e ?? '');
+      if (failures >= maxFailures) return { lost: true, error };
+      onUpdate({ reconnecting: failures, maxFailures, error });
       await sleep(Math.min(30000, interval * 2 ** failures));
       continue;
     }

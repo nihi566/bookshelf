@@ -92,7 +92,7 @@ def parse_books(html: str) -> List[Dict[str, str]]:
 
 TRUNCATION_MARK = "…"
 # 書名リンクの href（/books/<数字>。絶対 URL なら bookmeter.com のものだけ）
-_BOOK_HREF = re.compile(r"^(?:https://bookmeter\.com)?/books/(\d{1,12})$")
+_BOOK_HREF = re.compile(r"(?:https://bookmeter\.com)?/books/([0-9]{1,12})")
 
 
 def _bookmeter_id(href: str) -> str:
@@ -243,8 +243,8 @@ def _run_builtin_test() -> None:
 
     passed = True
     if books != [
-        {"title": "モック書籍A", "author": "モック著者A"},
-        {"title": "モック書籍B", "author": "モック著者B"},
+        {"title": "モック書籍A", "author": "モック著者A", "bookmeter_id": "1"},
+        {"title": "モック書籍B", "author": "モック著者B", "bookmeter_id": "2"},
     ]:
         print(f"  [NG] 取得結果が期待値と一致しません: {books}")
         passed = False

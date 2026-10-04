@@ -51,7 +51,7 @@ def is_kindle_asin(asin: str) -> bool:
     Kindle EBOK の ASIN は 'B0' で始まる 10 桁英数字。
     例: B0GGY819NL -> True / 4845925230 -> False
     """
-    return bool(KINDLE_ASIN_RE.match(asin))
+    return bool(KINDLE_ASIN_RE.fullmatch(asin))
 
 
 async def random_delay(min_sec: float = 1.0, max_sec: float = 3.0) -> None:

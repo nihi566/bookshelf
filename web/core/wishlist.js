@@ -25,7 +25,8 @@ const MARK_FIELDS = ['tag', 'rating', 'kind'];
 const MARK_GROUPS = { tag: ['tag', 'rating'], kind: ['kind'] };
 const ASIN = /^[A-Z0-9]{10}$/;
 const BOOKMETER_ID = /^\d{1,12}$/;
-// 数値のまま来た値は RegExp.test が文字列にしてしまうので、文字列だけを通す
+// 数値のまま来た値は RegExp.test が文字列にしてしまうので、文字列だけを通す（10 桁の数字の ASIN も数値で来うる）
+const isAsin = (v) => typeof v === 'string' && ASIN.test(v);
 const isBookmeterId = (v) => typeof v === 'string' && BOOKMETER_ID.test(v);
 
 const RETIRED_TAG = 'unwanted';
@@ -57,7 +58,7 @@ export function parseWishlist(data) {
     // KU の本は価格を持たない扱いにする（画面は「Kindle Unlimited 対象」と出すので、合計・値動きにも入れない）
     const price = b?.ku === true ? null : yen(b?.price);
     return {
-      asin: ASIN.test(b?.asin) ? b.asin : '',
+      asin: isAsin(b?.asin) ? b.asin : '',
       title: String(b?.title ?? ''),
       price,
       ku: b?.ku === true,
@@ -238,7 +239,7 @@ export function readingLookup(shelfBooks) {
   const byTitle = new Map();
   for (const b of shelfBooks) {
     const r = { count: b.count, lastHighlightedAt: b.lastHighlightedAt };
-    if (ASIN.test(b.asin)) byAsin.set(b.asin, r);
+    if (isAsin(b.asin)) byAsin.set(b.asin, r);
     const key = titleKey(b.title);
     if (key && !byTitle.has(key)) byTitle.set(key, r);
   }
@@ -418,7 +419,7 @@ export function wishlistForRecommend(list) {
     if (!title) return [];
     const ku = b.ku === true;
     const price = !ku && Number.isInteger(b.price) && b.price >= 0 ? b.price : null;
-    return [{ title, asin: ASIN.test(b.asin) ? b.asin : '', price, ku, skip: b.skip === true }];
+    return [{ title, asin: isAsin(b.asin) ? b.asin : '', price, ku, skip: b.skip === true }];
   });
 }
 
@@ -429,7 +430,7 @@ export function bookmeterUrl({ bookmeterId } = {}) {
 }
 
 export function amazonKindleUrl({ title, asin } = {}) {
-  if (ASIN.test(asin)) return `https://www.amazon.co.jp/dp/${asin}`;
+  if (isAsin(asin)) return `https://www.amazon.co.jp/dp/${asin}`;
   const q = String(title || '').trim();
   return q ? `https://www.amazon.co.jp/s?k=${encodeURIComponent(q)}&i=digital-text` : '';
 }
@@ -491,7 +492,7 @@ export function parseMarksFile(data) {
   if (data.version !== 1) throw new Error(`タグのファイルの版（${data.version}）に対応していません。アプリを更新してください`);
   const entries = [];
   for (const it of data.items) {
-    if (!ASIN.test(it?.asin)) continue;
+    if (!isAsin(it?.asin)) continue;
     const entry = { asin: it.asin };
     if (it.tag === '' || it.tag === RETIRED_TAG || isTag(it.tag)) {
       entry.tag = it.tag === RETIRED_TAG ? '' : it.tag;

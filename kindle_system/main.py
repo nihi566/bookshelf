@@ -166,7 +166,7 @@ def ask_start_index(total: int):
         return None
     if not typed:
         return None
-    if typed.isdigit() and 1 <= int(typed) <= total:
+    if typed.isdecimal() and 1 <= int(typed) <= total:
         return int(typed)
     print(f"[!] 開始番号「{typed}」は 1 ~ {total} の数字ではないため、最初から始めます。")
     return None
