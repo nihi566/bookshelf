@@ -3,7 +3,8 @@
 // 「点」= 1 つのハイライト。取り込み元（Kindle / Play Books）が違っても同じ形で扱う。
 // パーサは ParsedBook[] を返し、mergeParsed() でライブラリへ取り込む。
 //
-// ParsedBook = { title, author, source, asin?, volumeId?（Play ブックスの書籍 ID）, highlights: ParsedHighlight[] }
+// ParsedBook = { title, author, source, asin?, volumeId?（Play ブックスの書籍 ID）, annotatedOn?（Kindle の最終ハイライト日 'YYYY-MM-DD'）, highlights: ParsedHighlight[] }
+// Book.annotatedOn … 最初に取り込んだときの Kindle の最終ハイライト日（線そのものに日付が無い Kindle の本の、読書記録の日付に使う。古い日を残す）
 // ParsedHighlight = { text, note?, chapter?, location?, locationEnd?, page?, color?, createdAt?, kind? }
 
 import { bookKey, cleanText, hash, normalizeText } from './text.js';
@@ -129,7 +130,9 @@ export function mergeParsed(library, parsedBooks, { now = new Date().toISOString
     // 表紙に使う ID。既にある本に後から付いたときも保存し直せるよう数える
     const coverIds = ['asin', 'volumeId'].filter((k) => pb[k] && !book[k]);
     for (const k of coverIds) book[k] = pb[k];
-    if (coverIds.length && !isNew) {
+    const annotated = pb.annotatedOn && (!book.annotatedOn || pb.annotatedOn < book.annotatedOn);
+    if (annotated) book.annotatedOn = pb.annotatedOn;
+    if ((coverIds.length || annotated) && !isNew) {
       book.updatedAt = now;
       stats.booksUpdated++;
     }
@@ -341,6 +344,8 @@ function mergeBook(a, b) {
   const rank = (x) => (Object.keys(SOURCES).indexOf(x) + 1 || 99);
   out.sources = [...new Set([...(a.sources || []), ...(b.sources || [])])].sort((x, y) => rank(x) - rank(y) || x.localeCompare(y));
   out.createdAt = [a.createdAt, b.createdAt].filter(Boolean).sort()[0] || out.createdAt;
+  const annotatedOn = [a.annotatedOn, b.annotatedOn].filter(Boolean).sort()[0];
+  if (annotatedOn) out.annotatedOn = annotatedOn;
   return out;
 }
 
