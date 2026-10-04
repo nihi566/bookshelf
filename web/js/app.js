@@ -76,6 +76,9 @@ function render({ keepScroll = false } = {}) {
     state.pcInfoAt = Date.now();
     refreshPcInfo();
   }
+  // 別の画面に移ったとき、押したリンクは描き直しで消えてフォーカスが行方不明になる。
+  // キーボード・読み上げで使う人が新しい画面の先頭から読めるよう、本文にフォーカスを移す
+  if (path !== currentPath && !view.contains(document.activeElement)) view.focus({ preventScroll: true });
   if (keepScroll || path === currentPath) window.scrollTo(0, y);
   else window.scrollTo(0, 0);
   currentPath = path;
