@@ -28,8 +28,7 @@ const ROUTES = [
   [/^\/wishlist$/, wishlist, 'price'],
   // ハイライトの検索は「読んだ本」の中の画面（タブは持たない）
   [/^\/search$/, search, 'books'],
-  // 読書記録も「読んだ本」の中の画面
-  [/^\/records$/, records, 'books'],
+  [/^\/records$/, records, 'records'],
   [/^\/knowledge$/, knowledge, 'knowledge'],
   [/^\/knowledge\/line\/(?<id>[\w-]+)$/, lineView, 'knowledge'],
   [/^\/knowledge\/plane\/(?<id>[\w-]+)$/, planeView, 'knowledge'],

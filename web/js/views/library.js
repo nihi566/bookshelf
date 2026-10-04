@@ -111,7 +111,7 @@ export const books = {
       return html`<a class="chip ${on ? 'on' : ''}" href="#/books?${params}" ${on ? html`aria-current="true"` : ''}>${label}</a>`;
     };
     return html`<div class="page-head"><div><h1>読んだ本</h1><div class="sub">${list.length} 冊</div></div><span class="row"><button class="btn small" data-action="register-book">＋ 紙の本</button><a class="btn small" href="#/import">＋ 取り込む</a></span></div>
-      <div class="row" style="margin-bottom:12px"><a class="btn small" href="#/search">ハイライトを検索</a><a class="btn small" href="#/records">読書記録（冊数・ページ数）</a></div>
+      <div class="row" style="margin-bottom:12px"><a class="btn small" href="#/search">ハイライトを検索</a></div>
       <form class="search-box" data-form="book-filter" role="search"><input type="search" name="q" value="${query.get('q') || ''}" placeholder="書名・著者で絞り込む" aria-label="書名・著者で絞り込む"></form>
       <div class="chips" role="group" aria-label="読み方で絞り込む">${chip('source', '', 'すべて')}${chip('source', 'kindle', 'Kindle')}${chip('source', 'playbooks', 'Play Books')}${chip('source', 'paper', '紙の本')}${chip('source', 'memo', '読書メモ')}</div>
       <div class="chips" style="margin-top:6px" role="group" aria-labelledby="books-sort-label"><span class="chips-label" id="books-sort-label">並び順</span>${chip('sort', 'recent', '最近')}${chip('sort', 'title', '書名')}${chip('sort', 'count', '点の数')}</div>
