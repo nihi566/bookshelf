@@ -75,6 +75,8 @@ class BuildWishlistTest(unittest.TestCase):
                 "price_prev": None,
                 "price_changed_at": None,
                 "price_low": None,
+                "price_low_at": None,
+                "target_price": None,
                 "price_history": [],
                 "price_reason": None,
                 "bookmeter_id": None,
@@ -107,6 +109,16 @@ class BuildWishlistTest(unittest.TestCase):
         history = [{"at": "2026-01-01T00:00:00", "price": 1000, "ku": False}]
         book = report.build_wishlist([self._book(price_history=history)])["books"][0]
         self.assertEqual(book["price_history"], history)
+
+    def test_target_price_is_published_even_without_price(self):
+        """希望価格は利用者が決めた値なので、価格の取れない本（読み放題など）にもそのまま載せる。"""
+        self.assertEqual(report.build_wishlist([self._book(target_price=500)])["books"][0]["target_price"], 500)
+        self.assertEqual(report.build_wishlist([self._book(target_price=500, is_unlimited=1)])["books"][0]["target_price"], 500)
+
+    def test_price_low_at_is_published_for_paid_book(self):
+        trend = {"prev": 1000, "changed_at": "2026-01-02T03:04:05", "low": 800, "low_at": "2026-01-02T03:04:05"}
+        self.assertEqual(report.build_wishlist([self._book(price_trend=trend)])["books"][0]["price_low_at"], "2026-01-02T03:04:05")
+        self.assertIsNone(report.build_wishlist([self._book(price_trend=trend, actual_price=None)])["books"][0]["price_low_at"])
 
     def test_price_trend_is_published_for_paid_book(self):
         trend = {"prev": 1000, "changed_at": "2026-01-02T03:04:05", "low": 800}
@@ -163,26 +175,33 @@ class SummarizePriceChangesTest(unittest.TestCase):
     def test_unchanged_price_has_no_previous_price(self):
         self.assertEqual(
             report.summarize_price_changes(self._points("B0AAAAAAA1", [1000, 1000])),
-            {"B0AAAAAAA1": {"prev": None, "changed_at": None, "low": 1000}},
+            {"B0AAAAAAA1": {"prev": None, "changed_at": None, "low": 1000, "low_at": None}},
         )
 
     def test_drop_records_previous_price_and_when_it_changed(self):
         self.assertEqual(
             report.summarize_price_changes(self._points("B0AAAAAAA1", [1000, 1000, 800])),
-            {"B0AAAAAAA1": {"prev": 1000, "changed_at": "2026-01-03T00:00:00", "low": 800}},
+            {"B0AAAAAAA1": {"prev": 1000, "changed_at": "2026-01-03T00:00:00", "low": 800, "low_at": "2026-01-03T00:00:00"}},
         )
 
     def test_latest_change_wins_and_lowest_is_kept(self):
         self.assertEqual(
             report.summarize_price_changes(self._points("B0AAAAAAA1", [1000, 800, 1200])),
-            {"B0AAAAAAA1": {"prev": 800, "changed_at": "2026-01-03T00:00:00", "low": 800}},
+            {"B0AAAAAAA1": {"prev": 800, "changed_at": "2026-01-03T00:00:00", "low": 800, "low_at": "2026-01-02T00:00:00"}},
         )
+
+    def test_low_at_is_when_the_lowest_price_was_first_beaten_below_all_earlier_prices(self):
+        """最安値と同じ価格に戻っただけ（更新していない）では low_at は変わらない。最初の記録の価格は更新ではないので None。"""
+        result = report.summarize_price_changes(self._points("B0AAAAAAA1", [1000, 800, 900, 800]))
+        self.assertEqual(result["B0AAAAAAA1"]["low_at"], "2026-01-02T00:00:00")
+        result = report.summarize_price_changes(self._points("B0AAAAAAA1", [500, 800, 600]))
+        self.assertIsNone(result["B0AAAAAAA1"]["low_at"])
 
     def test_books_are_summarized_separately(self):
         points = self._points("B0AAAAAAA1", [1000, 900]) + self._points("B0BBBBBBB2", [500])
         result = report.summarize_price_changes(points)
         self.assertEqual(result["B0AAAAAAA1"]["prev"], 1000)
-        self.assertEqual(result["B0BBBBBBB2"], {"prev": None, "changed_at": None, "low": 500})
+        self.assertEqual(result["B0BBBBBBB2"], {"prev": None, "changed_at": None, "low": 500, "low_at": None})
 
 
 class SummarizePriceHistoryTest(unittest.TestCase):
@@ -251,16 +270,25 @@ class MainIntegrationTest(unittest.TestCase):
         self.mock_points = self._points.start()
         self._all_points = unittest.mock.patch.object(report, "get_all_price_points", return_value=[])
         self.mock_all_points = self._all_points.start()
+        self._targets = unittest.mock.patch.object(report, "get_target_prices", return_value={})
+        self.mock_targets = self._targets.start()
 
     def tearDown(self):
         self._points.stop()
         self._all_points.stop()
+        self._targets.stop()
         shutil.rmtree(self.tmpdir, ignore_errors=True)
         for key, value in self._saved_env.items():
             if value is None:
                 os.environ.pop(key, None)
             else:
                 os.environ[key] = value
+
+    def test_main_publishes_target_price_from_db(self):
+        self.mock_targets.return_value = {"B0INTEG1": 800}
+        self._run_main_with_marks({})
+        book = json.loads(self._read_wishlist_text())["books"][0]
+        self.assertEqual(book["target_price"], 800)
 
     def _run_main_with_marks(self, env):
         fake_book = {"title": "結合テスト本", "asin": "B0INTEG1", "actual_price": 1000, "is_unlimited": 0}

@@ -76,6 +76,17 @@ python run.py purchase <asin> --on
 python run.py purchase <asin> --off
 ```
 
+### 希望価格（買い時）の設定
+
+```
+python run.py target-price <asin> 500     # 実質価格（ポイント差し引き後）が ¥500 以下になったら知らせる
+python run.py target-price <asin> --clear # 取り消す
+```
+
+希望価格より高かった本が希望価格以下になった回に、`feed.xml` に「希望価格 ¥500 以下になりました」の 1 件が出る
+（設定したときに既に以下だった本は出さない）。値下がりで過去最安値を更新した回は、値下がりの 1 件の題名に「過去最安値」と添える。
+希望価格は `wishlist.json` の `target_price` にも載る。反映は次の `python run.py sync` から。
+
 ### 静的レポートの生成のみ実行（公開はしない）
 
 `run.py sync` は内部でレポート生成と公開（git commit・push）の両方を行うが、

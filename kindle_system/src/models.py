@@ -59,6 +59,18 @@ class BookMark(SQLModel, table=True):
     updated_at: str = Field()
 
 
+class TargetPrice(SQLModel, table=True):
+    """
+    本ごとの希望価格（`run.py target-price` で決める。実質価格がこの値以下になったらフィードで知らせる）。
+    既存テーブルに列を足さないためマイグレーションは不要（BookMark と同じく create_all / set_target_price が新規作成する）。
+    """
+    __tablename__ = "target_prices"
+
+    paid_asin: str = Field(primary_key=True)
+    price: int = Field()
+    updated_at: str = Field()
+
+
 # 価格が取れなかった理由（src/crawler.py の classify_unpriced と BAN 検知・例外）
 #   not_found:  商品ページが無い（404。販売終了・削除の可能性）
 #   no_price:   ページは開けたが価格の表示が無い（販売停止・予約前など。買えない可能性）
