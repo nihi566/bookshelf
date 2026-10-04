@@ -1,6 +1,6 @@
 // 画面の部品（ハイライトのカード、本の行、トースト、シート）
 import { html, mark } from './html.js';
-import { SOURCES } from '../core/model.js';
+import { listBooks, SOURCES } from '../core/model.js';
 import { hash, isoDate } from '../core/text.js';
 import { kindleSyncState } from '../core/kindle-status.js';
 
@@ -69,6 +69,24 @@ export function bookRow(b) {
     </span>
     <span class="count">${b.count}<span class="unit"> 点</span><small>${isoDate(b.lastHighlightedAt) || '-'}</small></span>
   </a></li>`;
+}
+
+/**
+ * 「読んだ本」の空表示。本が 1 冊も無く PC とつながっていない（PC を設定していない / 同期に失敗した）ときは、
+ * PC に本があっても 0 冊に見えて迷うので、つなぎ方を添える。
+ * @param {{ settings: { ai: { mode: string, companionUrl: string } }, servedByCompanion: boolean, pcSyncFailed?: boolean, library: object }} state
+ */
+export function emptyBooksBlock(state) {
+  const plain = html`<p class="empty">本がありません。<a href="#/import">取り込む</a></p>`;
+  if (state.settings.ai.mode !== 'companion' || listBooks(state.library).length) return plain;
+  const pcSet = state.servedByCompanion || state.settings.ai.companionUrl;
+  if (pcSet && !state.pcSyncFailed) return plain;
+  const head = pcSet ? 'PC と同期できませんでした。' : 'PC とつながっていません。';
+  return html`<div class="empty">
+      <p class="notice">${head}PC に取り込んだ本は、PC とつなぐとここに出ます。</p>
+      <p class="small">PC では <code>bh serve</code> を起動して http://localhost:8787 を開くのが簡単です。ほかの端末からは <a href="#/settings">設定</a> で PC の URL とトークンを入れてください（Chrome でローカルネットワークへのアクセスを聞かれたら許可します）。</p>
+      <p>または <a href="#/import">ここで取り込む</a></p>
+    </div>`;
 }
 
 let toastTimer;
