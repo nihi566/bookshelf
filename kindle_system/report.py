@@ -218,6 +218,20 @@ def _joined_ku_at(history: list):
     return None
 
 
+def _left_ku_at(history: list):
+    """
+    スクレイピングの履歴（古い順）から、最後に読み放題 → 有料に変わった取得の時刻を返す（無ければ None）。
+    _joined_ku_at の逆向き。取得に失敗した回（価格なし・KU でない）は飛ばす。今も読み放題なら None。
+    """
+    rows = [r for r in history if r.get("ku") or r.get("price") is not None]
+    if not rows or rows[-1].get("ku"):
+        return None
+    for prev, row in zip(reversed(rows[:-1]), reversed(rows)):
+        if prev.get("ku"):
+            return row["at"]
+    return None
+
+
 def _campaign_started_at(history: list):
     """
     スクレイピングの履歴（古い順）から、今のキャンペーンが付いた取得の時刻を返す（無ければ None）。
@@ -234,7 +248,7 @@ def _campaign_started_at(history: list):
 
 
 def _feed_events(wishlist: dict) -> list:
-    """フィードに載せる出来事 [{"id", "title", "at", "asin"}]（値下がり・読み放題入り・キャンペーン開始。購入済みの本は除く）。"""
+    """フィードに載せる出来事 [{"id", "title", "at", "asin"}]（値下がり・読み放題入り・読み放題の終了・キャンペーン開始。購入済みの本は除く）。"""
     events = []
     for book in wishlist["books"]:
         if book.get("purchased"):
@@ -246,6 +260,9 @@ def _feed_events(wishlist: dict) -> list:
         joined = _joined_ku_at(book.get("price_history") or []) if book.get("ku") else None
         if joined:
             events.append({"id": f"ku:{asin}:{joined}", "title": f"読み放題（Kindle Unlimited）に入りました: {title}", "at": joined, "asin": asin})
+        left = _left_ku_at(book.get("price_history") or []) if not book.get("ku") else None
+        if left:
+            events.append({"id": f"ku-ended:{asin}:{left}", "title": f"読み放題が終わりました（Kindle Unlimited）: {title}", "at": left, "asin": asin})
         campaign = book.get("campaign") or ""
         started = _campaign_started_at(book.get("price_history") or []) if price is not None and campaign else None
         if started:
