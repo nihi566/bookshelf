@@ -3,7 +3,7 @@
 // 「点」= 1 つのハイライト。取り込み元（Kindle / Play Books）が違っても同じ形で扱う。
 // パーサは ParsedBook[] を返し、mergeParsed() でライブラリへ取り込む。
 //
-// ParsedBook = { title, author, source, asin?, highlights: ParsedHighlight[] }
+// ParsedBook = { title, author, source, asin?, volumeId?（Play ブックスの書籍 ID）, highlights: ParsedHighlight[] }
 // ParsedHighlight = { text, note?, chapter?, location?, locationEnd?, page?, color?, createdAt?, kind? }
 
 import { bookKey, cleanText, hash, normalizeText } from './text.js';
@@ -61,7 +61,7 @@ export function highlightIdFor(bookId, text) {
  * reviveDeleted: false … 削除済みの本は復活させずに飛ばす（ブラウザ拡張の自動取り込みなど、人が操作していない取り込み用）
  */
 export function mergeParsed(library, parsedBooks, { now = new Date().toISOString(), reviveDeleted = true } = {}) {
-  const stats = { books: 0, booksAdded: 0, added: 0, updated: 0, unchanged: 0, skippedDeleted: 0, skippedDeletedBooks: 0 };
+  const stats = { books: 0, booksAdded: 0, booksUpdated: 0, added: 0, updated: 0, unchanged: 0, skippedDeleted: 0, skippedDeletedBooks: 0 };
   for (const pb of parsedBooks) {
     // 書名・著者は 1 行にする（改行入りの書名で Markdown の見出しが崩れないように）
     const title = cleanText(pb.title).replace(/\s+/g, ' ');
@@ -98,7 +98,13 @@ export function mergeParsed(library, parsedBooks, { now = new Date().toISOString
     }
     stats.books++;
     if (!book.author && pb.author) book.author = cleanText(pb.author).replace(/\s+/g, ' ');
-    if (pb.asin && !book.asin) book.asin = pb.asin;
+    // 表紙に使う ID。既にある本に後から付いたときも保存し直せるよう数える
+    const coverIds = ['asin', 'volumeId'].filter((k) => pb[k] && !book[k]);
+    for (const k of coverIds) book[k] = pb[k];
+    if (coverIds.length && book.createdAt !== now) {
+      book.updatedAt = now;
+      stats.booksUpdated++;
+    }
     if (!book.sources.includes(pb.source)) book.sources.push(pb.source);
 
     const existing = Object.values(library.highlights).filter((h) => h.bookId === bookId);

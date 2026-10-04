@@ -5,7 +5,7 @@ import { vaultPaths } from '../../core/obsidian.js';
 import { normalizeText } from '../../core/text.js';
 import { browserStore, formatPrice, loadMarks, searchWishlist, wishlistSummary } from '../../core/wishlist.js';
 import { loadWishlist } from '../wishlist-data.js';
-import { bookRow, emptyBooksBlock, highlightCard, kindleAlertBlock, lineIndex, sourceBadge, spineColor } from '../ui.js';
+import { bookRow, bookSpine, emptyBooksBlock, highlightCard, kindleAlertBlock, lineIndex, sourceBadge } from '../ui.js';
 
 const flow = html`<div class="flow" aria-label="点から立体へ">
   <div class="f-point"><b>点</b>線を引いた一文</div>
@@ -147,7 +147,7 @@ export const book = {
     return html`<a class="back" href="#/books">‹ 読んだ本</a>
       <div class="page-head">
         <div class="row" style="flex-wrap:nowrap;align-items:flex-start;gap:12px">
-          <span class="book-spine" style="background:${spineColor(b.title)}" aria-hidden="true">${[...b.title][0]}</span>
+          ${bookSpine(b)}
           <div><h1>${b.title}</h1><div class="sub">${b.author || '著者不明'} ${b.sources.map(sourceBadge)} ・ ${hs.length} 点</div></div>
         </div>
       </div>
@@ -238,7 +238,7 @@ function renderWishlistHits(root, q) {
 }
 
 function wishlistHitRow(b) {
-  const inner = html`<span class="book-spine" style="background:${spineColor(b.title)}" aria-hidden="true">${[...b.title][0] || ''}</span>
+  const inner = html`${bookSpine(b)}
     <span class="grow"><span class="title">${b.title}</span><span class="meta">${formatPrice(b)}</span></span>`;
   return b.asin
     ? html`<li><a class="book-item" href="https://www.amazon.co.jp/dp/${b.asin}" target="_blank" rel="noopener noreferrer" aria-label="${b.title}（Amazon で開く）">${inner}</a></li>`

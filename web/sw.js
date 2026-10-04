@@ -1,6 +1,6 @@
 // オフラインでも開けるようにするサービスワーカー。
 // ネットワーク優先（更新をすぐ反映）で、つながらないときだけキャッシュを使う。
-const CACHE = 'bh-v3';
+const CACHE = 'bh-v4';
 const SHELL = [
   './',
   'index.html',
@@ -34,6 +34,7 @@ const SHELL = [
   'core/analysis/prompts.js',
   'core/analysis/recommend.js',
   'core/analysis/vectors.js',
+  'core/covers.js',
   'core/importing.js',
   'core/jobs.js',
   'core/kindle-status.js',

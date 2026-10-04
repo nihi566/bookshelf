@@ -638,6 +638,11 @@ const forms = {
   },
 };
 
+// 表紙が読めない（通信できない・表紙の無い本で 1px の画像が返る）ときは画像を外し、書名の 1 文字目を見せる
+const dropCover = (img) => img.matches?.('img[data-cover]') && img.remove();
+document.addEventListener('error', (e) => dropCover(e.target), true);
+document.addEventListener('load', (e) => e.target.naturalWidth <= 1 && dropCover(e.target), true);
+
 document.addEventListener('click', (e) => {
   const el = e.target.closest('[data-action]');
   if (!el || el.tagName === 'INPUT') return;

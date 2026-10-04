@@ -2,7 +2,7 @@
 // タグ・★・種別はブラウザ（localStorage）に旧画面と同じキーで保存する（core/wishlist.js）。
 import { html } from '../html.js';
 import { download } from '../services.js';
-import { spineColor, toast } from '../ui.js';
+import { bookSpine, toast } from '../ui.js';
 import { applyImportedMarks, bookmeterUrl, browserStore, cleanupSyncedMarks, collectMarks, filterWishlist, formatPrice, inShelf, KEYS, loadMarks, marksFile, memoryStore, openWishlistFilters, parseMarksFile, priceChange, priceSparkline, priceTotal, readingCounts, readingLookup, saveMarks, shelfCounts, TAG_FILTER_LABELS, TAG_LABELS, tagCounts, toggleMark } from '../../core/wishlist.js';
 import { listBooks } from '../../core/model.js';
 import { isoDate } from '../../core/text.js';
@@ -14,7 +14,6 @@ const shelfLabel = (shelf, n) => `${SHELVES[shelf]} ${n}`;
 // 購入済みの内訳（本棚の線の有無で分ける）
 const READINGS = { all: 'すべて', unread: 'まだ線が無い', reading: '読書中' };
 const readingLabel = (reading, n) => `${READINGS[reading]} ${n}`;
-const COVER = (asin) => `https://images-na.ssl-images-amazon.com/images/P/${asin}.09.MZZZZZZZ.jpg`;
 
 // localStorage に保存できないブラウザ用。画面を移っても付けたタグが残るよう 1 つだけ持ち、
 // canStore: false のままにして「閉じる前に書き出して」の案内と公開データとの差の書き出しを使う（旧画面と同じ）
@@ -314,7 +313,7 @@ function bookmeterLink(book) {
 }
 
 function itemRow({ book, marks, reading }) {
-  const cover = html`<span class="wl-cover" style="background:${spineColor(book.title)}" aria-hidden="true">${[...book.title][0] || ''}${book.asin ? html`<img src="${COVER(book.asin)}" alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer">` : ''}</span>`;
+  const cover = bookSpine(book, 'wl-cover');
   const text = html`<span class="grow"><span class="title">${book.title}</span><span class="meta">${formatPrice(book)}${changeBadges(book)}${book.ku ? html` <span class="badge ku">KU</span>` : ''}${inShelf({ book, marks }, 'purchased') ? html` <span class="badge">購入済み</span>` : ''}${readingBadge({ book, marks, reading })}</span>${sparkline(book)}</span>`;
   const value = parseInt(marks.rating, 10) || 0;
   return html`<li class="wl-item" data-asin="${book.asin}">
