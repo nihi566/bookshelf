@@ -233,7 +233,7 @@ export async function analyzeLibrary({ library, llm: rawLlm, cache = emptyCache(
     solid = {
       title: clean(s.title, 60) || '知識の核',
       core: clean(s.core, 1200),
-      relations: (Array.isArray(s.relations) ? s.relations : [])
+      relations: objects(s.relations)
         .map((r) => ({ from: planeRef(r.from), to: planeRef(r.to), type: RELATION_TYPES.find((t) => String(r.type).includes(t)) || '関連する', description: clean(r.description, 300) }))
         .filter((r) => r.from && r.to && r.from !== r.to),
       principles: strList(s.principles, 8, 300),
@@ -333,7 +333,7 @@ export async function recommendBooks({ library, analysis, llm, signal, onProgres
   if (verify) {
     onProgress({ stage: 'recommend', done: 0, total: 3, message: '本を探す方向を考えています' });
     const s = await llm.chatJson({ ...searchPrompt({ solid: analysis.solid, planes: analysis.planes, count: Math.min(6, count), prefs }), signal });
-    const searches = (Array.isArray(s?.searches) ? s.searches : []).map((x) => ({ query: clean(x.query, 40), plane: x.plane, kind: kindOf(x.kind) })).filter((x) => x.query).slice(0, 6);
+    const searches = objects(s?.searches).map((x) => ({ query: clean(x.query, 40), plane: x.plane, kind: kindOf(x.kind) })).filter((x) => x.query).slice(0, 6);
     const candidates = [];
     const seen = new Set(readKeys);
     // 欲しい本のうち、知識の全体像に近い本を先に候補にする
@@ -362,7 +362,7 @@ export async function recommendBooks({ library, analysis, llm, signal, onProgres
       const r = await llm.chatJson({ ...pickPrompt({ solid: analysis.solid, planes: analysis.planes, candidates, count, prefs }), signal, temperature: 0.3 });
       const picked = new Set();
       const recs = [];
-      for (const p of Array.isArray(r?.picks) ? r.picks : []) {
+      for (const p of objects(r?.picks)) {
         const c = namedCandidate(p.reason, candidates) || candidates[Number(p.candidate) - 1];
         if (!c || picked.has(c)) continue;
         picked.add(c);
@@ -384,7 +384,7 @@ export async function recommendBooks({ library, analysis, llm, signal, onProgres
   for (let round = 0; round < 2 && recs.length < Math.ceil(count / 2); round++) {
     const p = recommendPrompt({ solid: analysis.solid, planes: analysis.planes, readTitles, count: count + 2, avoid: rejected, prefs });
     const r = await llm.chatJson({ ...p, signal, temperature: 0.5 + round * 0.2 });
-    for (const b of Array.isArray(r?.books) ? r.books : []) {
+    for (const b of objects(r?.books)) {
       const rec = { title: clean(b.title, 120), author: clean(b.author, 80), planeId: planeRef(b.plane), kind: kindOf(b.kind), reason: clean(stripPlaneRefs(b.reason), 400) };
       const key = bookKey(rec.title);
       if (!rec.title || seen.has(key)) continue;
@@ -432,6 +432,11 @@ function clean(v, max) {
     .replace(/\s+/g, ' ')
     .trim();
   return s.length > max ? s.slice(0, max - 1) + '…' : s;
+}
+
+/** LLM の出力の配列のうち、オブジェクトの要素だけ（null や文字列が混ざっても落ちないように） */
+function objects(v) {
+  return (Array.isArray(v) ? v : []).filter((x) => x && typeof x === 'object');
 }
 
 function strList(v, n, max) {
@@ -487,7 +492,15 @@ export function deserializeCache(data) {
   if (!data) return emptyCache();
   const vectors = {};
   for (const [id, b64] of Object.entries(data.embeddings?.vectors || {})) {
-    const bytes = fromBase64(b64);
+    // 壊れたベクトルはその点だけ捨てる（埋め込み直せばよい。キャッシュのせいで分析を毎回失敗させない）
+    if (typeof b64 !== 'string') continue;
+    let bytes;
+    try {
+      bytes = fromBase64(b64);
+    } catch {
+      continue;
+    }
+    if (bytes.byteLength % 4) continue;
     vectors[id] = new Float32Array(bytes.buffer, bytes.byteOffset, bytes.byteLength / 4);
   }
   // keys が壊れていたら持たない（前の版のキャッシュと同じに扱い、文が同じ点は使い続ける）

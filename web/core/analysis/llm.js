@@ -47,8 +47,11 @@ export function createLlmClient({ baseUrl, chatModel, embedModel = '', apiKey = 
     const onAbort = () => ctrl.abort(signal.reason);
     signal?.addEventListener('abort', onAbort);
     let res;
+    let text;
     try {
       res = await doFetch(base + path, { method, headers, body: body ? JSON.stringify(body) : undefined, signal: ctrl.signal });
+      // 本文を受け取り終えるまでがタイムアウト・中止の対象（ヘッダだけ返して止まるサーバで待ち続けない）
+      text = await res.text();
     } catch (e) {
       if (signal?.aborted) throw new LlmError('中止しました');
       throw new LlmError(`LLM サーバに接続できません (${base}): ${e.message}。サーバの起動と CORS 設定を確認してください。`);
@@ -56,7 +59,6 @@ export function createLlmClient({ baseUrl, chatModel, embedModel = '', apiKey = 
       clearTimeout(timer);
       signal?.removeEventListener('abort', onAbort);
     }
-    const text = await res.text();
     if (!res.ok) throw new LlmError(`LLM サーバがエラーを返しました (HTTP ${res.status}): ${text.slice(0, 300)}`, { status: res.status, body: text });
     try {
       return JSON.parse(text);
@@ -115,7 +117,8 @@ export function createLlmClient({ baseUrl, chatModel, embedModel = '', apiKey = 
         continue;
       }
       const parsed = extractJson(content);
-      if (parsed !== undefined) return parsed;
+      // 指定の形はどれもオブジェクト。null やただの数・文字列は読めなかったものとして言い直させる
+      if (parsed && typeof parsed === 'object') return parsed;
       // 壊れた JSON が返ったら 1 回だけ言い直させる
       messages.push({ role: 'assistant', content }, { role: 'user', content: '出力が JSON として読めませんでした。説明文を付けず、指定の形式の JSON だけを出力し直してください。' });
     }
@@ -153,8 +156,20 @@ export function extractJson(text) {
   } catch {
     /* 下で部分抽出を試す */
   }
-  const start = s.search(/[[{]/);
-  if (start < 0) return undefined;
+  // 前に括弧つきの説明（「[注]」「{name, summary} の形で」など）があるときは、その後ろの括弧から試す。
+  // 括弧が閉じないまま終わったら（途中で切れた出力）、中の一部を答えにしないよう諦める
+  for (let start = s.search(/[[{]/); start >= 0; ) {
+    const { value, end } = balancedJson(s, start);
+    if (value !== undefined) return value;
+    if (end < 0) return undefined;
+    const next = s.slice(end + 1).search(/[[{]/);
+    start = next < 0 ? -1 : end + 1 + next;
+  }
+  return undefined;
+}
+
+/** s[start] の括弧と対になる括弧までを JSON として読む。end は対になる括弧の位置（閉じなければ -1） */
+function balancedJson(s, start) {
   const open = s[start];
   const close = open === '{' ? '}' : ']';
   let depth = 0;
@@ -172,11 +187,11 @@ export function extractJson(text) {
     else if (c === open) depth++;
     else if (c === close && --depth === 0) {
       try {
-        return JSON.parse(s.slice(start, i + 1));
+        return { value: JSON.parse(s.slice(start, i + 1)), end: i };
       } catch {
-        return undefined;
+        return { value: undefined, end: i };
       }
     }
   }
-  return undefined;
+  return { value: undefined, end: -1 };
 }
