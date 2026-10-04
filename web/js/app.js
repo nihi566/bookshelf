@@ -687,10 +687,19 @@ const actions = {
     autoSyncAfterChange();
   },
   'map-zoom'(el) {
+    // いま見えている大きさから拡大・縮小し、見ていた中心を保つ（CSS の最小幅があるので % ではなく px で決める）
     const svg = document.getElementById('knowledge-map');
-    const w = parseFloat(svg.getAttribute('width')) || 100;
-    const next = Math.max(100, Math.min(400, w * (el.dataset.dir === '1' ? 1.5 : 1 / 1.5)));
-    svg.setAttribute('width', `${next}%`);
+    const wrap = document.getElementById('map-wrap');
+    const box = svg.getBoundingClientRect();
+    const fx = (wrap.scrollLeft + wrap.clientWidth / 2) / box.width;
+    const fy = (wrap.scrollTop + wrap.clientHeight / 2) / box.height;
+    const base = Math.max(600, wrap.clientWidth);
+    const next = Math.max(base, Math.min(base * 4, box.width * (el.dataset.dir === '1' ? 1.5 : 1 / 1.5)));
+    svg.style.width = `${next}px`;
+    const after = svg.getBoundingClientRect();
+    wrap.scrollLeft = fx * after.width - wrap.clientWidth / 2;
+    wrap.scrollTop = fy * after.height - wrap.clientHeight / 2;
+    for (const b of wrap.querySelectorAll('[data-action="map-zoom"]')) b.disabled = b.dataset.dir === '1' ? next >= base * 4 - 1 : next <= base + 1;
   },
   sync: () => sync(),
   async 'toggle-autosync'(el) {

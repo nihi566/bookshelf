@@ -95,9 +95,9 @@ function changesBlock(a, { links = true } = {}) {
   return html`${head}
     <section class="card stack changes">
       ${c.addedLines.length ? html`<div><h3 class="small">新しい線 ${c.addedLines.length}</h3><div class="hl-lines">${c.addedLines.map((l) => chip(l.id, lineName(l.id, l.name)))}</div></div>` : ''}
-      ${c.grownLines.length ? html`<div><h3 class="small">大きくなった線 ${c.grownLines.length}</h3><div class="hl-lines">${c.grownLines.map((l) => chip(l.id, `${lineName(l.id, l.name)} ＋${l.added}`))}</div></div>` : ''}
+      ${c.grownLines.length ? html`<div><h3 class="small">大きくなった線 ${c.grownLines.length}</h3><div class="hl-lines">${c.grownLines.map((l) => chip(l.id, html`${lineName(l.id, l.name)} <span class="nowrap">＋${l.added}</span>`))}</div></div>` : ''}
       ${c.removedLines.length ? html`<div><h3 class="small">消えた線 ${c.removedLines.length}</h3><p class="small muted">${c.removedLines.map((l) => l.name).join('、')}</p></div>` : ''}
-      ${c.connectedPoints.length ? html`<div><h3 class="small">新しくつながった点 ${c.connectedPoints.length}</h3><div class="hl-lines">${[...connected].map(([id, n]) => chip(id, `${lineName(id, '線')}に ${n} 点`))}</div></div>` : ''}
+      ${c.connectedPoints.length ? html`<div><h3 class="small">新しくつながった点 ${c.connectedPoints.length}</h3><div class="hl-lines">${[...connected].map(([id, n]) => chip(id, html`${lineName(id, '線')}に <span class="nowrap">${n} 点</span>`))}</div></div>` : ''}
     </section>`;
 }
 
@@ -208,7 +208,7 @@ const pcConfigured = (state) => state.settings.ai.mode === 'companion' && Boolea
 
 function historyListHtml(items, state) {
   return items.length
-    ? html`<ul class="card plain history-list">${items.map((h) => html`<li><a href="#/knowledge/history/${h.id}">${when(h.createdAt)}</a> <span class="small muted">点 ${h.stats?.points ?? '–'}・線 ${h.stats?.lines ?? '–'}・面 ${h.stats?.planes ?? '–'}${h.createdAt === state?.analysis?.createdAt ? '（いま表示している分析）' : ''}</span><br><span class="small">${changeSummary(h.changes)}</span></li>`)}</ul>`
+    ? html`<ul class="card plain history-list">${items.map((h) => html`<li><a href="#/knowledge/history/${h.id}">${when(h.createdAt)}</a> <span class="small muted"><span class="nowrap">点 ${h.stats?.points ?? '–'}</span>・<span class="nowrap">線 ${h.stats?.lines ?? '–'}</span>・<span class="nowrap">面 ${h.stats?.planes ?? '–'}</span>${h.createdAt === state?.analysis?.createdAt ? '（いま表示している分析）' : ''}</span><br><span class="small">${changeSummary(h.changes).split('・').map((part, i) => html`${i ? '・' : ''}<span class="nowrap">${part}</span>`)}</span></li>`)}</ul>`
     : html`<p class="small muted">まだ履歴がありません（PC で分析すると残ります）。</p>`;
 }
 
@@ -339,10 +339,16 @@ function mapSvg(a) {
       return `<line class="edge-${e.kind === 'core' ? 'core' : 'plane'}" x1="${+f.x}" y1="${+f.y}" x2="${+t.x}" y2="${+t.y}"/>`;
     })
     .join('');
+  // 面の名前は横に並ぶので、隣の面と重ならない字数までにする（全角 1 文字 ≒ フォントサイズ 84）
+  const planes = nodes.filter((n) => n.kind === 'plane');
+  const planeChars = (n) => {
+    const gaps = planes.filter((o) => o !== n && Math.abs(o.y - n.y) < 160).map((o) => Math.abs(o.x - n.x));
+    return gaps.length ? Math.max(4, Math.min(12, Math.floor(Math.min(...gaps) / 84) - 1)) : 12;
+  };
   const nodeSvg = nodes
     .map((n) => {
       const r = n.kind === 'core' ? 70 : n.kind === 'plane' ? 48 : Math.min(36, 16 + (n.weight || 1) * 2);
-      const label = esc(truncate(n.label, n.kind === 'line' ? 9 : 12));
+      const label = esc(truncate(n.label, n.kind === 'line' ? 9 : n.kind === 'plane' ? planeChars(n) : 12));
       const anchor = n.kind === 'line' ? (n.x < -1 ? 'end' : n.x > 1 ? 'start' : 'middle') : 'middle';
       const tx = n.kind === 'line' ? n.x + (anchor === 'end' ? -r - 16 : anchor === 'start' ? r + 16 : 0) : n.x;
       const ty = n.kind === 'line' ? n.y + 22 : n.y + r + 92;
@@ -351,7 +357,7 @@ function mapSvg(a) {
     })
     .join('');
   return html`<div class="map-wrap" id="map-wrap">
-    <div class="map-tools"><button type="button" data-action="map-zoom" data-dir="1" aria-label="拡大">＋</button><button type="button" data-action="map-zoom" data-dir="-1" aria-label="縮小">－</button></div>
+    <div class="map-tools"><button type="button" data-action="map-zoom" data-dir="1" aria-label="拡大">＋</button><button type="button" data-action="map-zoom" data-dir="-1" aria-label="縮小" disabled>－</button></div>
     <svg id="knowledge-map" viewBox="${minX} ${minY} ${w} ${h}" width="100%" role="img" aria-label="知識マップ">${raw(edgeSvg)}${raw(nodeSvg)}</svg>
   </div>`;
 }

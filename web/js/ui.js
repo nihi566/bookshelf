@@ -42,8 +42,12 @@ export function lineIndex(analysis) {
   return map;
 }
 
+function locationParts(h) {
+  return [h.location != null ? `位置 ${h.location}` : '', h.page ? `p.${h.page}` : '', isoDate(h.createdAt)].filter(Boolean);
+}
+
 export function locationText(h) {
-  return [h.location != null ? `位置 ${h.location}` : '', h.page ? `p.${h.page}` : '', isoDate(h.createdAt)].filter(Boolean).join(' · ');
+  return locationParts(h).join(' · ');
 }
 
 export function highlightCard(h, { library, lines = [], query = '', showBook = true } = {}) {
@@ -57,7 +61,7 @@ export function highlightCard(h, { library, lines = [], query = '', showBook = t
     <div class="hl-foot">
       <div class="hl-meta">
         ${showBook && book ? html`<a class="book-link" href="#/book/${book.id}">${book.title}</a>` : ''}
-        <span>${locationText(h)}</span>
+        <span>${locationParts(h).map((p, i) => html`${i ? ' · ' : ''}<span class="nowrap">${p}</span>`)}</span>
         ${sourceBadge(h.source)}
       </div>
       <div class="hl-actions">
