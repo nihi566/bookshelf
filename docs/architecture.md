@@ -25,7 +25,7 @@
 
 ```
 Library = { version, books: { [id]: Book }, highlights: { [id]: Highlight }, updatedAt }
-Book      = { id: 'b'+hash(書名の正規化), title, author, sources: ['kindle'|'playbooks'], asin?, updatedAt, deleted? }
+Book      = { id: 'b'+hash(書名の正規化), title, author, sources: ['kindle'|'playbooks'|'paper'|'memo'], asin?, volumeId?, cover?（アップロードした表紙の data URL）, technical?（技術書か。無ければ書名から推定）, updatedAt, deleted? }
 Highlight = { id: 'h'+hash(bookId+本文の正規化), bookId, source, kind: 'highlight'|'note',
               text, note, chapter, location, locationEnd, page, color, createdAt,
               favorite, tags, userNote, importedAt, updatedAt, deleted?, supersededBy? }
@@ -37,7 +37,7 @@ Highlight = { id: 'h'+hash(bookId+本文の正規化), bookId, source, kind: 'hi
 - 削除は墓標（`deleted: true`）で持つので、再取り込みでも同期でも復活しない
 - 端末間の同期（`mergeLibraries`）は **欄ごと** に統合し、どちら向きに統合しても同じ結果になる
   - 取り込みで決まる欄（章・色・位置・メモなど）は `updatedAt` が新しい方を採り、空欄はもう一方で埋める
-  - 利用者の欄（★・タグ・自分のメモ・削除）は、利用者が編集した時刻 `userUpdatedAt` が新しい方をまとめて採る。取り込みで欄が埋まっても `userUpdatedAt` は変わらないので、未同期のスマホの編集が PC 側に上書きされない（古い版のデータは、編集の跡があれば `updatedAt` で代用）
+  - 利用者の欄（★・タグ・自分のメモ・削除。本では削除・表紙・技術書）は、利用者が編集した時刻 `userUpdatedAt` が新しい方をまとめて採る。取り込みで欄が埋まっても `userUpdatedAt` は変わらないので、未同期のスマホの編集が PC 側に上書きされない（古い版のデータは、編集の跡があれば `updatedAt` で代用）
   - 伸ばしたハイライトに置き換わった点（`supersededBy`）は、どちらの端末から来ても消えたまま
 - 包含関係での置き換え（伸ばしたハイライト）は Kindle だけで、位置が重なるか、位置が無ければ同じページのときだけ行う（Play ブックスの別ページの短いハイライトを消さない）
 - おすすめへの反応は `library.feedback[書名キー] = { status: read|want|no|'', updatedAt }` に持ち、同期では新しい方を採る

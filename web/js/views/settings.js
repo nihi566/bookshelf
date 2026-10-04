@@ -74,6 +74,12 @@ export const importView = {
         </details>
       </div>
 
+      <div class="section"><h2>紙の本・読書メモ</h2></div>
+      <div class="card">
+        <p class="help">紙の本は <a href="#/books">読んだ本</a> の「＋ 紙の本」で書名と表紙を登録し、本の画面で線を引いた文を入力します。</p>
+        <p class="help">Obsidian などに書いた<b>読書メモ（.md）</b>は、上の欄でそのまま選べます（複数可）。ファイル名を書名にし、見出しを章、段落・箇条書きの項目を 1 点ずつにします。書名の一部が同じ本が 1 冊だけあればその本にまとめ、既にある線と同じ文は増やしません。画像の埋め込みは取り込めません。PC では <code>bh import &lt;フォルダ&gt;</code> でフォルダごと取り込めます。</p>
+      </div>
+
       <div class="section"><h2>ほかに</h2></div>
       <div class="card row spread"><span class="help grow">架空の 8 冊・48 の点で動きを試せます。</span><button class="btn" data-action="load-sample">サンプルを入れる</button></div>
       <p class="small muted" style="margin-top:12px">現在: 本 ${libraryStats(state.library).books} 冊 / 点 ${libraryStats(state.library).highlights} 件</p>`;
@@ -86,7 +92,7 @@ export const settingsView = {
     const s = libraryStats(state.library);
     return html`<div class="page-head"><h1>設定</h1></div>
       <div class="card stack">
-        <a class="row spread" href="#/import"><b>取り込み</b><span class="muted">Kindle・Play ブックス ›</span></a>
+        <a class="row spread" href="#/import"><b>取り込み</b><span class="muted">Kindle・Play ブックス・読書メモ ›</span></a>
       </div>
 
       <div class="section"><h2>AI（ローカル LLM）</h2></div>

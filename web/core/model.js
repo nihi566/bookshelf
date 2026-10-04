@@ -7,14 +7,38 @@
 // ParsedHighlight = { text, note?, chapter?, location?, locationEnd?, page?, color?, createdAt?, kind? }
 
 import { bookKey, cleanText, hash, normalizeText } from './text.js';
+import { isUploadedCover } from './covers.js';
 
 export const SOURCES = {
   kindle: 'Kindle',
   playbooks: 'Play Books',
+  paper: '紙の本',
+  // Obsidian などに書いていた読書メモ（Markdown）から移したもの
+  memo: '読書メモ',
   manual: '手入力',
 };
 
 export const LIBRARY_VERSION = 1;
+
+// ---- 技術書（IT の教科書）。線は残して見られるが、「点」には数えない（件数・今日の点・AI 分析から外す） ----
+
+// 英字の語は前後が英字でないときだけ一致させる（"digital" の git、"javanese" の java などに反応しない）。
+// 後読み（?<!）は古い iOS Safari でモジュールごと読めなくなるので使わない
+const TECH_WORDS = /(?:^|[^a-z])(?:sql|mysql|postgresql|php|python|javascript|typescript|java|ruby|rails|golang|rust|c\+\+|c#|html|css|linux|unix|git|github|docker|kubernetes|aws|azure|gcp|tcp\/ip|http|api|react|vue|laravel|devops)(?![a-z])/;
+const TECH_PHRASES = /データベース|db設計|プログラミング|プログラマ|ソフトウェア|フロントエンド|バックエンド|インフラ|ネットワーク入門|オブジェクト指向|アルゴリズム|データ構造|機械学習|深層学習|ディープラーニング|コマンドライン|シェルスクリプト|itエンジニア|要件定義|システム設計|システム開発|aiのしくみ|web技術|webを支える|コンピュータ|情報処理|テスト駆動|リファクタリング/;
+
+/** 書名から IT の教科書かどうかを推定する */
+export function guessTechnical(title) {
+  // 「PHP新書」「PHP文庫」は出版社（PHP研究所）の名前で、プログラミング言語ではない
+  const t = normalizeText(title).replace(/php(?:新書|文庫|研究所|ビジネス新書|文芸文庫|エディターズ)/g, '');
+  return TECH_WORDS.test(t) || TECH_PHRASES.test(t);
+}
+
+/** 技術書か。本で決めた値（technical: true / false）があればそれを、無ければ書名から推定する */
+export function isTechnicalBook(book) {
+  if (!book) return false;
+  return typeof book.technical === 'boolean' ? book.technical : guessTechnical(book.title);
+}
 
 export function emptyLibrary() {
   return { version: LIBRARY_VERSION, books: {}, highlights: {}, feedback: {}, updatedAt: null };
@@ -61,11 +85,14 @@ export function highlightIdFor(bookId, text) {
  * reviveDeleted: false … 削除済みの本は復活させずに飛ばす（ブラウザ拡張の自動取り込みなど、人が操作していない取り込み用）
  */
 export function mergeParsed(library, parsedBooks, { now = new Date().toISOString(), reviveDeleted = true } = {}) {
-  const stats = { books: 0, booksAdded: 0, booksUpdated: 0, added: 0, updated: 0, unchanged: 0, skippedDeleted: 0, skippedDeletedBooks: 0 };
+  // memoTitles: 読書メモの書名を既にある本の書名に合わせたもの（取り込み結果で知らせる）
+  const stats = { books: 0, booksAdded: 0, booksUpdated: 0, added: 0, updated: 0, unchanged: 0, skippedDeleted: 0, skippedDeletedBooks: 0, memoTitles: [] };
   for (const pb of parsedBooks) {
     // 書名・著者は 1 行にする（改行入りの書名で Markdown の見出しが崩れないように）
-    const title = cleanText(pb.title).replace(/\s+/g, ' ');
-    if (!title) continue;
+    const rawTitle = cleanText(pb.title).replace(/\s+/g, ' ');
+    if (!rawTitle) continue;
+    const title = pb.source === 'memo' ? noteBookTitle(library, rawTitle) : rawTitle;
+    if (title !== rawTitle) stats.memoTitles.push({ from: rawTitle, to: title });
     const bookId = bookIdFor(title);
     let book = library.books[bookId];
     const isNew = !book;
@@ -125,6 +152,13 @@ export function mergeParsed(library, parsedBooks, { now = new Date().toISOString
         else stats.unchanged++;
         continue;
       }
+      // 読書メモは Kindle・Play ブックスの線を写したものが多い。既にある線に含まれる文は増やさない
+      // 短い文（「習慣」など）はどの線にも含まれがちなので、含む判定はある程度の長さの文だけにする
+      const c = compact(ph.text);
+      if (pb.source === 'memo' && existing.some((h) => (c.length >= MEMO_CONTAINED_MIN ? compact(h.text).includes(c) : compact(h.text) === c))) {
+        stats.unchanged++;
+        continue;
+      }
       // Kindle はハイライトを伸ばすと古い短い版も残るので、包含関係で置き換える
       const norm = normalizeText(ph.text);
       const sameSpot = (h) => extendable && h.source === pb.source && locationsOverlap(h, ph);
@@ -172,6 +206,25 @@ export function mergeParsed(library, parsedBooks, { now = new Date().toISOString
   }
   library.updatedAt = now;
   return stats;
+}
+
+const MEMO_CONTAINED_MIN = 12;
+
+/** 空白・改行の違いを無視して比べるための形 */
+function compact(text) {
+  return normalizeText(text).replace(/\s/g, '');
+}
+
+/**
+ * 読書メモの書名を、既にある本の書名に合わせる。メモの書名は短く書かれがち（「ハマトン」→『新版 ハマトンの知的生活』）なので、
+ * 同じ書名の本が無く、メモの書名を含む本がちょうど 1 冊だけあるときはその本にまとめる（2 冊以上なら決めつけない）
+ */
+function noteBookTitle(library, title) {
+  if (library.books[bookIdFor(title)]) return title;
+  const key = bookKey(title);
+  if (key.length < 3) return title;
+  const hits = Object.values(library.books).filter((b) => !b.deleted && bookKey(b.title).includes(key));
+  return hits.length === 1 ? hits[0].title : title;
 }
 
 /** 古い版のデータ（userUpdatedAt 無し）で編集の跡があれば、updatedAt を進める前にその時刻を編集時刻として残す */
@@ -234,7 +287,8 @@ export function dedupeContained(highlights) {
 
 // 利用者が編集する欄（★・タグ・自分のメモ・削除）。取り込みで埋まる欄とは別の時刻（userUpdatedAt）で比べる
 const USER_FIELDS = ['favorite', 'tags', 'userNote', 'deleted', 'deletedWithBook'];
-const BOOK_USER_FIELDS = ['deleted'];
+// 本の表紙（アップロードしたもの）と技術書かどうかも、利用者が決める欄
+const BOOK_USER_FIELDS = ['deleted', 'technical', 'cover'];
 
 const isBlank = (v) => v === null || v === undefined || v === '' || (Array.isArray(v) && !v.length);
 const later = (a, b) => ((a || '') > (b || '') ? a : b) || null;
@@ -282,6 +336,8 @@ function mergeHighlight(a, b) {
 
 function mergeBook(a, b) {
   const out = mergeItem(a, b, BOOK_USER_FIELDS);
+  // ほかの端末から届いた表紙は形を確かめる（画像の data URL でなければ・大きすぎれば持たない）
+  if ('cover' in out && !isUploadedCover(out.cover)) delete out.cover;
   const rank = (x) => (Object.keys(SOURCES).indexOf(x) + 1 || 99);
   out.sources = [...new Set([...(a.sources || []), ...(b.sources || [])])].sort((x, y) => rank(x) - rank(y) || x.localeCompare(y));
   out.createdAt = [a.createdAt, b.createdAt].filter(Boolean).sort()[0] || out.createdAt;
@@ -302,6 +358,8 @@ export function mergeLibraries(base, incoming) {
       out[kind][id] = cur ? merge(cur, item) : structuredClone(item);
     }
   }
+  // 片方にしか無かった本の表紙も形を確かめる（mergeBook を通らないため）
+  for (const b of Object.values(out.books)) if ('cover' in b && !isUploadedCover(b.cover)) delete b.cover;
   // 置き換わった古い点に、置き換え先より新しい自分の編集（もう一方の端末で未同期だったもの）があれば引き継ぐ
   for (const h of Object.values(out.highlights)) {
     const target = h.supersededBy && out.highlights[h.supersededBy];
@@ -327,6 +385,11 @@ export function liveHighlights(library) {
   return Object.values(library.highlights).filter((h) => !h.deleted && !library.books[h.bookId]?.deleted);
 }
 
+/** 「点」として数える線（技術書の線を除く）。件数・今日の点・AI 分析はこれを使う */
+export function pointHighlights(library) {
+  return liveHighlights(library).filter((h) => !isTechnicalBook(library.books[h.bookId]));
+}
+
 /** 本の中での並び順（位置 → ページ → 日付） */
 export function compareInBook(a, b) {
   const la = a.location ?? pageNumber(a.page);
@@ -346,8 +409,11 @@ export function bookHighlights(library, bookId) {
   return liveHighlights(library).filter((h) => h.bookId === bookId).sort(compareInBook);
 }
 
-/** 本の一覧（ハイライト数・最終ハイライト日つき）。新しく線を引いた順 */
-export function listBooks(library) {
+/**
+ * 本の一覧（ハイライト数・最終ハイライト日・技術書かどうかつき）。新しく線を引いた順
+ * includeEmpty: 線がまだ無い紙の本も含める（登録した直後の本を一覧から開けるように。Obsidian の書き出しなどには含めない）
+ */
+export function listBooks(library, { includeEmpty = false } = {}) {
   const byBook = new Map();
   for (const h of liveHighlights(library)) {
     const e = byBook.get(h.bookId) || { count: 0, last: '' };
@@ -357,8 +423,8 @@ export function listBooks(library) {
     byBook.set(h.bookId, e);
   }
   return Object.values(library.books)
-    .filter((b) => !b.deleted && byBook.has(b.id))
-    .map((b) => ({ ...b, count: byBook.get(b.id).count, lastHighlightedAt: byBook.get(b.id).last }))
+    .filter((b) => !b.deleted && (byBook.has(b.id) || (includeEmpty && b.sources?.includes('paper'))))
+    .map((b) => ({ ...b, count: byBook.get(b.id)?.count || 0, lastHighlightedAt: byBook.get(b.id)?.last || b.createdAt || '', isTechnical: isTechnicalBook(b) }))
     .sort((a, b) => b.lastHighlightedAt.localeCompare(a.lastHighlightedAt) || a.title.localeCompare(b.title, 'ja'));
 }
 
@@ -406,17 +472,87 @@ export function deleteBook(library, bookId, now = new Date().toISOString()) {
   library.updatedAt = now;
 }
 
+/** highlights は点の数（技術書の線を除く）。technical は数えなかった技術書の線の数 */
 export function libraryStats(library) {
-  const hs = liveHighlights(library);
+  const live = liveHighlights(library);
+  const hs = live.filter((h) => !isTechnicalBook(library.books[h.bookId]));
   const books = listBooks(library);
   const bySource = {};
   for (const h of hs) bySource[h.source] = (bySource[h.source] || 0) + 1;
-  return { books: books.length, highlights: hs.length, bySource, favorites: hs.filter((h) => h.favorite).length };
+  return { books: books.length, highlights: hs.length, technical: live.length - hs.length, bySource, favorites: hs.filter((h) => h.favorite).length };
+}
+
+// ---- 紙の本（書名・表紙を登録し、線を引いた文を手で入れる） ----
+
+function oneLine(s) {
+  return cleanText(s).replace(/\s+/g, ' ');
+}
+
+function checkCover(cover) {
+  if (cover && !isUploadedCover(cover)) throw new Error('表紙は JPEG・PNG・WebP の画像にしてください');
+}
+
+/**
+ * 紙の本を登録する。同じ書名の本が既にあれば、その本に「紙の本」を足す（線はそのまま）
+ * technical を省くと書名からの推定に任せる
+ */
+export function registerBook(library, { title, author = '', cover = '', technical } = {}, now = new Date().toISOString()) {
+  const t = oneLine(title);
+  if (!t) throw new Error('書名を入力してください');
+  checkCover(cover);
+  mergeParsed(library, [{ title: t, author: oneLine(author), source: 'paper', highlights: [] }], { now });
+  const patch = {};
+  if (cover) patch.cover = cover;
+  if (typeof technical === 'boolean') patch.technical = technical;
+  return updateBook(library, bookIdFor(t), patch, now);
+}
+
+/** 本の情報を変える（著者・表紙・技術書）。cover: '' で表紙を外す、technical: null で書名からの推定に戻す */
+export function updateBook(library, bookId, patch, now = new Date().toISOString()) {
+  const b = library.books[bookId];
+  if (!b || b.deleted) throw new Error('本が見つかりません');
+  checkCover(patch.cover);
+  if ('author' in patch) b.author = oneLine(patch.author);
+  if ('cover' in patch) {
+    if (patch.cover) b.cover = patch.cover;
+    else delete b.cover;
+  }
+  if ('technical' in patch) {
+    if (typeof patch.technical === 'boolean') b.technical = patch.technical;
+    else delete b.technical;
+  }
+  b.updatedAt = now;
+  // 表紙・技術書を変えたときだけ利用者の編集時刻を進める（著者だけの修正で、別の端末で付けた表紙を負かさない）
+  if ('cover' in patch || 'technical' in patch) b.userUpdatedAt = now;
+  library.updatedAt = now;
+  return b;
+}
+
+/**
+ * 紙の本に線を引いた文を足す。同じ文が既にあれば増やさず、消した文なら戻す
+ * @returns {{ highlight: object, added: boolean }}
+ */
+export function addHighlight(library, bookId, { text, page = '', chapter = '', note = '' } = {}, now = new Date().toISOString()) {
+  const b = library.books[bookId];
+  if (!b || b.deleted) throw new Error('本が見つかりません');
+  const t = cleanText(text);
+  if (!t) throw new Error('線を引いた文を入力してください');
+  const id = highlightIdFor(bookId, t);
+  const current = library.highlights[id];
+  if (current && !current.deleted) return { highlight: current, added: false };
+  if (current) {
+    updateHighlight(library, id, { deleted: false }, now);
+    delete current.deleted;
+    delete current.supersededBy;
+    return { highlight: current, added: true };
+  }
+  mergeParsed(library, [{ title: b.title, source: 'paper', highlights: [{ text: t, page: oneLine(page), chapter: oneLine(chapter), note, createdAt: now }] }], { now });
+  return { highlight: library.highlights[id], added: true };
 }
 
 /** 日付をシードにした「今日の点」。同じ日には同じ結果になる */
 export function dailyPicks(library, count = 3, date = new Date()) {
-  const hs = liveHighlights(library).sort((a, b) => a.id.localeCompare(b.id));
+  const hs = pointHighlights(library).sort((a, b) => a.id.localeCompare(b.id));
   if (!hs.length) return [];
   const day = `${date.getFullYear()}-${date.getMonth() + 1}-${date.getDate()}`;
   const scored = hs.map((h) => ({ h, s: hash(day + h.id) }));

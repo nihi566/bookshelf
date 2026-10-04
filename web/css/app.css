@@ -157,9 +157,15 @@ main { max-width: 760px; margin: 0 auto; padding: 16px 16px 32px; outline: none;
 .badge { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 0.72rem; font-weight: 600; background: var(--surface-2); color: var(--ink-2); vertical-align: 1px; }
 .badge.kindle { background: #fbe7cf; color: #8a4b00; }
 .badge.playbooks { background: #d9ecfb; color: #0c5a93; }
+.badge.paper { background: #efe3cf; color: #6b4a1a; }
+.badge.memo { background: #e6e0f3; color: #4f3b80; }
+.badge.tech { background: #e3e7ea; color: #3c4a55; }
 @media (prefers-color-scheme: dark) {
   .badge.kindle { background: #43301a; color: #f3c285; }
   .badge.playbooks { background: #183449; color: #8cc8f5; }
+  .badge.paper { background: #3d3122; color: #e8c896; }
+  .badge.memo { background: #2f2944; color: #c7b8f0; }
+  .badge.tech { background: #2c3338; color: #b9c6cf; }
 }
 
 /* 入力 */

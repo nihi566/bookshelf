@@ -11,12 +11,14 @@ import { BACKUP_FORMAT } from '../importing.js';
 import { looksLikeClippings, parseKindleClippings } from './kindle-clippings.js';
 import { isNotebookJson, looksLikeKindleExport, parseKindleExportHtml, parseNotebookJson } from './kindle-notebook.js';
 import { looksLikePlayBooksMarkdown, parsePlayBooksDocx, parsePlayBooksHtml, parsePlayBooksMarkdown, titleFromFileName } from './playbooks.js';
+import { noteTitleFromFileName, parseReadingNote } from './reading-notes.js';
 
 export const FORMAT_LABELS = {
   'kindle-clippings': 'Kindle（My Clippings.txt）',
   'kindle-export': 'Kindle（ノートブックのエクスポート HTML）',
   'kindle-notebook': 'Kindle（ノートブックのブックマークレット）',
   playbooks: 'Play Books（ドライブのメモ）',
+  'reading-note': '読書メモ（Markdown）',
   library: 'このアプリのバックアップ',
   parsed: '汎用 JSON',
 };
@@ -55,7 +57,23 @@ function isLibraryBackup(data) {
   return data && typeof data === 'object' && data.books && data.highlights && !Array.isArray(data.books) && typeof data.highlights === 'object';
 }
 
-/** 1 ファイル → { format, books?, library?, error? } */
+/**
+ * .md は Play ブックスの書き出し（表の形）なら Play Books、それ以外は自分で書いた読書メモとして読む。
+ * 読書メモに Play ブックスのページへのリンクを貼っただけのものもあるので、表の形で線が取れたときだけ Play Books にする
+ */
+function parseMarkdown(text, base) {
+  if (looksLikePlayBooksMarkdown(text)) {
+    const books = parsePlayBooksMarkdown(text, titleFromFileName(base));
+    if (books.some((b) => b.highlights.length)) return { format: 'playbooks', books };
+  }
+  const { images, ...note } = parseReadingNote(text, noteTitleFromFileName(base));
+  if (!note.highlights.length) {
+    return { error: images.length ? `本文が無く、画像 ${images.length} 枚だけのメモです（画像は取り込めません）` : '本文の無いメモです' };
+  }
+  return { format: 'reading-note', books: [note], images: images.length };
+}
+
+/** 1 ファイル → { format, books?, library?, error?, images?（取り込めなかった画像の数） } */
 async function parseOne(name, bytes) {
   const e = ext(name);
   const base = String(name).split('/').pop();
@@ -92,6 +110,7 @@ async function parseOne(name, bytes) {
     return { error: 'ハイライトが見つからない HTML です（Kindle のエクスポートか Play ブックスのメモを選んでください）' };
   }
   if (looksLikeClippings(text)) return { format: 'kindle-clippings', books: parseKindleClippings(text) };
+  if (e === 'md' || e === 'markdown') return parseMarkdown(text, base);
   if (looksLikePlayBooksMarkdown(text)) return { format: 'playbooks', books: parsePlayBooksMarkdown(text, titleFromFileName(base)) };
   if (e === 'txt') return { error: 'My Clippings.txt の形式ではありません（Play ブックスのメモは .docx か .html で書き出してください）' };
   return { error: '対応していない形式です' };
@@ -99,7 +118,7 @@ async function parseOne(name, bytes) {
 
 /**
  * @param {{ name: string, bytes: Uint8Array }[]} files
- * @returns {{ books: object[], backups: { library, analysis }[], results: { name, format, formatLabel, books, highlights, error }[] }}
+ * @returns {{ books: object[], backups: { library, analysis }[], results: { name, format, formatLabel, books, highlights, images, error }[] }}
  */
 export async function parseFiles(files) {
   const books = [];
@@ -124,7 +143,7 @@ export async function parseFiles(files) {
     const lib = r.backup?.library;
     const hl = r.books ? r.books.reduce((s, b) => s + b.highlights.length, 0) : lib ? Object.keys(lib.highlights).length : 0;
     if (!r.error && !lib && hl === 0) r.error = 'ハイライトが見つかりませんでした';
-    results.push({ name: f.name, format: r.format || '', formatLabel: FORMAT_LABELS[r.format] || '', books: r.books?.length ?? (lib ? Object.keys(lib.books).length : 0), highlights: hl, error: r.error || '' });
+    results.push({ name: f.name, format: r.format || '', formatLabel: FORMAT_LABELS[r.format] || '', books: r.books?.length ?? (lib ? Object.keys(lib.books).length : 0), highlights: hl, images: r.images || 0, error: r.error || '' });
   }
   return { books, backups, results };
 }

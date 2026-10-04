@@ -9,7 +9,8 @@ import { isolatedView, knowledge, lineView, planeView } from './views/knowledge.
 import { importView, kindleSyncBlock, settingsView } from './views/settings.js';
 import { wishlist } from './views/wishlist.js';
 import { records } from './views/records.js';
-import { FEEDBACK_LABELS, deleteBook, emptyLibrary, listBooks, mergeParsed, setFeedback, updateHighlight } from '../core/model.js';
+import { FEEDBACK_LABELS, addHighlight, deleteBook, emptyLibrary, guessTechnical, listBooks, mergeParsed, registerBook, setFeedback, updateBook, updateHighlight } from '../core/model.js';
+import { COVER_MAX_LENGTH } from '../core/covers.js';
 import { parseFiles } from '../core/parsers/index.js';
 import { applyImport, makeBackup } from '../core/importing.js';
 import { isNotebookJson, parseNotebookJson } from '../core/parsers/kindle-notebook.js';
@@ -139,7 +140,8 @@ async function importFiles(files) {
     if (out) {
       out.innerHTML = String(html`<div class="card" style="margin-top:12px">
         <p class="notice ${stats.added || stats.backups ? 'ok' : ''}">${summary}${r.analysisChanged ? '（バックアップの新しい分析結果も反映）' : ''}</p>
-        <ul class="result-list">${results.map((r) => html`<li>${r.error ? '✗' : '✓'} <b>${r.name}</b><br><span class="small muted">${r.error || `${r.formatLabel} — 本 ${r.books} 冊 / 点 ${r.highlights} 件`}</span></li>`)}</ul>
+        <ul class="result-list">${results.map((r) => html`<li>${r.error ? '✗' : '✓'} <b>${r.name}</b><br><span class="small muted">${r.error || `${r.formatLabel} — 本 ${r.books} 冊 / 点 ${r.highlights} 件${r.images ? `（画像 ${r.images} 枚は取り込めません）` : ''}`}</span></li>`)}</ul>
+        ${stats.memoTitles?.length ? html`<p class="small muted">既にある本にまとめた読書メモ: ${stats.memoTitles.map((m) => `「${m.from}」→『${m.to}』`).join('、')}</p>` : ''}
         <div class="row" style="margin-top:8px"><a class="btn small" href="#/books">本を見る</a></div>
       </div>`);
     }
@@ -393,9 +395,108 @@ function googleLabel(g) {
   return `有効（最終確認 ${time(g.lastCheck)}・最終取り込み ${time(g.lastImport)}）${g.error ? ` ／ ${g.error}` : ''}`;
 }
 
-// ---- 操作 ----
+// ---- 紙の本（登録・本の情報の編集） ----
+
+// 表紙は一覧の小さな枠と本の画面に出すだけなので、この大きさに縮めて JPEG にする（同期を重くしない）
+const COVER_BOX = { width: 360, height: 540 };
+
+/** 選んだ画像を縮小した data URL にする。選んでいなければ空文字 */
+async function coverDataUrl(file) {
+  if (!file || !file.size) return '';
+  if (!String(file.type).startsWith('image/')) throw new Error('表紙には画像ファイルを選んでください');
+  let img;
+  try {
+    img = await createImageBitmap(file);
+  } catch {
+    throw new Error('画像を読み込めませんでした（JPEG・PNG・WebP の画像を選んでください）');
+  }
+  const scale = Math.min(1, COVER_BOX.width / img.width, COVER_BOX.height / img.height);
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.max(1, Math.round(img.width * scale));
+  canvas.height = Math.max(1, Math.round(img.height * scale));
+  const g = canvas.getContext('2d');
+  // JPEG は透明を持てないので、透過 PNG が黒くならないよう白で塗ってから描く
+  g.fillStyle = '#fff';
+  g.fillRect(0, 0, canvas.width, canvas.height);
+  g.drawImage(img, 0, 0, canvas.width, canvas.height);
+  img.close?.();
+  for (const quality of [0.85, 0.7, 0.55]) {
+    const url = canvas.toDataURL('image/jpeg', quality);
+    if (url.length <= COVER_MAX_LENGTH) return url;
+  }
+  throw new Error('表紙の画像を小さくできませんでした。別の画像を選んでください');
+}
+
+/** 技術書の選択肢。自動のときは、書名から今どちらと判断しているかも見せる */
+function technicalField(b) {
+  const value = typeof b?.technical === 'boolean' ? (b.technical ? 'yes' : 'no') : 'auto';
+  const guess = b ? (guessTechnical(b.title) ? '技術書' : '技術書ではない') : '';
+  const opt = (v, label) => html`<option value="${v}" ${v === value ? 'selected' : ''}>${label}</option>`;
+  return html`<label class="field"><span>技術書（IT の教科書）か</span>
+    <select name="technical">${opt('auto', `書名から自動で判断${guess ? `（今は「${guess}」）` : ''}`)}${opt('yes', '技術書（線を点に数えない）')}${opt('no', '技術書ではない')}</select></label>`;
+}
+
+const TECHNICAL_VALUES = { auto: null, yes: true, no: false };
 
 const actions = {
+  'register-book'() {
+    openSheet(
+      html`<h2>紙の本を登録</h2>
+        <label class="field"><span>書名</span><input type="text" name="title" autocomplete="off"></label>
+        <label class="field"><span>著者（任意）</span><input type="text" name="author" autocomplete="off"></label>
+        <label class="field"><span>表紙の画像（任意）</span><input type="file" name="cover" accept="image/*"></label>
+        ${technicalField(null)}
+        <div class="row spread"><span></span><span class="row"><button class="btn" value="cancel">やめる</button><button class="btn primary" value="save">登録</button></span></div>`,
+      async (data) => {
+        try {
+          const b = registerBook(state.library, {
+            title: data.get('title'),
+            author: data.get('author'),
+            cover: await coverDataUrl(data.get('cover')),
+            technical: TECHNICAL_VALUES[data.get('technical')] ?? undefined,
+          });
+          await persistLibrary();
+          toast(`『${b.title}』を登録しました。線を引いた文を足せます`);
+          location.hash = `#/book/${b.id}`;
+          autoSyncAfterChange();
+        } catch (e) {
+          toast(e.message, 5000);
+          return true;
+        }
+      },
+    );
+  },
+  'edit-book'(el) {
+    const b = state.library.books[el.dataset.id];
+    openSheet(
+      html`<h2>本の情報</h2>
+        <p class="quote">${b.title}</p>
+        <label class="field"><span>著者</span><input type="text" name="author" value="${b.author || ''}" autocomplete="off"></label>
+        <label class="field"><span>表紙の画像を${b.cover ? '差し替える' : '選ぶ'}（任意）</span><input type="file" name="cover" accept="image/*"></label>
+        ${b.cover ? html`<label class="check"><input type="checkbox" name="removeCover" value="1"> アップロードした表紙を外す</label>` : ''}
+        ${technicalField(b)}
+        <div class="row spread"><span></span><span class="row"><button class="btn" value="cancel">やめる</button><button class="btn primary" value="save">保存</button></span></div>`,
+      async (data) => {
+        try {
+          // 変えた欄だけを送る（変えていない表紙・技術書の編集時刻を進めて、別の端末の編集を負かさない）
+          const patch = { author: data.get('author') };
+          const technical = TECHNICAL_VALUES[data.get('technical')] ?? null;
+          if (technical !== (typeof b.technical === 'boolean' ? b.technical : null)) patch.technical = technical;
+          const cover = await coverDataUrl(data.get('cover'));
+          if (cover) patch.cover = cover;
+          else if (data.get('removeCover')) patch.cover = '';
+          updateBook(state.library, b.id, patch);
+          await persistLibrary();
+          toast('保存しました');
+          render({ keepScroll: true });
+          autoSyncAfterChange();
+        } catch (e) {
+          toast(e.message, 5000);
+          return true;
+        }
+      },
+    );
+  },
   async fav(el) {
     const h = updateHighlight(state.library, el.dataset.id, { favorite: !state.library.highlights[el.dataset.id].favorite });
     await persistLibrary();
@@ -497,6 +598,21 @@ const actions = {
 const forms = {
   search(form) {
     form.querySelector('input')?.blur();
+  },
+  async 'add-highlight'(form) {
+    const d = new FormData(form);
+    const chapter = String(d.get('chapter') || '');
+    const r = addHighlight(state.library, form.dataset.id, { text: d.get('text'), page: d.get('page'), chapter });
+    await persistLibrary();
+    toast(r.added ? '追加しました' : '同じ文が既にあります');
+    render({ keepScroll: true });
+    // 続けて同じ章の文を入れやすいよう、章は残して文の欄に戻る
+    const next = view.querySelector('form[data-form="add-highlight"]');
+    if (next) {
+      next.elements.chapter.value = chapter;
+      next.elements.text.focus();
+    }
+    autoSyncAfterChange();
   },
   'book-filter'(form) {
     const q = new FormData(form).get('q');

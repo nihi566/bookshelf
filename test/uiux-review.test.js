@@ -42,7 +42,8 @@ test('ハイライトの検索: 選んでいる絞り込みのチップだけ ar
   };
   search.mount(root, { state: sampleState(), query: new URLSearchParams('fav=1') });
   const chips = chipsOf(boxes['#search-filters'].innerHTML);
-  assert.equal(chips.length, 4);
+  // すべて・Kindle・Play Books・紙の本・読書メモ・★ お気に入り
+  assert.equal(chips.length, 6);
   const current = chips.filter((c) => c.includes('aria-current="true"'));
   assert.deepEqual(current.map((c) => c.replace(/<[^>]+>/g, '')), ['すべて', '★ お気に入り']);
   const page = String(search.render({ state: sampleState(), query: new URLSearchParams() }));
