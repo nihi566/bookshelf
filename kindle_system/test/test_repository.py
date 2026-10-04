@@ -7,6 +7,7 @@ src/repository.py の単体テスト（マイグレーション冪等性・デ�
     python -m unittest test.test_repository -v
 """
 
+import contextlib
 import logging
 import os
 import sys
@@ -20,6 +21,26 @@ BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, BASE_DIR)
 
 from src import repository
+
+
+@contextlib.contextmanager
+def _captured_log_records(logger_name, level):
+    """logger_name（と子の logger）へ level 以上で出たログを集める。
+
+    assertNoLogs は Python 3.10 以降にしか無いため、手元の Python 3.9 でも同じ検証ができるようにする。
+    """
+    logger = logging.getLogger(logger_name)
+    records = []
+    handler = logging.Handler(level)
+    handler.emit = records.append
+    original_level = logger.level
+    logger.addHandler(handler)
+    logger.setLevel(level)
+    try:
+        yield records
+    finally:
+        logger.removeHandler(handler)
+        logger.setLevel(original_level)
 
 
 def _create_old_schema_db(db_path: str) -> None:
@@ -146,6 +167,9 @@ class MigrateBookMappingsSchemaTest(unittest.TestCase):
         backups = [f for f in os.listdir(self.tmpdir) if f.startswith("test.db.bak-")]
         self.assertEqual(len(backups), 1)
 
+    # Windows は読み取り専用属性のファイルを os.replace() で置き換えられない（アクセス拒否）。
+    # この検証は実データが root 所有・-rw-r--r-- になる Linux の運用を前提にしているので、Windows では流さない。
+    @unittest.skipIf(sys.platform == "win32", "Windows では読み取り専用のファイルを置き換えられない（Linux の運用前提の検証）")
     def test_migration_succeeds_when_db_file_itself_is_read_only(self):
         """
         実データ data/kindle_monitor.db は root 所有・-rw-r--r-- で実行ユーザーからは
@@ -315,6 +339,8 @@ class MigrateBookMappingsSchemaBackfillFlagsTest(unittest.TestCase):
         rows_after_second = _fetch_all_rows(self.db_path)
         self.assertEqual(rows_after_first, rows_after_second)
 
+    # Windows は読み取り専用属性のファイルを os.replace() で置き換えられない（上の同名の検証と同じ理由）
+    @unittest.skipIf(sys.platform == "win32", "Windows では読み取り専用のファイルを置き換えられない（Linux の運用前提の検証）")
     def test_falls_back_to_staging_when_db_file_itself_is_read_only(self):
         """id/sourceがある新スキーマでflags列だけ無い場合、in-place ALTERが
         db_pathへ書き込めない(読み取り専用)ときは複製→置換パターンへ
@@ -717,8 +743,9 @@ class SaveMappingCrossSourceDedupTest(unittest.TestCase):
             )
             session.commit()
 
-        with self.assertNoLogs("src.repository", level="INFO"):
+        with _captured_log_records("src.repository", logging.INFO) as records:
             repository.save_mapping("B0NOLOGSAMPLE", "B0NOLOGSHARED", "共有本")
+        self.assertEqual([r.getMessage() for r in records], [])
 
 
 class DualSourceRegistrationFlagsIntegrationTest(unittest.TestCase):
