@@ -172,12 +172,13 @@ test('analyzeLibrary: 点→線→面→立体→おすすめ。キャッシュ�
     assert.doesNotMatch(picks.messages[1].content, /小さな習慣の力』/);
     assert.equal(analysis.recommendationNote, '');
 
-    // キャッシュの保存と復元 → 2 回目は線・面・立体の LLM 呼び出しも埋め込みも無し（おすすめだけ）
+    // キャッシュの保存と復元 → 2 回目は線・面・立体の LLM 呼び出しも埋め込みも無し（線の説明文の埋め込みもキャッシュから）
     const restored = deserializeCache(JSON.parse(JSON.stringify(serializeCache(cache))));
     const before = { ...fake.calls };
     const again = await analyzeLibrary({ library: lib, llm, cache: restored, options: { recommend: false } });
     assert.equal(fake.calls.chat, before.chat);
-    assert.equal(fake.calls.embed, before.embed + 1, '線の説明の埋め込みだけ');
+    assert.equal(fake.calls.embed, before.embed, '埋め込みもキャッシュから');
+    assert.deepEqual(again.analysis.stats.calls, { chat: 0, embed: 0 });
     assert.deepEqual(again.analysis.lines.map((l) => l.name), analysis.lines.map((l) => l.name));
   } finally {
     await fake.close();

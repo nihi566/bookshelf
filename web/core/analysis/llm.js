@@ -8,6 +8,9 @@
 
 import { l2normalize } from './vectors.js';
 
+// 埋め込みを 1 回の依頼でまとめて送る文の数（AI を呼んだ回数を数えるときも使う）
+export const EMBED_BATCH_SIZE = 32;
+
 export function normalizeBaseUrl(url) {
   return String(url || '')
     .trim()
@@ -34,6 +37,8 @@ export function createLlmClient({ baseUrl, chatModel, embedModel = '', apiKey = 
   let sendReasoningOff = true;
 
   async function request(path, body, { method = body ? 'POST' : 'GET', signal } = {}) {
+    // 依頼の前に中止されていたら送らない（中止の合図は 1 回しか来ないので、あとから待っても受け取れない）
+    if (signal?.aborted) throw new LlmError('中止しました');
     const headers = { 'Content-Type': 'application/json' };
     if (apiKey) headers.Authorization = `Bearer ${apiKey}`;
     if (token) headers['X-BH-Token'] = token;
@@ -118,7 +123,7 @@ export function createLlmClient({ baseUrl, chatModel, embedModel = '', apiKey = 
   }
 
   /** テキスト配列 → 正規化済みベクトル配列 */
-  async function embed(texts, { batchSize = 32, signal, onProgress } = {}) {
+  async function embed(texts, { batchSize = EMBED_BATCH_SIZE, signal, onProgress } = {}) {
     if (!embedModel) throw new LlmError('埋め込みモデルが設定されていません');
     const out = [];
     for (let i = 0; i < texts.length; i += batchSize) {

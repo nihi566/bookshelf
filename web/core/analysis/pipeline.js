@@ -6,20 +6,40 @@
 // 4. 立体: LLM が面どうしの関係・核となる考え・原則・問いを組み立てる
 // 5. おすすめ: 立体と「問い」をもとに LLM が次の本を選び、書誌 DB で実在を確認する
 //
-// LLM の結果はメンバー構成のハッシュでキャッシュするので、再分析は変わった部分だけで済む。
+// 前回の分析（previous）を渡すと、線・面を引き継いで（ID を保って）点の増減だけを反映する（incremental.js）。
+// 線・面・立体は「顔ぶれの指紋（sig）」が前回と同じなら AI を呼ばずに前回の結果を使い、変わったところだけ作り直す。
+// LLM の結果は指紋でキャッシュもするので、前回の結果が無くても同じ顔ぶれなら呼び直さない。
 
 import { feedbackByStatus } from '../model.js';
 import { analysisPoints, embedText, isThought, legacyEmbedText, pointLabel } from '../points.js';
 import { bookKey, hash } from '../text.js';
 import { PROMPT_VERSION, RECOMMEND_KINDS, RELATION_TYPES, linePrompt, pickPrompt, planePrompt, recommendPrompt, searchPrompt, solidPrompt } from './prompts.js';
-import { centroid, dot, groupLines, groupPoints, l2normalize, tfidfEmbed } from './vectors.js';
+import { centroid, dot, l2normalize, tfidfEmbed } from './vectors.js';
+import { carryLines, carryPlanes } from './incremental.js';
+import { diffAnalyses } from './changes.js';
+import { EMBED_BATCH_SIZE } from './llm.js';
+import { isAnalysisShape } from './shape.js';
 import { searchBooks, verifyBooks } from './recommend.js';
 import { titleKey, wishlistForRecommend } from '../wishlist.js';
 
 // おすすめの候補に混ぜる欲しい本の冊数（多すぎると小さなモデルが選びきれない）
 const WISHLIST_CANDIDATES = 8;
 
-export const ANALYSIS_VERSION = 1;
+// 2: 線を小さくした（点 8 件で線 1 本・上限 400 本）。前の版の分析は引き継がず、最初から作り直す
+export const ANALYSIS_VERSION = 2;
+
+// 点いくつで線 1 本にするかの目安と、線の数の上限。線が大きくなりすぎると「1 ノート = 1 アイデア」から離れ、
+// AI も中心の 12 点しか見ないので、ぼやけた概念になる（点 1,000 件で 1 本の点の数の中央値が 10 以下になるようにした）
+export const LINE_TARGET_SIZE = 8;
+export const MAX_LINES = 400;
+// 面の数の上限と、面を作る AI に見せる線の数（面の中心に近い線から）
+export const MAX_PLANES = 12;
+export const PLANE_SAMPLE_SIZE = 12;
+// 1 本の線に入れる点の上限（目安の 2.5 倍。増えた点を加えるときもこれを超えない）
+const lineMaxSize = (target) => Math.ceil(target * 2.5);
+// 前回最初から作り直したときから点がこれだけ増えたら、引き継がずに作り直す（小さいうちの線・面の形に縛られ続けないように）
+const REBUILD_GROWTH = 1.5;
+const REBUILD_MIN_ADDED = 40;
 
 // 埋め込みモデル無し（文字 n-gram）で分析したときの案内。実データ（点 920）で試すと、ありふれた言葉を共有する点が
 // 1 本の線に集まり、面の名前も「知識の〜」ばかりになった。bge-m3 にすると面がテーマごとに分かれた
@@ -54,17 +74,30 @@ function promptPoint(library, p) {
  * @param {object} p.library
  * @param {object} p.llm        createLlmClient() の戻り値
  * @param {object} [p.cache]    emptyCache() 形式。呼び出し側で保存すると次回が速い
+ * @param {object} [p.previous] 前回の分析結果。渡すと線・面を引き継ぎ、変わったところだけ AI を呼ぶ
  * @param {function} [p.onProgress] ({ stage, done, total, message }) => void
  * @param {AbortSignal} [p.signal]
- * @param {object} [p.options]  { granularity: 点いくつで線 1 本か (既定 5), maxLines, recommend: bool, verify: bool, fetchImpl, wishlist: toRecommendWishlist() の結果 }
+ * @param {object} [p.options]  { granularity: 点いくつで線 1 本か (既定 8), maxLines, maxPlanes, full: 前回を引き継がず最初から作り直す,
+ *                                recommend: true / false / 'keep'（前回のおすすめを残す。自動の分析は欲しい本の印を知らないため）,
+ *                                verify: bool, fetchImpl, wishlist: toRecommendWishlist() の結果 }
  */
-export async function analyzeLibrary({ library, llm, cache = emptyCache(), onProgress = () => {}, signal, options = {} }) {
-  const { granularity = 5, maxLines = 40, recommend = true, verify = true, recommendCount = 6, fetchImpl, wishlist } = options;
+export async function analyzeLibrary({ library, llm: rawLlm, cache = emptyCache(), previous: rawPrevious = null, onProgress = () => {}, signal, options = {} }) {
+  // 形の壊れた前回の結果（ほかの端末・バックアップから届いたもの）は使わない（毎回の失敗にしない）
+  const previous = rawPrevious && isAnalysisShape(rawPrevious) ? rawPrevious : null;
+  const { granularity = LINE_TARGET_SIZE, maxLines = MAX_LINES, maxPlanes = MAX_PLANES, full = false, recommend = true, verify = true, recommendCount = 6, fetchImpl, wishlist } = options;
   // 点 = 本に引いた線（技術書は除く）+ 思いつき（捨てたものは除く）
   const points = analysisPoints(library);
   if (points.length < 4) throw new Error(`点（ハイライト・思いつき）が ${points.length} 件しかありません。4 件以上取り込んでから分析してください。`);
   const check = () => {
     if (signal?.aborted) throw new Error('分析を中止しました');
+  };
+  // 線・面・立体を作るために AI を呼んだ回数（おすすめの本は数えない）。変わったところだけ呼んだかを結果に残す
+  const calls = { chat: 0, embed: 0 };
+  const llm = {
+    ...rawLlm,
+    chatJson: (p) => (calls.chat++, rawLlm.chatJson(p)),
+    // 埋め込みは 1 回の依頼で EMBED_BATCH_SIZE 件ずつ送るので、依頼の数で数える（中の言い直しは数えない）
+    embed: (texts, o) => (calls.embed += Math.max(1, Math.ceil(texts.length / EMBED_BATCH_SIZE)), rawLlm.embed(texts, o)),
   };
 
   // 1. 点 → ベクトル（自分のメモ・タグも入れる。書き換えた点だけ埋め込み直す）
@@ -98,29 +131,41 @@ export async function analyzeLibrary({ library, llm, cache = emptyCache(), onPro
   }
   check();
 
-  // 2. 点 → 線
-  const { groups, isolated } = groupPoints(vectors, { targetSize: granularity, maxGroups: maxLines });
+  // 前回の結果を引き継げるか（同じ版の分析で、同じ方法で埋め込んだとき。違えば最初から作り直す）。
+  // 前回最初から作り直したときから点が 1.5 倍（かつ 40 件以上）に増えていたら作り直す（小さいうちの形に縛られ続けない）
+  const pointsAtFull = Number.isFinite(previous?.pointsAtFull) ? previous.pointsAtFull : previous?.stats?.points || 0;
+  const grew = points.length >= Math.max(pointsAtFull * REBUILD_GROWTH, pointsAtFull + REBUILD_MIN_ADDED);
+  const base = !full && !grew && previous?.version === ANALYSIS_VERSION && previous.model?.embed === embedMethod ? previous : null;
+  const prevLines = new Map((base?.lines || []).map((l) => [l.id, l]));
+  const prevPlanes = new Map((base?.planes || []).map((p) => [p.id, p]));
+
+  // 2. 点 → 線（前回の線を引き継ぎ、増えた点は近い線に加える）
+  const { lines: groups, isolated } = carryLines({ ids: points.map((p) => p.id), vectors, previousLines: base?.lines || [], previousIsolated: base?.isolated || [], targetSize: granularity, maxSize: lineMaxSize(granularity), maxGroups: maxLines });
   const lines = [];
+  const used = new Set();
   for (let gi = 0; gi < groups.length; gi++) {
     check();
-    const members = groups[gi];
+    const { members } = groups[gi];
     const c = centroid(members.map((i) => vectors[i]));
     // プロンプトには中心に近い点から最大 12 件（お気に入りの点は優先して入れる）
     const ordered = [...members].sort((a, b) => dot(vectors[b], c) - dot(vectors[a], c));
     const chosen = lineSample(ordered, (i) => Boolean(points[i].favorite));
-    const sample = chosen.map((i) => promptPoint(library, points[i]));
     const ids = ordered.map((i) => points[i].id);
-    // 点の文（自分のメモ・タグを含む）が変わった線と、AI に見せる点が変わった線（★を付け替えたなど）は作り直させる
-    const key = 'line:' + hash([PROMPT_VERSION, llm.chatModel, ...ids.map((id) => `${id}:${textKeyById.get(id)}`).sort(), '|見せた点|', ...chosen.map((i) => points[i].id)].join('|'));
+    // 指紋: 点の顔ぶれと文（自分のメモ・タグを含む）・AI に見せる点（★を付け替えたなど）・モデル・プロンプトの版
+    // 見せた点は並べ替えてから入れる（文字 n-gram では点が増えるたびに中心への近さの順が少し入れ替わるため）
+    const sig = 'line:' + hash([PROMPT_VERSION, rawLlm.chatModel, ...ids.map((id) => `${id}:${textKeyById.get(id)}`).sort(), '|見せた点|', ...chosen.map((i) => points[i].id).sort()].join('|'));
+    let id = groups[gi].id || 'l' + hash([...ids].sort().join('|'));
+    if (used.has(id)) id += gi.toString(36);
+    used.add(id);
     onProgress({ stage: 'lines', done: gi, total: groups.length, message: `点をつないで線を引いています（${gi + 1}/${groups.length}）` });
-    let r = cache.llm[key];
+    const before = prevLines.get(groups[gi].id);
+    let r = before?.sig === sig ? before : cache.llm[sig];
     if (!r) {
-      const p = linePrompt(sample);
-      r = await llm.chatJson({ ...p, signal });
-      cache.llm[key] = r;
+      r = await llm.chatJson({ ...linePrompt(chosen.map((i) => promptPoint(library, points[i]))), signal });
+      cache.llm[sig] = r;
     }
     lines.push({
-      id: 'l' + hash([...ids].sort().join('|')),
+      id,
       name: clean(r.name, 40) || `線 ${gi + 1}`,
       summary: clean(r.summary, 600),
       insight: clean(r.insight, 300),
@@ -128,6 +173,7 @@ export async function analyzeLibrary({ library, llm, cache = emptyCache(), onPro
       // 点の ID（思いつきの ID も入る。名前は前の版のまま）
       highlightIds: ids,
       bookIds: [...new Set(ids.map((id) => library.highlights[id]?.bookId).filter(Boolean))],
+      sig,
       vector: c,
     });
   }
@@ -135,73 +181,118 @@ export async function analyzeLibrary({ library, llm, cache = emptyCache(), onPro
   if (!lines.length) throw new Error('点どうしのつながりが見つかりませんでした。ハイライトを増やしてから試してください。');
   dedupeNames(lines);
 
-  // 3. 線 → 面（線の説明文の埋め込みがあればそれも使う）
+  // 3. 線 → 面（線の説明文の埋め込みがあればそれも使う。説明文が変わった線だけ埋め込む）
+  const summaryKeys = lines.map((l) => 's' + hash(`${l.name}\n${l.summary}`));
   if (llm.embedModel) {
-    const summaryVecs = await llm.embed(lines.map((l) => `${l.name}\n${l.summary}`), { signal });
-    lines.forEach((l, i) => (l.vector = l2normalize(l.vector.map((x, j) => x + summaryVecs[i][j]))));
+    const emb = cache.embeddings;
+    const need = [...new Set(summaryKeys.filter((k) => !emb.vectors[k]))];
+    if (need.length) {
+      const vecs = await llm.embed(need.map((k) => { const l = lines[summaryKeys.indexOf(k)]; return `${l.name}\n${l.summary}`; }), { signal });
+      need.forEach((k, i) => (emb.vectors[k] = vecs[i]));
+    }
+    lines.forEach((l, i) => (l.vector = l2normalize(l.vector.map((x, j) => x + emb.vectors[summaryKeys[i]][j]))));
   }
-  const planeGroups = groupLines(lines.map((l) => l.vector));
+  const planeGroups = carryPlanes({ lineIds: lines.map((l) => l.id), vectors: lines.map((l) => l.vector), previousPlanes: base?.planes || [], maxPlanes });
   const planes = [];
   for (let pi = 0; pi < planeGroups.length; pi++) {
     check();
-    const ls = planeGroups[pi].map((i) => lines[i]);
-    const key = 'plane:' + hash([PROMPT_VERSION, llm.chatModel, ...ls.map((l) => l.id + l.name).sort()].join('|'));
+    const ls = planeGroups[pi].members.map((i) => lines[i]);
+    const lineIds = ls.map((l) => l.id);
+    // 面は線の顔ぶれが変わったときだけ作り直す（線の名前が少し変わっただけでは呼び直さない）
+    const sig = 'plane:' + hash([PROMPT_VERSION, rawLlm.chatModel, ...[...lineIds].sort()].join('|'));
+    const id = planeGroups[pi].id || 'p' + hash([...lineIds].sort().join('|'));
     onProgress({ stage: 'planes', done: pi, total: planeGroups.length, message: `線を束ねて面を作っています（${pi + 1}/${planeGroups.length}）` });
-    let r = cache.llm[key];
+    const before = prevPlanes.get(planeGroups[pi].id);
+    let r = before?.sig === sig ? before : cache.llm[sig];
     if (!r) {
-      r = await llm.chatJson({ ...planePrompt(ls), signal });
-      cache.llm[key] = r;
+      // 面の中心に近い線から最大 12 本だけ見せる（多すぎると小さなモデルの読める長さを超える）
+      const c = centroid(ls.map((l) => l.vector));
+      const shown = [...ls].sort((a, b) => dot(b.vector, c) - dot(a.vector, c)).slice(0, PLANE_SAMPLE_SIZE);
+      r = await llm.chatJson({ ...planePrompt(shown, { more: ls.length - shown.length }), signal });
+      cache.llm[sig] = r;
     }
-    planes.push({ id: 'p' + hash(ls.map((l) => l.id).sort().join('|')), name: clean(r.name, 40) || `面 ${pi + 1}`, summary: clean(r.summary, 800), lineIds: ls.map((l) => l.id) });
+    planes.push({ id, name: clean(r.name, 40) || `面 ${pi + 1}`, summary: clean(r.summary, 800), lineIds, sig });
   }
   dedupeNames(planes);
 
-  // 4. 面 → 立体
+  // 4. 面 → 立体（面の名前と顔ぶれが前回と同じなら、前回の立体をそのまま使う）
   check();
   onProgress({ stage: 'solid', done: 0, total: 1, message: '面の関係から立体を組み立てています' });
-  const planeInput = planes.map((p) => ({ ...p, lines: p.lineIds.map((id) => lines.find((l) => l.id === id)) }));
-  const solidKey = 'solid:' + hash([PROMPT_VERSION, llm.chatModel, ...planes.map((p) => p.id + p.name)].join('|'));
-  let s = cache.llm[solidKey];
-  if (!s) {
-    s = await llm.chatJson({ ...solidPrompt(planeInput), signal });
-    cache.llm[solidKey] = s;
+  const solidSig = 'solid:' + hash([PROMPT_VERSION, rawLlm.chatModel, ...planes.map((p) => p.id + p.name)].join('|'));
+  let solid;
+  if (base?.solid?.sig === solidSig) solid = structuredClone(base.solid);
+  else {
+    const planeInput = planes.map((p) => ({ ...p, lines: p.lineIds.map((id) => lines.find((l) => l.id === id)) }));
+    let s = cache.llm[solidSig];
+    if (!s) {
+      s = await llm.chatJson({ ...solidPrompt(planeInput), signal });
+      cache.llm[solidSig] = s;
+    }
+    const planeRef = (ref) => planes[parseInt(String(ref).replace(/[^\d]/g, ''), 10) - 1]?.id;
+    solid = {
+      title: clean(s.title, 60) || '知識の核',
+      core: clean(s.core, 1200),
+      relations: (Array.isArray(s.relations) ? s.relations : [])
+        .map((r) => ({ from: planeRef(r.from), to: planeRef(r.to), type: RELATION_TYPES.find((t) => String(r.type).includes(t)) || '関連する', description: clean(r.description, 300) }))
+        .filter((r) => r.from && r.to && r.from !== r.to),
+      principles: strList(s.principles, 8, 300),
+      questions: strList(s.questions, 6, 300),
+      sig: solidSig,
+    };
   }
-  const planeRef = (ref) => planes[parseInt(String(ref).replace(/[^\d]/g, ''), 10) - 1]?.id;
-  const solid = {
-    title: clean(s.title, 60) || '知識の核',
-    core: clean(s.core, 1200),
-    relations: (Array.isArray(s.relations) ? s.relations : [])
-      .map((r) => ({ from: planeRef(r.from), to: planeRef(r.to), type: RELATION_TYPES.find((t) => String(r.type).includes(t)) || '関連する', description: clean(r.description, 300) }))
-      .filter((r) => r.from && r.to && r.from !== r.to),
-    principles: strList(s.principles, 8, 300),
-    questions: strList(s.questions, 6, 300),
-  };
   onProgress({ stage: 'solid', done: 1, total: 1, message: '立体ができました' });
+
+  // 使わなくなった AI の結果（顔ぶれが変わる前の線・面・立体）をキャッシュから外す（分析のたびに増え続けないように）
+  const usedSigs = new Set([...lines.map((l) => l.sig), ...planes.map((p) => p.sig), solidSig]);
+  for (const k of Object.keys(cache.llm)) if (/^(line|plane|solid):/.test(k) && !usedSigs.has(k)) delete cache.llm[k];
+  // 使わなくなった埋め込み（消えた点・変わった線の説明文）をキャッシュから外す（保存を重くしない）
+  if (llm.embedModel) {
+    const live = new Set([...points.map((p) => p.id), ...summaryKeys]);
+    for (const k of Object.keys(cache.embeddings.vectors)) if (/^[hts]/.test(k) && !live.has(k)) delete cache.embeddings.vectors[k];
+    for (const k of Object.keys(cache.embeddings.keys || {})) if (!live.has(k)) delete cache.embeddings.keys[k];
+  }
 
   const analysis = {
     version: ANALYSIS_VERSION,
     createdAt: new Date().toISOString(),
-    model: { chat: llm.chatModel, embed: embedMethod },
-    stats: { points: points.length, thoughts: points.filter(isThought).length, lines: lines.length, planes: planes.length, isolated: isolated.length },
+    model: { chat: rawLlm.chatModel, embed: embedMethod },
+    // incremental: 前回の線・面を引き継いだか（false は最初から作り直した）。calls: 線・面・立体のために AI を呼んだ回数
+    incremental: Boolean(base),
+    // 最後に最初から作り直したときの点の数（ここから 1.5 倍に増えたら作り直す）
+    pointsAtFull: base ? pointsAtFull : points.length,
+    stats: { points: points.length, thoughts: points.filter(isThought).length, lines: lines.length, planes: planes.length, isolated: isolated.length, calls },
     lines: lines.map(({ vector, ...l }) => l),
     planes,
     solid,
     isolated: isolated.map((i) => points[i].id),
     recommendations: [],
   };
+  // 前回から何が変わったか（最初から作り直したときは、線の ID が変わるので一覧ではなく「作り直した」と出す）
+  const changes = diffAnalyses(previous, analysis);
+  // rebuilt の理由: full（作り直しを指定）/ grew（点が大きく増えた）/ format（前回と分析の版・埋め込みの方法が違う）
+  if (changes) analysis.changes = base ? changes : { previousAt: changes.previousAt, rebuilt: true, reason: full ? 'full' : grew ? 'grew' : 'format', addedLines: [], grownLines: [], removedLines: [], connectedPoints: [] };
 
-  // 5. おすすめの本
+  // 5. おすすめの本（立体が前回と同じなら、前回のおすすめをそのまま使う。'keep' なら立体が変わっても前回のものを残す）
   if (recommend) {
-    // おすすめで失敗しても、ここまでの分析（線・面・立体）は捨てない
-    try {
-      analysis.recommendations = await recommendBooks({ library, analysis, llm, signal, onProgress, verify, count: recommendCount, fetchImpl, wishlist });
-      analysis.recommendationNote = recommendationNote(analysis.recommendations);
-    } catch (e) {
-      if (signal?.aborted) throw e;
-      analysis.recommendations = [];
-      analysis.recommendationNote = `おすすめを選べませんでした（${e.message}）。「おすすめを選び直す」で再実行できます。`;
+    const keep = previous?.recommendations?.length && (recommend === 'keep' || (base && solid.sig === base.solid?.sig));
+    if (keep) {
+      analysis.recommendations = structuredClone(previous.recommendations);
+      analysis.recommendationNote = previous.recommendationNote || '';
+      analysis.recommendedAt = previous.recommendedAt || previous.createdAt;
+    } else if (recommend === 'keep') {
+      analysis.recommendationNote = '自動の分析ではおすすめの本を選びません（欲しい本の「購入済み」などの印は画面の側にあるため）。「おすすめを選び直す」で選べます。';
+    } else {
+      // おすすめで失敗しても、ここまでの分析（線・面・立体）は捨てない
+      try {
+        analysis.recommendations = await recommendBooks({ library, analysis, llm: rawLlm, signal, onProgress, verify, count: recommendCount, fetchImpl, wishlist });
+        analysis.recommendationNote = recommendationNote(analysis.recommendations);
+      } catch (e) {
+        if (signal?.aborted) throw e;
+        analysis.recommendations = [];
+        analysis.recommendationNote = `おすすめを選べませんでした（${e.message}）。「おすすめを選び直す」で再実行できます。`;
+      }
+      analysis.recommendedAt = new Date().toISOString();
     }
-    analysis.recommendedAt = new Date().toISOString();
   }
   return { analysis, cache };
 }
@@ -336,13 +427,14 @@ function strList(v, n, max) {
     .slice(0, n);
 }
 
+/** 同じ名前が並ばないよう、2 つ目以降に「 (2)」などを付ける（前回の結果を使った名前に付いた番号とも重ならない番号にする） */
 function dedupeNames(items) {
-  const seen = new Map();
+  const used = new Set();
   for (const it of items) {
-    const k = it.name;
-    const n = (seen.get(k) || 0) + 1;
-    seen.set(k, n);
-    if (n > 1) it.name = `${k} (${n})`;
+    let name = it.name;
+    for (let n = 2; used.has(name); n++) name = `${it.name} (${n})`;
+    it.name = name;
+    used.add(name);
   }
 }
 

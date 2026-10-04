@@ -48,14 +48,15 @@ ${list}
   };
 }
 
-export function planePrompt(lines) {
+/** 面を作る依頼。lines は面の中心に近い線から（最大 12 本）、more は見せていない線の数 */
+export function planePrompt(lines, { more = 0 } = {}) {
   const list = lines.map((l, i) => `[${i + 1}] ${l.name}: ${truncate(l.summary, 200)}`).join('\n');
   return {
     system: SYSTEM,
     name: 'plane',
     user: `次の線（概念）は近いものとして集まりました。これらを束ねる「面（テーマ）」を作ってください。
 
-${list}
+${list}${more > 0 ? `\n（ほかに近い線が ${more} 本あります）` : ''}
 
 線の名前や本の名前を並べるのではなく、線に共通する考えの中身を自分の言葉で書いてください。
 
@@ -74,8 +75,10 @@ export const RELATION_TYPES = ['支える', '対立する', '具体化する', '
 
 export function solidPrompt(planes) {
   const refs = planes.map((_, i) => `P${i + 1}`);
+  // 面ごとに線の名前は 12 本まで（線が多いと小さなモデルの読める長さを超える）
+  const names = (ls) => `${ls.slice(0, 12).map((l) => l.name).join('、')}${ls.length > 12 ? ` ほか ${ls.length - 12} 本` : ''}`;
   const list = planes
-    .map((p, i) => `P${i + 1}「${p.name}」: ${truncate(p.summary, 220)}\n  線: ${p.lines.map((l) => l.name).join('、')}`)
+    .map((p, i) => `P${i + 1}「${p.name}」: ${truncate(p.summary, 220)}\n  線: ${names(p.lines)}`)
     .join('\n');
   return {
     system: SYSTEM,

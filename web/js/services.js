@@ -44,6 +44,9 @@ export const companion = {
   startAnalyze: (mode = 'analyze', wishlist = []) => call('/api/analyze', { method: 'POST', body: { mode, wishlist } }),
   job: () => call('/api/analyze'),
   cancel: () => call('/api/analyze', { method: 'DELETE' }),
+  // 分析の履歴は PC にだけ置く（一覧は要約だけ。開いたときに 1 回分を取りに行く）
+  history: () => call('/api/history').then((r) => r?.items || []),
+  historyEntry: (id) => call(`/api/history/${encodeURIComponent(id)}`),
 };
 
 /** 同一オリジンでコンパニオンサーバが動いているか（http://localhost:8787 で開いた場合など） */

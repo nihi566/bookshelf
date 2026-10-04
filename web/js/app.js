@@ -5,7 +5,7 @@ import { loadCache, loadState, save, saveCache, state } from './state.js';
 import { buildBookmarklet, companion, detectServedByCompanion, download, syncWithPc } from './services.js';
 import { kindleAlertBlock, openSheet, toast } from './ui.js';
 import { book, books, home, search } from './views/library.js';
-import { isolatedView, knowledge, lineView, planeView } from './views/knowledge.js';
+import { autoStatusBlock, historyView, isolatedView, knowledge, lineView, planeView } from './views/knowledge.js';
 import { importView, kindleSyncBlock, settingsView } from './views/settings.js';
 import { wishlist } from './views/wishlist.js';
 import { records } from './views/records.js';
@@ -39,6 +39,8 @@ const ROUTES = [
   [/^\/knowledge\/line\/(?<id>[\w-]+)$/, lineView, 'knowledge'],
   [/^\/knowledge\/plane\/(?<id>[\w-]+)$/, planeView, 'knowledge'],
   [/^\/knowledge\/isolated$/, isolatedView, 'knowledge'],
+  // 過去の分析（履歴は PC にだけある）
+  [/^\/knowledge\/history\/(?<id>[0-9TZ]+)$/, historyView, 'knowledge'],
   [/^\/import$/, importView, 'settings'],
   [/^\/settings$/, settingsView, 'settings'],
 ];
@@ -247,7 +249,8 @@ async function runAnalysis(mode = 'analyze') {
       } else {
         const cache = await loadCache();
         try {
-          const { analysis } = await analyzeLibrary({ library: state.library, llm, cache, signal: abort.signal, onProgress, options: { wishlist } });
+          // 前回の線・面を引き継ぎ、変わったところだけ AI を呼ぶ（full: 最初から作り直す）
+          const { analysis } = await analyzeLibrary({ library: state.library, llm, cache, previous: state.analysis, signal: abort.signal, onProgress, options: { wishlist, full: mode === 'full' } });
           state.analysis = analysis;
         } finally {
           await saveCache(cache);
@@ -269,6 +272,13 @@ async function runAnalysis(mode = 'analyze') {
     pcJobStartedAt = started?.startedAt || null;
     await pollPcJob();
   } catch (e) {
+    // PC がすでに分析している（自動の分析など）: 押した操作は使わず、その分析が終わるまで追う
+    if (e.status === 409) {
+      toast(e.message, 6000);
+      pcJobStartedAt = null;
+      setJob({ running: true, where: 'pc', stage: 'embed', message: e.message, error: '' });
+      return pollPcJob();
+    }
     setJob({ running: false, stage: 'error', error: e.message, message: '' });
   }
 }
@@ -353,9 +363,9 @@ async function sync({ quiet = false } = {}) {
 }
 
 // PC の状態（拡張の確認結果など）を表示する画面
-const PC_INFO_PATHS = ['/settings', '/import', '/'];
+const PC_INFO_PATHS = ['/settings', '/import', '/', '/knowledge'];
 // 描き直さず、欄だけ差し替える画面（描き直すと取り込み結果の表示・開いた説明・今日の点の「別の点」が消える）
-const PC_INFO_BOXES = { '/import': ['#kindle-sync', kindleSyncBlock], '/': ['#kindle-alert', kindleAlertBlock] };
+const PC_INFO_BOXES = { '/import': ['#kindle-sync', kindleSyncBlock], '/': ['#kindle-alert', kindleAlertBlock], '/knowledge': ['#auto-status', autoStatusBlock] };
 
 /** PC の状態（拡張の確認結果など）を取り直し、表示している画面に反映する */
 async function refreshPcInfo() {
@@ -615,7 +625,22 @@ const actions = {
     render({ keepScroll: true });
   },
   'run-analysis': () => runAnalysis('analyze'),
+  'run-analysis-full': () => runAnalysis('full'),
   'rerun-recommend': () => runAnalysis('recommend'),
+  // 立体・線の問いに答える（答えは思いつきとして受け箱に入り、次の分析で点になる）
+  answer(el) {
+    if (!state.loaded) return toast('まだ端末のデータを読み込んでいます。少し待ってから押してください');
+    const question = el.dataset.question;
+    const answerTo = { kind: el.dataset.kind, question, ...(el.dataset.ref ? { id: el.dataset.ref } : {}) };
+    const id = randomId('t');
+    openSheet(newThoughtSheet({ question }), async (data) => {
+      addThought(state.library, { text: data.get('text'), answerTo }, undefined, id);
+      await persistLibrary();
+      toast('答えを受け箱に入れました。次の分析から点になります');
+      render({ keepScroll: true });
+      autoSyncAfterChange();
+    });
+  },
   'cancel-analysis': cancelAnalysis,
   'check-pc-job': () => checkPcJob(),
   async 'rec-feedback'(el) {
