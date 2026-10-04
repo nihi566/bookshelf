@@ -84,6 +84,7 @@ export function parseNotebookJson(data) {
       title: cleanText(b.title),
       author: cleanText(b.author),
       asin: b.asin || undefined,
+      annotatedOn: parseKindleDate(b.lastAnnotated) || undefined,
       source: 'kindle',
       highlights: (b.highlights || [])
         .map((h) => ({
@@ -98,4 +99,21 @@ export function parseNotebookJson(data) {
         .filter((h) => h.text),
     }))
     .filter((b) => b.title && b.highlights.length);
+}
+
+const MONTHS = ['january', 'february', 'march', 'april', 'may', 'june', 'july', 'august', 'september', 'october', 'november', 'december'];
+
+/**
+ * ノートブックの本の最終ハイライト日（「Sunday September 27, 2026」「2026年9月27日 日曜日」）を 'YYYY-MM-DD' にする。
+ * 読めない・実在しない日付は空文字
+ */
+export function parseKindleDate(value) {
+  const s = String(value ?? '').normalize('NFKC');
+  const ja = s.match(/(\d{4})年\s*(\d{1,2})月\s*(\d{1,2})日/);
+  const en = s.match(/([A-Za-z]+)\s+(\d{1,2}),\s*(\d{4})/);
+  const [y, m, d] = ja ? [ja[1], ja[2], ja[3]].map(Number) : en ? [Number(en[3]), MONTHS.indexOf(en[1].toLowerCase()) + 1, Number(en[2])] : [];
+  if (!y || !m) return '';
+  const date = new Date(Date.UTC(y, m - 1, d));
+  if (date.getUTCFullYear() !== y || date.getUTCMonth() !== m - 1 || date.getUTCDate() !== d) return '';
+  return `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
 }
