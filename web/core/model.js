@@ -11,6 +11,7 @@ import { bookKey, cleanText, hash, normalizeText } from './text.js';
 import { isUploadedCover } from './covers.js';
 import { mergeCollections } from './collections.js';
 import { mergeThought, normalizeThought, pointThoughts } from './thoughts.js';
+import { mergeReads } from './discovery-reads.js';
 
 export const SOURCES = {
   kindle: 'Kindle',
@@ -387,6 +388,8 @@ export function mergeLibraries(base, incoming) {
   }
   // 思いつきは書き直した時刻が新しい方（状態は状態を変えた時刻が新しい方）。消したものはどちらから来ても消えたまま
   out.thoughts = mergeCollections(base.thoughts, incoming.thoughts, { stickyDelete: true, normalize: normalizeThought, mergeItem: mergeThought });
+  // 発見の既読は、どちらかで読んでいれば既読（読んだ時刻は早い方）
+  out.discoveryReads = mergeReads(base.discoveryReads, incoming.discoveryReads);
   out.updatedAt = later(base.updatedAt, incoming.updatedAt);
   return out;
 }

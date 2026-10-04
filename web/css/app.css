@@ -219,6 +219,20 @@ details li { margin: 4px 0; }
 .line-chip::before { content: ""; width: 10px; height: 2px; background: currentColor; border-radius: 2px; }
 .chapter { font-size: 0.85rem; color: var(--ink-2); margin: 20px 0 8px; padding-bottom: 4px; border-bottom: 1px dashed var(--line); }
 
+/* 発見（前に見たあとに見つかったつながり）と、今日の点に添える「つながる別の本の点」 */
+.discoveries { margin-bottom: 8px; }
+.discoveries > .help { margin: -4px 0 10px; }
+.disc-list { list-style: none; margin: 0; padding: 0; }
+.disc-item { display: flex; flex-direction: column; gap: 2px; padding: 10px 12px; margin-bottom: 8px; border-radius: 12px; border: 1px solid var(--line); border-left: 4px solid var(--layer-line); background: var(--surface); color: var(--ink); }
+.disc-item:hover { text-decoration: none; background: var(--surface-2); }
+.disc-kind { font-size: 0.75rem; font-weight: 700; color: var(--layer-line); }
+.disc-pair { font-family: var(--serif); font-size: 0.92rem; line-height: 1.6; overflow-wrap: anywhere; }
+.disc-why { font-size: 0.78rem; color: var(--ink-3); }
+.badge.new { background: var(--accent); color: var(--accent-ink); }
+.partner { margin: -4px 0 12px 18px; padding: 8px 12px; border-left: 2px dashed var(--layer-line); }
+.partner-label { display: block; font-size: 0.75rem; color: var(--ink-3); }
+.partner-text { font-family: var(--serif); font-size: 0.92rem; line-height: 1.7; margin: 2px 0; overflow-wrap: anywhere; }
+
 /* 思いつき（本に属さないメモ）と受け箱 */
 .hl.thought { --hl-color: var(--accent); }
 .badge.thought { background: var(--accent-soft); color: var(--accent); }

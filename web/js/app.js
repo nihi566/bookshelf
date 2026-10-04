@@ -6,6 +6,8 @@ import { buildBookmarklet, companion, detectServedByCompanion, download, syncWit
 import { kindleAlertBlock, openSheet, toast } from './ui.js';
 import { book, books, home, search } from './views/library.js';
 import { autoStatusBlock, historyView, isolatedView, knowledge, lineView, planeView } from './views/knowledge.js';
+import { discoveriesView, discoveryView } from './views/discoveries.js';
+import { markDiscoveryRead } from '../core/discovery-reads.js';
 import { importView, kindleSyncBlock, settingsView } from './views/settings.js';
 import { wishlist } from './views/wishlist.js';
 import { records } from './views/records.js';
@@ -41,6 +43,9 @@ const ROUTES = [
   [/^\/knowledge\/isolated$/, isolatedView, 'knowledge'],
   // 過去の分析（履歴は PC にだけある）
   [/^\/knowledge\/history\/(?<id>[0-9TZ]+)$/, historyView, 'knowledge'],
+  // 発見（ホームの「発見」から開く）
+  [/^\/discovery\/(?<id>[\w-]+)$/, discoveryView, 'home'],
+  [/^\/discoveries$/, discoveriesView, 'home'],
   [/^\/import$/, importView, 'settings'],
   [/^\/settings$/, settingsView, 'settings'],
 ];
@@ -68,7 +73,7 @@ function render({ keepScroll = false } = {}) {
   }
   if (!match) match = { view: home, tab: 'home', params: {} };
   // refresh: 同じ画面の描き直し（同期・編集のあと）。別の画面から来たとき・リンクを押したときは false
-  const ctx = { state, params: match.params, query, shuffle, refresh: location.hash === currentHash };
+  const ctx = { state, params: match.params, query, shuffle, refresh: location.hash === currentHash, markDiscoveryRead: readDiscovery };
   currentHash = location.hash;
   const y = window.scrollY;
   view.innerHTML = String(match.view.render(ctx));
@@ -122,6 +127,17 @@ function mountCommon() {
 
 async function persistLibrary() {
   await save.library();
+}
+
+/** 発見を開いたら既読にする（端末に保存し、PC と同期してほかの端末でも既読にする） */
+async function readDiscovery(id) {
+  if (!state.loaded || !markDiscoveryRead(state.library, id)) return;
+  try {
+    await persistLibrary();
+    autoSyncAfterChange();
+  } catch (e) {
+    toast(e.message, 4000);
+  }
 }
 
 // 思いつきを出している画面（受け箱・メモの一覧・点の検索）

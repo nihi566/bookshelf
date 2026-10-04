@@ -8,6 +8,7 @@ import { browserStore, formatPrice, loadMarks, searchWishlist, wishlistSummary }
 import { loadWishlist } from '../wishlist-data.js';
 import { bookRow, bookSpine, emptyBooksBlock, highlightCard, kindleAlertBlock, lineIndex, pointCard, sourceBadge } from '../ui.js';
 import { inboxBlock } from './thoughts.js';
+import { discoveriesBlock, partnerBlock } from './discoveries.js';
 
 const flow = html`<div class="flow" aria-label="点から立体へ">
   <div class="f-point"><b>点</b>線を引いた一文</div>
@@ -52,10 +53,12 @@ export const home = {
       </div>
       <p class="small muted" style="margin-top:8px">本 ${s.books} 冊 ・ ${bySource.join(' ・ ')} ・ ★ ${s.favorites}${s.technical ? ` ・ 技術書の線 ${s.technical} 件は点に数えていません` : ''}</p>
 
+      ${discoveriesBlock(state)}
+
       ${inboxBlock(state)}
 
       <div class="section"><h2>今日の点</h2><button class="btn small" data-action="shuffle">別の点</button></div>
-      ${picks.map((p) => pointCard(p, { library: lib, lines: idx.get(p.id) }))}
+      ${picks.map((p) => html`${pointCard(p, { library: lib, lines: idx.get(p.id) })}${partnerBlock(state, p, idx)}`)}
 
       ${a
         ? html`<div class="section"><h2>立体</h2><a class="small" href="#/knowledge">知識マップへ</a></div>

@@ -17,6 +17,7 @@ import { PROMPT_VERSION, RECOMMEND_KINDS, RELATION_TYPES, linePrompt, pickPrompt
 import { centroid, dot, l2normalize, tfidfEmbed } from './vectors.js';
 import { carryLines, carryPlanes } from './incremental.js';
 import { diffAnalyses } from './changes.js';
+import { findDiscoveries, mergeDiscoveries } from './discoveries.js';
 import { EMBED_BATCH_SIZE } from './llm.js';
 import { isAnalysisShape } from './shape.js';
 import { searchBooks, verifyBooks } from './recommend.js';
@@ -271,6 +272,19 @@ export async function analyzeLibrary({ library, llm: rawLlm, cache = emptyCache(
   const changes = diffAnalyses(previous, analysis);
   // rebuilt の理由: full（作り直しを指定）/ grew（点が大きく増えた）/ format（前回と分析の版・埋め込みの方法が違う）
   if (changes) analysis.changes = base ? changes : { previousAt: changes.previousAt, rebuilt: true, reason: full ? 'full' : grew ? 'grew' : 'format', addedLines: [], grownLines: [], removedLines: [], connectedPoints: [] };
+  // 発見（前回の分析との差から。前回を引き継いだときだけ作り、それまでの発見は点が残っていれば持ち越す）
+  const indexOf = new Map(points.map((p, i) => [p.id, i]));
+  const foundNow = base
+    ? findDiscoveries({
+        previous: base,
+        lines: analysis.lines,
+        sourceOf: (id) => (isThought(points[indexOf.get(id)]) ? id : points[indexOf.get(id)]?.bookId || id),
+        vectorOf: (id) => vectors[indexOf.get(id)],
+        formerIdsOf: formerIdsIn(library),
+        now: analysis.createdAt,
+      })
+    : [];
+  analysis.discoveries = mergeDiscoveries(foundNow, previous?.discoveries, (id) => indexOf.has(id));
 
   // 5. おすすめの本（立体が前回と同じなら、前回のおすすめをそのまま使う。'keep' なら立体が変わっても前回のものを残す）
   if (recommend) {
@@ -425,6 +439,30 @@ function strList(v, n, max) {
     .map((x) => clean(typeof x === 'string' ? x : x?.text ?? JSON.stringify(x), max))
     .filter(Boolean)
     .slice(0, n);
+}
+
+/**
+ * Kindle で伸ばしたハイライトの、置き換わる前の点の ID（伸ばした回数ぶんたどる）。
+ * 伸ばしただけの点を、発見で「新しくつながった点」と数えないため
+ */
+function formerIdsIn(library) {
+  const direct = new Map();
+  for (const h of Object.values(library.highlights || {})) {
+    if (!h?.supersededBy) continue;
+    if (!direct.has(h.supersededBy)) direct.set(h.supersededBy, []);
+    direct.get(h.supersededBy).push(h.id);
+  }
+  return (id) => {
+    const out = [];
+    const stack = [...(direct.get(id) || [])];
+    while (stack.length) {
+      const x = stack.pop();
+      if (out.includes(x) || x === id) continue;
+      out.push(x);
+      stack.push(...(direct.get(x) || []));
+    }
+    return out;
+  };
 }
 
 /** 同じ名前が並ばないよう、2 つ目以降に「 (2)」などを付ける（前回の結果を使った名前に付いた番号とも重ならない番号にする） */

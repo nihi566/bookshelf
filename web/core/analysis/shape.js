@@ -3,6 +3,8 @@
 // 届いた分析が壊れていると、前回の結果として読んだ分析が毎回失敗し、PC の状態（/api/info）も返せなくなる。
 // ここでは中身の正しさまでは見ず、使う場所が前提にしている形（配列・文字列）だけを確かめる。
 
+import { isDiscovery } from './discoveries.js';
+
 const isStr = (v, max = 200) => typeof v === 'string' && v.length <= max;
 const isIdList = (v) => Array.isArray(v) && v.every((x) => isStr(x, 80));
 
@@ -29,6 +31,7 @@ export function analysisShapeError(a, now = Date.now()) {
   if (!Array.isArray(a.planes) || !a.planes.every((p) => p && typeof p === 'object' && isStr(p.id, 80) && isIdList(p.lineIds))) return '面（planes）の形が違います';
   if (a.isolated != null && !isIdList(a.isolated)) return 'まだつながらない点（isolated）の形が違います';
   if (!a.solid || typeof a.solid !== 'object' || Array.isArray(a.solid)) return '立体（solid）の形が違います';
+  if (a.discoveries != null && (!Array.isArray(a.discoveries) || !a.discoveries.every(isDiscovery))) return '発見（discoveries）の形が違います';
   return '';
 }
 
