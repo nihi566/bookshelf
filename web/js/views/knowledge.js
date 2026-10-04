@@ -5,6 +5,7 @@ import { layoutKnowledgeMap } from '../../core/knowledge-map.js';
 import { isoDate, truncate } from '../../core/text.js';
 import { TFIDF_HINT } from '../../core/analysis/pipeline.js';
 import { hasChanges } from '../../core/analysis/changes.js';
+import { RELATED_MAX } from '../../core/analysis/neighbors.js';
 import { pendingPoints } from '../../core/auto-analysis.js';
 import { analysisPointById, analysisPoints, isThought } from '../../core/points.js';
 import { lineIndex, pointCard } from '../ui.js';
@@ -368,6 +369,8 @@ export const lineView = {
     const plane = a.planes.find((p) => p.lineIds.includes(l.id));
     // 線の点（本に引いた線と思いつき）
     const hs = l.highlightIds.map((id) => analysisPointById(state.library, id)).filter(Boolean);
+    // 2 番目に近い線がこの線で、十分近い点（G4-3。ほかの端末から届いた分析でも、重ねず上限まで）
+    const related = [...new Set(l.relatedIds || [])].slice(0, RELATED_MAX).map((id) => analysisPointById(state.library, id)).filter(Boolean);
     const idx = lineIndex(a);
     const books = new Set(hs.filter((h) => !isThought(h)).map((h) => h.bookId));
     const thoughts = hs.filter(isThought).length;
@@ -384,6 +387,11 @@ export const lineView = {
       ${citingNotesBlock(state.library, new Set(l.highlightIds), 'この線の点を根拠にしている永久ノート')}
       <div class="section"><h2>つながっている点</h2><span class="small muted">${hs.length}</span></div>
       ${hs.map((h) => pointCard(h, { library: state.library, lines: (idx.get(h.id) || []).filter((x) => x.id !== l.id) }))}
+      ${related.length
+        ? html`<div class="section"><h2>関わる点（ほかの線から）</h2><span class="small muted">${related.length}</span></div>
+          <p class="help">ほかの線に入っている点のうち、この線の点と同じくらい、この線の中心に近い点です。</p>
+          ${related.map((h) => pointCard(h, { library: state.library, lines: idx.get(h.id) || [] }))}`
+        : ''}
       ${siblings.length ? html`<div class="section"><h2>同じ面の線</h2></div><div class="lines-of-plane">${siblings.map((s) => html`<a class="line-row" href="#/knowledge/line/${s.id}"><b>${s.name}</b><span>${s.summary}</span></a>`)}</div>` : ''}`;
   },
 };

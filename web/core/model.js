@@ -14,6 +14,7 @@ import { mergeThought, normalizeThought, pointThoughts } from './thoughts.js';
 import { mergeReads } from './discovery-reads.js';
 import { mergeFarReactions } from './far-reactions.js';
 import { normalizeNote } from './notes.js';
+import { mergeLinks } from './links.js';
 
 export const SOURCES = {
   kindle: 'Kindle',
@@ -403,6 +404,8 @@ export function mergeLibraries(base, incoming) {
   out.farReactions = mergeFarReactions(base.farReactions, incoming.farReactions, now);
   // 永久ノートは書き直した時刻が新しい方。消したものはどちらから来ても消えたまま
   out.notes = mergeCollections(base.notes, incoming.notes, { stickyDelete: true, normalize: (n) => normalizeNote(n, now) });
+  // リンクは張った・外した・理由を直した時刻が新しい方（外したリンクも、もう一度張れば戻る）
+  out.links = mergeLinks(base.links, incoming.links, now);
   out.updatedAt = later(base.updatedAt, incoming.updatedAt);
   return out;
 }

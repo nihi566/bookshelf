@@ -7,6 +7,7 @@
 
 import { mergeCollections } from './collections.js';
 import { isoStamp } from './text.js';
+import { currentPointId } from './point-ids.js';
 import { EXPLANATION_MAX, IDEA_MAX, farConnectionOf, farId, farText, isFarConnection, isFarId, isPointId } from './analysis/far.js';
 
 export const FAR_REACTIONS = Object.freeze({ interesting: '面白い', wrong: 'ちがう' });
@@ -52,6 +53,22 @@ export function wrongFarIds(library) {
 /** 発見（discoveries.js）が指す遠いつながりの ID（遠いつながりの発見でなければ ''） */
 export function farIdOfDiscovery(d) {
   return d?.kind === 'far' && Array.isArray(d.pointIds) && d.pointIds.length === 2 ? farId(d.pointIds[0], d.pointIds[1]) : '';
+}
+
+/**
+ * その点の「面白い」とした遠いつながりを、リンクとして出す形にする（G4-5）。
+ * 相手の点の ID（Kindle で伸ばしたハイライトは置き換わった先）と、共通する考え（リンクの理由として出す）
+ * @returns {{ far: object, other: string, reason: string }[]}
+ */
+export function farLinksFor(analysis, library, pointId) {
+  const self = currentPointId(library, pointId);
+  return visibleFarConnections(analysis, library)
+    .filter((f) => f.status === 'interesting')
+    .map((f) => {
+      const [a, b] = [currentPointId(library, f.a), currentPointId(library, f.b)];
+      return { far: f, other: a === self ? b : b === self ? a : null, reason: f.idea };
+    })
+    .filter((x) => x.other && x.other !== self);
 }
 
 /**

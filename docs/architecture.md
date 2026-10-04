@@ -25,7 +25,7 @@
 
 ```
 Library = { version, books: { [id]: Book }, highlights: { [id]: Highlight }, feedback, thoughts: { [id]: Thought }, discoveryReads: { [id]: readAt },
-            farReactions: { [id]: FarReaction }, notes: { [id]: Note }, updatedAt }
+            farReactions: { [id]: FarReaction }, notes: { [id]: Note }, links: { [id]: Link }, updatedAt }
 Book      = { id: 'b'+hash(書名の正規化), title, author, sources: ['kindle'|'playbooks'|'paper'|'memo'], asin?, volumeId?, cover?（アップロードした表紙の data URL）, technical?（技術書か。無ければ書名から推定）, updatedAt, deleted? }
 Highlight = { id: 'h'+hash(bookId+本文の正規化), bookId, source, kind: 'highlight'|'note',
               text, note, chapter, location, locationEnd, page, color, createdAt,
@@ -35,6 +35,8 @@ Thought   = { id: 't'+時刻+乱数, text, status: 'inbox'|'done'|'discarded', a
 FarReaction = { id: 'f'+hash(2 点の ID), a, b, idea, explanation, status: 'interesting'|'wrong'|'', updatedAt }  // 遠いつながりへの反応
 Note      = { id: 'n'+時刻+乱数, title, body, pointIds: [点の ID], from?: { kind: 'line'|'thought', id, name? }, createdAt, updatedAt }
             // 永久ノート。消したものは { id, deleted: true, createdAt, updatedAt } だけ残す
+Link      = { id: 'k'+hash(2 つの端の ID), a, b, reason, createdAt, updatedAt, deleted? }
+            // リンク（点・メモ・永久ノートどうし。a < b）。外したものは deleted: true で残す（理由は消す）
 ```
 
 - **思いつき（Thought）**は本に属さないメモ（フリートノート。`web/core/thoughts.js`）。「メモ」と呼ぶものが他にもある（読書メモ = source `memo` の点 / 取り込んだメモ = `note` / 自分のメモ = `userNote`）ので、コードでは thought と呼ぶ。本文を直しても ID は変わらない
@@ -46,6 +48,13 @@ Note      = { id: 'n'+時刻+乱数, title, body, pointIds: [点の ID], from?: 
   - 線から作る（`noteDraftFromLine`: 名前を題に、説明と問いを本文に、線の点を根拠に写す）・受け箱のメモから作る（`noteFromThought`: メモを根拠にし、メモは整理済みにする）・点の画面から作る／根拠に足す
   - 根拠の点が消えたら、ノートは残したまま「根拠の点が消えた」と出す（`note-evidence.js` の `missingEvidence`）。点・線・面の画面には、その点を根拠にしているノートを出す（`notesCiting`）
   - 同期では `updatedAt` が新しい方を採り、消したものはどちらから来ても消えたまま（`mergeCollections` の `stickyDelete`）。外から来たノートは形を確かめる（ID・題か本文のどちらか・点の ID の形・最大 200 点）。古い版のデータ（`notes` が無い）は空として読む（`notesOf()`）
+- **リンク（Link）**（`web/core/links.js`）は点・メモ・永久ノートのどれどうしでも人間が張るつながり（AI は張らない。候補の「意味の近い点」を出すまで）。理由は 1 行（120 字まで。制御文字・幅の無い文字は落とす）
+  - ID は 2 つの端から決まる（`linkId`。どの端末で張っても 1 つにまとまる）。逆向きにも見える（`linksFor` は両方向。Kindle で伸ばしたハイライトは置き換わった先として数え、同じ相手は 1 つにまとめる）。伸ばす前と後の点どうしは張れない
+  - 外したものは `deleted: true` で残し（理由の文は消す。消したノート・メモと同じく本文を残さない）、同期では `updatedAt` が新しい方を採る。張り直せば戻る（同じ 2 つから同じ ID になるので、思いつき・ノートと違い `stickyDelete` は使わない）。外から来たリンクは形を確かめる（ID が 2 つの端と合う・端の形・同じものどうしでない）。古い版のデータ（`links` が無い）は空として読む（`linksOf()`）
+  - 持つのは最大 20,000 件（`LINKS_MAX`。同期・バックアップで大量に届いても統合と画面を重くしない）。超えたら張っているリンクを先に、新しい順に残す。1 つの画面に出すのは新しい順に 50 件まで（残りは数だけ出す）
+  - 別の端末で Kindle の伸ばす前と後の点に張ると、同じ相手へのリンクが 2 本になる。画面は 1 つにまとめ、「外す」は同じ 2 つの間のリンクをまとめて外す（`removeLinksBetween`）
+  - 消えた点・ノート（まだ届いていない点を含む）へのリンクは「消えた」と出し、外せる（`web/js/views/links.js` の `endView`）。捨てたメモは消えていないのでそのまま出す
+  - 「面白い」とした遠いつながりは、両方の点の画面にリンクとして出す（`farLinksFor`。共通する考えを理由に。同じ 2 点に張ったリンクがあればそちらを出す）。相手の点を消した組は、遠いつながりの画面と同じく出さない（外せない行を残さない）
 
 - ID は内容から決まるので、何度取り込んでも・どの端末で取り込んでも同じ点は同じ ID になる
 - 取り込み（`mergeParsed`）は空欄を補うだけで、ユーザーの編集（★・メモ・タグ・削除）は変えない
@@ -66,10 +75,11 @@ Note      = { id: 'n'+時刻+乱数, title, body, pointIds: [点の ID], from?: 
 ```
 Analysis = { version: 2, createdAt, model: { chat, embed }, incremental,
   stats: { points, thoughts, lines, planes, isolated, calls: { chat, embed }, far: { candidates, calls, found } },
-  lines:  [{ id, name, summary, insight, keywords, highlightIds, bookIds, sig }],   // 線
+  lines:  [{ id, name, summary, insight, keywords, highlightIds, bookIds, relatedIds?, sig }],   // 線（relatedIds: 関わる点）
   planes: [{ id, name, summary, lineIds, sig }],                                     // 面
   solid:  { title, core, relations: [{ from, to, type, description }], principles, questions, sig },  // 立体
   isolated: [highlightId],                                                           // まだつながらない点
+  neighbors: { [点の ID]: [点の ID] },                                                // 意味の近い点（別の出どころ・近い順に最大 5 件）
   changes?: { previousAt, rebuilt?, addedLines, grownLines, removedLines, connectedPoints },  // 前回からの変化
   farConnections: [{ id: 'f…', a, b, idea, explanation, foundAt }],                  // 遠いつながり（新しい順・最大 50）
   farNote?,                                                                          // 遠い組み合わせの判定に失敗したときの説明
@@ -81,6 +91,9 @@ Analysis = { version: 2, createdAt, model: { chat, embed }, incremental,
 - 線 → 面：線の中心ベクトル + 線の説明文の埋め込みで k-means（k ≒ √線の数、2〜12）
 - LLM への依頼は線 1 本・面 1 つずつに分け、プロンプトには中心に近い点から最大 12 件だけ入れる（★の点は優先して入れる）。面には中心に近い線を最大 12 本、立体には面ごとに線の名前を最大 12 本だけ見せる（小さなモデルの読める長さを超えないように）
 - **永久ノートを分析の材料にする**（G3-5）: 面を作る AI には、その面の線の点を根拠にしたノート（最大 6 件）を、立体を作る AI には新しく直したノート（最大 12 件）を「人間がまとめた線」として見せ、AI の線より重く見るよう頼む（`humanLines`）。ノートの ID と題・本文のハッシュを面・立体の指紋に入れるので、ノートを書き直すとその面と立体だけを作り直す。ノートが無いときの依頼文と指紋は前と同じ（キャッシュが無駄にならない）
+- **意味の近い点・関わる点**（`web/core/analysis/neighbors.js`。AI は呼ばない）: 線を作ったあとに、点のベクトルと線の点の中心（面を作るために説明文の埋め込みを混ぜる前）から作る。乱数は使わず、同じ近さなら ID の順
+  - 意味の近い点（`neighbors`）: 点ごとに、別の出どころ（別の本。思いつきは 1 つずつ別）の点を近い順に最大 5 件。全部の組を比べると重い（点 2,000 件で 400 万組）ので、中心が近い線 8 本の点と、まだつながらない点だけを候補にする。点の画面に出し、1 回押せばリンクになる
+  - 関わる点（`lines[].relatedIds`）: 線に入っている点のうち、自分の線を除いていちばん近い線に、その線の点が中心にどれだけ近いかの中央値（点の数が偶数なら低い方）以上に近い点を、その線の関わる点にする（1 本に最大 12 件・近い順）。線の画面に「関わる点（ほかの線から）」、点の画面に「関わる線」として出す（1 つの点が複数の線とつながる）
 - **増分の分析**（`web/core/analysis/incremental.js`）: 前回の分析を渡すと、線・面を ID ごと引き継ぐ
   - 前回の線は残っている点だけで残す（2 点未満ならほどく）。増えた点（前回の線にも「まだつながらない点」にも無い点）は、いちばん近い線の中心に十分近ければその線に加える（上限に達した線には加えない）。「十分近い」= 引き継いだ点が「自分を除いた線の中心」にどれだけ近いかの平均 − 1.5σ 以上（自分を含めた中心で測ると線の点だけが近く出て、増えた点が入りにくい）
   - 前回の「まだつながらない点」は、今回点が加わった線（中心が動いた線）に十分近ければ加える。残った点で新しい線を作るのは、増えた点を 1 つ以上含み、十分近い点だけでできる組に限る（何も増えていなければ何も変えない。線の数は上限まで）
