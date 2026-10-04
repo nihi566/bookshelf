@@ -274,7 +274,7 @@ def build_feed(wishlist: dict, site_url: str) -> str:
         return el
 
     sub(feed, "id", site + "feed.xml")
-    sub(feed, "title", "欲しい本の値下がり・読み放題入り")
+    sub(feed, "title", "欲しい本の値下がり・読み放題・キャンペーン")
     sub(feed, "link", rel="self", href=site + "feed.xml")
     sub(feed, "link", rel="alternate", href=site)
     sub(feed, "updated", _atom_time(events[0]["at"] if events else wishlist.get("last_scraped") or ""))
