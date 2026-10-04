@@ -27,6 +27,8 @@ export const state = {
   pcSyncFailed: false,
   // PC のコンパニオンサーバの状態（拡張の確認結果など）
   pcInfo: null,
+  // 端末に保存したデータを読み終えたか。読み終える前に保存すると、空のライブラリで上書きしてしまう
+  loaded: false,
 };
 
 export async function loadState() {
@@ -39,10 +41,14 @@ export async function loadState() {
     state.settings = { ...structuredClone(DEFAULT_SETTINGS), ...rest, ai: { ...DEFAULT_SETTINGS.ai, ...(settings.ai || {}) } };
   }
   state.lastSync = lastSync || null;
+  state.loaded = true;
 }
 
 export const save = {
-  library: () => kv.set('library', state.library),
+  library: () => {
+    if (!state.loaded) return Promise.reject(new Error('まだ端末のデータを読み込んでいます。少し待ってからもう一度押してください'));
+    return kv.set('library', state.library);
+  },
   analysis: () => (state.analysis ? kv.set('analysis', state.analysis) : kv.del('analysis')),
   settings: () => kv.set('settings', state.settings),
   lastSync: () => kv.set('lastSync', state.lastSync),

@@ -39,6 +39,17 @@ export function hash(str, seed = 0) {
   return (4294967296 * (2097151 & h2) + (h1 >>> 0)).toString(36);
 }
 
+/**
+ * 利用者が作る項目（思いつきなど）の ID。本文から決まる点の ID と違い、本文を直しても変わらない。
+ * crypto.randomUUID は http の LAN アドレスなど安全でない画面では使えないので getRandomValues を使う
+ */
+export function randomId(prefix) {
+  const bytes = new Uint8Array(8);
+  if (globalThis.crypto?.getRandomValues) globalThis.crypto.getRandomValues(bytes);
+  else for (let i = 0; i < bytes.length; i++) bytes[i] = Math.floor(Math.random() * 256);
+  return prefix + Date.now().toString(36) + [...bytes].map((b) => b.toString(16).padStart(2, '0')).join('');
+}
+
 /** ISO 日付文字列 → YYYY-MM-DD（不正な値は空文字） */
 export function isoDate(value) {
   if (!value) return '';

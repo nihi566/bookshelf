@@ -1,9 +1,11 @@
-// 画面の部品（ハイライトのカード、本の行、トースト、シート）
+// 画面の部品（ハイライト・思いつきのカード、本の行、トースト、シート）
 import { html, mark } from './html.js';
 import { listBooks, SOURCES } from '../core/model.js';
 import { hash, isoDate } from '../core/text.js';
 import { kindleSyncState } from '../core/kindle-status.js';
 import { bookCoverUrl } from '../core/covers.js';
+import { isThought } from '../core/points.js';
+import { THOUGHT_LABEL, THOUGHT_STATUS } from '../core/thoughts.js';
 
 export const COLOR_VAR = {
   yellow: 'var(--hl-yellow)',
@@ -67,6 +69,39 @@ export function highlightCard(h, { library, lines = [], query = '', showBook = t
   </article>`;
 }
 
+// 思いつきの状態を変えるボタン（いまの状態から行ける先）
+const STATUS_MOVES = {
+  inbox: [['done', '整理済みにする'], ['discarded', '捨てる']],
+  done: [['inbox', '未整理に戻す'], ['discarded', '捨てる']],
+  discarded: [['inbox', '未整理に戻す']],
+};
+
+/** 思いつきのカード。moves: 状態を変えるボタンを出す（受け箱・メモの一覧） */
+export function thoughtCard(t, { lines = [], query = '', moves = false } = {}) {
+  return html`<article class="hl thought" data-hl="${t.id}">
+    <p class="hl-text">${query ? mark(t.text, query) : t.text}</p>
+    ${t.answerTo ? html`<div class="hl-note"><b>問いへの答え</b>${t.answerTo.question}</div>` : ''}
+    ${lines.length ? html`<div class="hl-lines">${lines.map((l) => html`<a class="line-chip" href="#/knowledge/line/${l.id}">${l.name}</a>`)}</div>` : ''}
+    <div class="hl-foot">
+      <div class="hl-meta">
+        <span class="badge thought">${THOUGHT_LABEL}</span>
+        <span>${isoDate(t.createdAt)}</span>
+        <span class="thought-status ${t.status}">${THOUGHT_STATUS[t.status] || ''}</span>
+      </div>
+      <div class="hl-actions">
+        <button class="icon-btn" data-action="edit-thought" data-id="${t.id}" aria-label="メモを編集">✎</button>
+        <button class="icon-btn" data-action="copy" data-id="${t.id}" aria-label="メモをコピー">⧉</button>
+      </div>
+    </div>
+    ${moves ? html`<div class="row thought-moves">${(STATUS_MOVES[t.status] || []).map(([status, label]) => html`<button type="button" class="btn small" data-action="thought-status" data-id="${t.id}" data-status="${status}">${label}</button>`)}</div>` : ''}
+  </article>`;
+}
+
+/** 点のカード（ハイライトか思いつきか） */
+export function pointCard(p, opts = {}) {
+  return isThought(p) ? thoughtCard(p, opts) : highlightCard(p, opts);
+}
+
 export function bookRow(b) {
   return html`<li><a class="book-item" href="#/book/${b.id}">
     ${bookSpine(b)}
@@ -111,11 +146,19 @@ export function sheetDirty(before, after) {
   return key(before) !== key(after);
 }
 
-/** 下から出るシート。content は html``、onSubmit(formData, action) を返す */
+// Enter で送ってよい 1 行の入力欄（チェックボックスなどは除く）
+const TEXT_INPUT = /^(text|search|url|email|tel|number|password)$/;
+
+/**
+ * 下から出るシート。content は html``、onSubmit(formData, action) を返す。
+ * onSubmit が true を返すと開いたまま。例外を投げると、その文をシートの中に出して開いたままにする
+ * （トーストはシートの下に隠れて見えないため）
+ */
 export function openSheet(content, onSubmit) {
   const dialog = document.getElementById('sheet');
-  dialog.innerHTML = String(html`<form method="dialog">${content}</form>`);
+  dialog.innerHTML = String(html`<form method="dialog">${content}<p class="notice err sheet-msg" role="alert" hidden></p></form>`);
   const form = dialog.querySelector('form');
+  const msg = form.querySelector('.sheet-msg');
   // 保存が終わるまでは次の送信を受け付けない（連打・Enter の二重送信で同じ記録が 2 件できないように）
   let busy = false;
   const initial = [...new FormData(form)];
@@ -123,15 +166,28 @@ export function openSheet(content, onSubmit) {
   const tryClose = () => {
     if (!sheetDirty(initial, [...new FormData(form)]) || confirm('編集中の内容を破棄して閉じますか？')) dialog.close();
   };
+  // 入力欄で Enter を押すと、ブラウザは並びの最初の送信ボタン（「この点を削除」など）を押したことにする。
+  // 確認なしで消えないよう、Enter は「保存」ボタンを押したことにする
+  form.addEventListener('keydown', (e) => {
+    if (e.key !== 'Enter' || e.isComposing || e.target.tagName !== 'INPUT' || !TEXT_INPUT.test(e.target.type)) return;
+    const save = form.querySelector('button[value="save"]');
+    if (!save) return;
+    e.preventDefault();
+    save.click();
+  });
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
     const action = e.submitter?.value || 'save';
     if (action === 'cancel') return dialog.close();
     if (busy) return;
     busy = true;
+    msg.hidden = true;
     try {
       const keep = await onSubmit(new FormData(form), action);
       if (keep !== true) dialog.close();
+    } catch (err) {
+      msg.textContent = err?.message || String(err);
+      msg.hidden = false;
     } finally {
       busy = false;
     }

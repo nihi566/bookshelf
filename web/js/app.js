@@ -9,7 +9,11 @@ import { isolatedView, knowledge, lineView, planeView } from './views/knowledge.
 import { importView, kindleSyncBlock, settingsView } from './views/settings.js';
 import { wishlist } from './views/wishlist.js';
 import { records } from './views/records.js';
+import { editThoughtSheet, newThoughtSheet, thoughtsView } from './views/thoughts.js';
 import { FEEDBACK_LABELS, addHighlight, deleteBook, emptyLibrary, guessTechnical, listBooks, mergeParsed, registerBook, setFeedback, updateBook, updateHighlight } from '../core/model.js';
+import { THOUGHT_STATUS, addThought, deleteThought, thoughtsOf, updateThought } from '../core/thoughts.js';
+import { isThought, pointById } from '../core/points.js';
+import { randomId } from '../core/text.js';
 import { COVER_MAX_LENGTH } from '../core/covers.js';
 import { parseFiles } from '../core/parsers/index.js';
 import { applyImport, makeBackup } from '../core/importing.js';
@@ -29,6 +33,8 @@ const ROUTES = [
   // ハイライトの検索は「読んだ本」の中の画面（タブは持たない）
   [/^\/search$/, search, 'books'],
   [/^\/records$/, records, 'records'],
+  // 思いつき（フリートノート）の一覧。受け箱はホームにあるので、タブはホーム
+  [/^\/thoughts$/, thoughtsView, 'home'],
   [/^\/knowledge$/, knowledge, 'knowledge'],
   [/^\/knowledge\/line\/(?<id>[\w-]+)$/, lineView, 'knowledge'],
   [/^\/knowledge\/plane\/(?<id>[\w-]+)$/, planeView, 'knowledge'],
@@ -114,6 +120,22 @@ function mountCommon() {
 
 async function persistLibrary() {
   await save.library();
+}
+
+// 思いつきを出している画面（受け箱・メモの一覧・点の検索）
+const THOUGHT_PATHS = ['/', '/thoughts', '/search'];
+
+/** 画面の入力欄に書きかけがあるか（描き直すと消えてしまう） */
+function hasDraft() {
+  return [...view.querySelectorAll('input:not([type="checkbox"]):not([type="radio"]):not([type="file"]), textarea')].some((el) => el.value !== el.defaultValue);
+}
+
+/**
+ * 思いつきを書いたあと、思いつきを出している画面だけ描き直す。
+ * 上のバーの「メモ」はどの画面からも開けるので、ほかの画面（紙の本の入力欄など）の書きかけを消さない
+ */
+function refreshThoughtViews() {
+  if (THOUGHT_PATHS.includes(parseHash().path) && !hasDraft()) render({ keepScroll: true });
 }
 
 // ---- 取り込み ----
@@ -311,7 +333,8 @@ async function sync({ quiet = false } = {}) {
     const { analysisDir } = await syncWithPc();
     state.pcSyncFailed = false;
     if (!quiet) toast(`PC と同期しました${analysisDir ? `（分析: ${analysisDir}）` : ''}`);
-    render({ keepScroll: true });
+    // 書きかけの入力欄があるときは描き直さない（同期した内容は次に画面を開いたときに出る）
+    if (!hasDraft()) render({ keepScroll: true });
     refreshPcInfo();
     // PC で分析が走っていれば進捗を追う
     const job = await companion.job().catch(() => null);
@@ -511,6 +534,7 @@ const actions = {
         <p class="quote">${h.text}</p>
         <label class="field"><span>自分のメモ</span><textarea name="userNote">${h.userNote || ''}</textarea></label>
         <label class="field"><span>タグ（空白かカンマ区切り）</span><input type="text" name="tags" value="${(h.tags || []).join(' ')}" placeholder="例: 習慣 仕事"></label>
+        <p class="help">自分のメモ・タグ・★は、AI が点をつなぐときに「読者自身の言葉」として使います（次の分析から）。</p>
         <div class="row spread"><button class="btn danger" value="delete">この点を削除</button><span class="row"><button class="btn" value="cancel">やめる</button><button class="btn primary" value="save">保存</button></span></div>`,
       async (data, action) => {
         if (action === 'delete') {
@@ -526,10 +550,48 @@ const actions = {
     );
   },
   async copy(el) {
-    const h = state.library.highlights[el.dataset.id];
+    const h = pointById(state.library, el.dataset.id);
+    if (!h) return;
+    // http の LAN アドレスなど、安全でない画面ではクリップボードを使えない
+    if (!navigator.clipboard) return toast('この画面ではコピーできません（https か localhost で開いてください）', 4000);
     const b = state.library.books[h.bookId];
-    await navigator.clipboard.writeText(`${h.text}\n— ${b.title}${b.author ? `（${b.author}）` : ''}`);
+    await navigator.clipboard.writeText(isThought(h) || !b ? h.text : `${h.text}\n— ${b.title}${b.author ? `（${b.author}）` : ''}`);
     toast('コピーしました');
+  },
+  // ---- 思いつき（フリートノート） ----
+  'new-thought'() {
+    if (!state.loaded) return toast('まだ端末のデータを読み込んでいます。少し待ってから押してください');
+    // ID はシートを開いたときに 1 回だけ作る（保存に失敗して押し直しても、同じメモが 2 件にならない）
+    const id = randomId('t');
+    openSheet(newThoughtSheet(), async (data) => {
+      // 失敗したら例外のままシートに出す（書いた文はシートに残る）
+      addThought(state.library, { text: data.get('text') }, undefined, id);
+      // 端末に先に保存する（PC とつながっていなくても消えない。つながったときに同期する）
+      await persistLibrary();
+      toast('受け箱に入れました');
+      refreshThoughtViews();
+      autoSyncAfterChange();
+    });
+  },
+  'edit-thought'(el) {
+    const t = thoughtsOf(state.library)[el.dataset.id];
+    if (!t || t.deleted) return;
+    openSheet(editThoughtSheet(t), async (data, action) => {
+      if (action === 'delete') deleteThought(state.library, t.id);
+      // 本文が変わっていなければ updateThought は何もしない（別の端末の新しい編集を負かさない）
+      else updateThought(state.library, t.id, { text: data.get('text') });
+      await persistLibrary();
+      toast(action === 'delete' ? '削除しました' : '保存しました');
+      render({ keepScroll: true });
+      autoSyncAfterChange();
+    });
+  },
+  async 'thought-status'(el) {
+    const t = updateThought(state.library, el.dataset.id, { status: el.dataset.status });
+    await persistLibrary();
+    toast(`「${THOUGHT_STATUS[t.status]}」にしました`);
+    render({ keepScroll: true });
+    autoSyncAfterChange();
   },
   async 'delete-book'(el) {
     const b = state.library.books[el.dataset.id];
@@ -619,6 +681,13 @@ const forms = {
     else query.delete('q');
     location.hash = `#/books?${query}`;
   },
+  'thought-filter'(form) {
+    const q = new FormData(form).get('q');
+    const { query } = parseHash();
+    if (q) query.set('q', q);
+    else query.delete('q');
+    location.hash = `#/thoughts?${query}`;
+  },
   async 'ai-settings'(form, submitter) {
     const d = new FormData(form);
     const ai = state.settings.ai;
@@ -644,7 +713,7 @@ const forms = {
         out.innerHTML = String(html`<p class="notice ok">接続できました。モデル: ${models.join('、') || '（なし）'}</p>`);
       } else {
         const info = await companion.info();
-        out.innerHTML = String(html`<p class="notice ${info.llm.configured ? 'ok' : ''}">PC に接続できました。点 ${info.stats.highlights} 件・チャットモデル: ${info.llm.chatModel || '未設定（PC で bh config model …）'}・埋め込み: ${info.llm.embedModel || '文字 n-gram'}・Play ブックスの自動取り込み: ${googleLabel(info.google)}</p>`);
+        out.innerHTML = String(html`<p class="notice ${info.llm.configured ? 'ok' : ''}">PC に接続できました。点 ${info.stats.points ?? info.stats.highlights} 件・チャットモデル: ${info.llm.chatModel || '未設定（PC で bh config model …）'}・埋め込み: ${info.llm.embedModel || '文字 n-gram'}・Play ブックスの自動取り込み: ${googleLabel(info.google)}</p>`);
       }
     } catch (e) {
       out.innerHTML = String(html`<p class="notice err">${e.message}</p>`);

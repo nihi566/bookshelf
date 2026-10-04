@@ -8,7 +8,8 @@
 //
 // LLM の結果はメンバー構成のハッシュでキャッシュするので、再分析は変わった部分だけで済む。
 
-import { feedbackByStatus, pointHighlights } from '../model.js';
+import { feedbackByStatus } from '../model.js';
+import { analysisPoints, embedText, isThought, legacyEmbedText, pointLabel } from '../points.js';
 import { bookKey, hash } from '../text.js';
 import { PROMPT_VERSION, RECOMMEND_KINDS, RELATION_TYPES, linePrompt, pickPrompt, planePrompt, recommendPrompt, searchPrompt, solidPrompt } from './prompts.js';
 import { centroid, dot, groupLines, groupPoints, l2normalize, tfidfEmbed } from './vectors.js';
@@ -24,8 +25,28 @@ export const ANALYSIS_VERSION = 1;
 // 1 本の線に集まり、面の名前も「知識の〜」ばかりになった。bge-m3 にすると面がテーマごとに分かれた
 export const TFIDF_HINT = '埋め込みモデルを使わず、文字の並びだけで点をつないでいます。ありふれた言葉でつながりやすく、面の名前が似通いがちです。PC で ollama pull bge-m3 を実行し、埋め込みモデルに bge-m3 を設定すると、意味の近さでつなげます。';
 
+// embeddings.keys: 点ごとに、埋め込んだ文のハッシュ（自分のメモ・タグを書き換えた点だけ埋め込み直すため）
 export function emptyCache() {
-  return { embeddings: { model: '', vectors: {} }, llm: {} };
+  return { embeddings: { model: '', vectors: {}, keys: {} }, llm: {} };
+}
+
+// 線を作る AI に見せる点の数（中心に近い点から）
+export const LINE_SAMPLE_SIZE = 12;
+
+/**
+ * 線を作る AI に見せる点を選ぶ。ordered は線の点（中心に近い順）。
+ * お気に入りの点を優先して入れ、残りを中心に近い順に足して max 件。並びは中心に近い順のまま
+ */
+export function lineSample(ordered, isFavorite, max = LINE_SAMPLE_SIZE) {
+  const fav = ordered.filter(isFavorite).slice(0, max);
+  const rest = ordered.filter((i) => !isFavorite(i)).slice(0, max - fav.length);
+  const chosen = new Set([...fav, ...rest]);
+  return ordered.filter((i) => chosen.has(i));
+}
+
+/** AI に渡す点の形（prompts.js の pointLine） */
+function promptPoint(library, p) {
+  return { text: p.text, label: pointLabel(library, p), thought: isThought(p), note: p.note || '', userNote: p.userNote || '', tags: p.tags || [] };
 }
 
 /**
@@ -39,29 +60,36 @@ export function emptyCache() {
  */
 export async function analyzeLibrary({ library, llm, cache = emptyCache(), onProgress = () => {}, signal, options = {} }) {
   const { granularity = 5, maxLines = 40, recommend = true, verify = true, recommendCount = 6, fetchImpl, wishlist } = options;
-  // 技術書の線は点に数えない（知識の立体の材料にしない）
-  const points = pointHighlights(library).sort((a, b) => a.id.localeCompare(b.id));
-  if (points.length < 4) throw new Error(`点（ハイライト）が ${points.length} 件しかありません。4 件以上取り込んでから分析してください。`);
+  // 点 = 本に引いた線（技術書は除く）+ 思いつき（捨てたものは除く）
+  const points = analysisPoints(library);
+  if (points.length < 4) throw new Error(`点（ハイライト・思いつき）が ${points.length} 件しかありません。4 件以上取り込んでから分析してください。`);
   const check = () => {
     if (signal?.aborted) throw new Error('分析を中止しました');
   };
 
-  // 1. 点 → ベクトル
-  const texts = points.map((h) => (h.note ? `${h.text}\n${h.note}` : h.text));
+  // 1. 点 → ベクトル（自分のメモ・タグも入れる。書き換えた点だけ埋め込み直す）
+  const texts = points.map(embedText);
+  const textKeys = texts.map((t) => hash(t));
+  const textKeyById = new Map(points.map((p, i) => [p.id, textKeys[i]]));
   let vectors;
   let embedMethod;
   if (llm.embedModel) {
-    if (cache.embeddings.model !== llm.embedModel) cache.embeddings = { model: llm.embedModel, vectors: {} };
-    const missing = points.filter((h) => !cache.embeddings.vectors[h.id]);
+    if (cache.embeddings.model !== llm.embedModel) cache.embeddings = { model: llm.embedModel, vectors: {}, keys: {} };
+    const emb = cache.embeddings;
+    emb.keys = emb.keys || {};
+    // 文のハッシュを持たない前の版のキャッシュは、前の版と同じ文（自分のメモ・タグが無い点）なら使い続ける
+    const fresh = (i) => Boolean(emb.vectors[points[i].id]) && (emb.keys[points[i].id] ?? hash(legacyEmbedText(points[i]))) === textKeys[i];
+    const missing = points.map((_, i) => i).filter((i) => !fresh(i));
     onProgress({ stage: 'embed', done: 0, total: missing.length, message: `点をベクトル化しています（${llm.embedModel}）` });
     if (missing.length) {
       const vecs = await llm.embed(
-        missing.map((h) => texts[points.indexOf(h)]),
+        missing.map((i) => texts[i]),
         { signal, onProgress: (done, total) => onProgress({ stage: 'embed', done, total, message: '点をベクトル化しています' }) },
       );
-      missing.forEach((h, i) => (cache.embeddings.vectors[h.id] = vecs[i]));
+      missing.forEach((i, j) => (emb.vectors[points[i].id] = vecs[j]));
     }
-    vectors = points.map((h) => cache.embeddings.vectors[h.id]);
+    points.forEach((p, i) => (emb.keys[p.id] = textKeys[i]));
+    vectors = points.map((p) => emb.vectors[p.id]);
     embedMethod = llm.embedModel;
   } else {
     onProgress({ stage: 'embed', done: 0, total: 1, message: '点をベクトル化しています（文字 n-gram）' });
@@ -77,11 +105,13 @@ export async function analyzeLibrary({ library, llm, cache = emptyCache(), onPro
     check();
     const members = groups[gi];
     const c = centroid(members.map((i) => vectors[i]));
-    // プロンプトには中心に近い点から最大 12 件
+    // プロンプトには中心に近い点から最大 12 件（お気に入りの点は優先して入れる）
     const ordered = [...members].sort((a, b) => dot(vectors[b], c) - dot(vectors[a], c));
-    const sample = ordered.slice(0, 12).map((i) => ({ text: points[i].text, note: points[i].note, book: library.books[points[i].bookId]?.title || '' }));
+    const chosen = lineSample(ordered, (i) => Boolean(points[i].favorite));
+    const sample = chosen.map((i) => promptPoint(library, points[i]));
     const ids = ordered.map((i) => points[i].id);
-    const key = 'line:' + hash([PROMPT_VERSION, llm.chatModel, ...[...ids].sort()].join('|'));
+    // 点の文（自分のメモ・タグを含む）が変わった線と、AI に見せる点が変わった線（★を付け替えたなど）は作り直させる
+    const key = 'line:' + hash([PROMPT_VERSION, llm.chatModel, ...ids.map((id) => `${id}:${textKeyById.get(id)}`).sort(), '|見せた点|', ...chosen.map((i) => points[i].id)].join('|'));
     onProgress({ stage: 'lines', done: gi, total: groups.length, message: `点をつないで線を引いています（${gi + 1}/${groups.length}）` });
     let r = cache.llm[key];
     if (!r) {
@@ -95,8 +125,9 @@ export async function analyzeLibrary({ library, llm, cache = emptyCache(), onPro
       summary: clean(r.summary, 600),
       insight: clean(r.insight, 300),
       keywords: (Array.isArray(r.keywords) ? r.keywords : []).map((k) => clean(k, 30)).filter(Boolean).slice(0, 6),
+      // 点の ID（思いつきの ID も入る。名前は前の版のまま）
       highlightIds: ids,
-      bookIds: [...new Set(ids.map((id) => library.highlights[id].bookId))],
+      bookIds: [...new Set(ids.map((id) => library.highlights[id]?.bookId).filter(Boolean))],
       vector: c,
     });
   }
@@ -151,7 +182,7 @@ export async function analyzeLibrary({ library, llm, cache = emptyCache(), onPro
     version: ANALYSIS_VERSION,
     createdAt: new Date().toISOString(),
     model: { chat: llm.chatModel, embed: embedMethod },
-    stats: { points: points.length, lines: lines.length, planes: planes.length, isolated: isolated.length },
+    stats: { points: points.length, thoughts: points.filter(isThought).length, lines: lines.length, planes: planes.length, isolated: isolated.length },
     lines: lines.map(({ vector, ...l }) => l),
     planes,
     solid,
@@ -319,7 +350,7 @@ function dedupeNames(items) {
 export function serializeCache(cache) {
   const vectors = {};
   for (const [id, v] of Object.entries(cache.embeddings?.vectors || {})) vectors[id] = toBase64(new Uint8Array(v.buffer, v.byteOffset, v.byteLength));
-  return { embeddings: { model: cache.embeddings?.model || '', vectors }, llm: cache.llm || {} };
+  return { embeddings: { model: cache.embeddings?.model || '', vectors, keys: cache.embeddings?.keys || {} }, llm: cache.llm || {} };
 }
 
 export function deserializeCache(data) {
@@ -329,7 +360,10 @@ export function deserializeCache(data) {
     const bytes = fromBase64(b64);
     vectors[id] = new Float32Array(bytes.buffer, bytes.byteOffset, bytes.byteLength / 4);
   }
-  return { embeddings: { model: data.embeddings?.model || '', vectors }, llm: data.llm || {} };
+  // keys が壊れていたら持たない（前の版のキャッシュと同じに扱い、文が同じ点は使い続ける）
+  const keys = data.embeddings?.keys;
+  const plain = (v) => v && typeof v === 'object' && !Array.isArray(v);
+  return { embeddings: { model: data.embeddings?.model || '', vectors, keys: plain(keys) ? keys : {} }, llm: plain(data.llm) ? data.llm : {} };
 }
 
 function toBase64(bytes) {

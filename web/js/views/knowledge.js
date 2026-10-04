@@ -4,7 +4,8 @@ import { FEEDBACK_LABELS, feedbackByStatus, feedbackFor, libraryStats } from '..
 import { layoutKnowledgeMap } from '../../core/knowledge-map.js';
 import { isoDate, truncate } from '../../core/text.js';
 import { TFIDF_HINT } from '../../core/analysis/pipeline.js';
-import { highlightCard, lineIndex } from '../ui.js';
+import { analysisPointById, isThought } from '../../core/points.js';
+import { lineIndex, pointCard } from '../ui.js';
 import { amazonKindleUrl, findWishlistBook, formatPrice } from '../../core/wishlist.js';
 import { loadWishlist } from '../wishlist-data.js';
 
@@ -46,11 +47,11 @@ export const knowledge = {
     const s = libraryStats(state.library);
     const job = state.job;
     const summary = aiSummary(state.settings, state.servedByCompanion);
-    const runBtn = html`<button class="btn primary" data-action="run-analysis" ${job?.running || s.highlights < 4 ? 'disabled' : ''}>${a ? '分析し直す' : '点をつないで分析する'}</button>`;
-    const head = html`<div class="page-head"><div><h1>知識</h1><div class="sub">点 ${s.highlights} → 線 ${a?.lines.length ?? '–'} → 面 ${a?.planes.length ?? '–'} → 立体</div></div></div>
+    const runBtn = html`<button class="btn primary" data-action="run-analysis" ${job?.running || s.points < 4 ? 'disabled' : ''}>${a ? '分析し直す' : '点をつないで分析する'}</button>`;
+    const head = html`<div class="page-head"><div><h1>知識</h1><div class="sub">点 ${s.points} → 線 ${a?.lines.length ?? '–'} → 面 ${a?.planes.length ?? '–'} → 立体</div></div></div>
       <div class="card stack">
         <p class="small">AI: ${summary || html`<b>未設定</b> — <a href="#/settings">AI の接続を設定する</a>`}</p>
-        ${s.highlights < 4 ? html`<p class="notice">分析には 4 件以上の点が必要です。<a href="#/import">取り込む</a></p>` : ''}
+        ${s.points < 4 ? html`<p class="notice">分析には 4 件以上の点が必要です。<a href="#/import">取り込む</a>か、上の「メモ」で思いつきを書いてください。</p>` : ''}
         <div class="row">${runBtn}${a ? html`<button class="btn" data-action="rerun-recommend" ${job?.running ? 'disabled' : ''}>おすすめを選び直す</button>` : ''}</div>
         ${a ? html`<p class="small muted">前回の分析: ${isoDate(a.createdAt)}・${a.model?.chat}${a.model?.embed ? ' / ' + a.model.embed : ''}・点 ${a.stats.points}</p>` : ''}
         ${a?.model?.embed === 'tfidf' ? html`<p class="notice">${TFIDF_HINT}</p>` : ''}
@@ -220,12 +221,14 @@ export const lineView = {
     const l = a?.lines.find((x) => x.id === params.id);
     if (!l) return html`<p class="empty">線が見つかりません。<a href="#/knowledge">知識へ</a></p>`;
     const plane = a.planes.find((p) => p.lineIds.includes(l.id));
-    const hs = l.highlightIds.map((id) => state.library.highlights[id]).filter((h) => h && !h.deleted);
+    // 線の点（本に引いた線と思いつき）
+    const hs = l.highlightIds.map((id) => analysisPointById(state.library, id)).filter(Boolean);
     const idx = lineIndex(a);
-    const books = new Set(hs.map((h) => h.bookId));
+    const books = new Set(hs.filter((h) => !isThought(h)).map((h) => h.bookId));
+    const thoughts = hs.filter(isThought).length;
     const siblings = plane ? plane.lineIds.filter((id) => id !== l.id).map((id) => a.lines.find((x) => x.id === id)).filter(Boolean) : [];
     return html`<a class="back" href="${plane ? `#/knowledge/plane/${plane.id}` : '#/knowledge'}">‹ ${plane ? plane.name : '知識'}</a>
-      <div class="layer-label line">線 ・ ${books.size} 冊の本をつなぐ</div>
+      <div class="layer-label line">線 ・ ${books.size} 冊の本${thoughts ? `と思いつき ${thoughts} 件` : ''}をつなぐ</div>
       <h1 style="margin:4px 0 12px">${l.name}</h1>
       <section class="card stack">
         <p style="font-family:var(--serif);line-height:1.9">${l.summary}</p>
@@ -233,7 +236,7 @@ export const lineView = {
         ${l.keywords?.length ? html`<div class="chips">${l.keywords.map((k) => html`<a class="chip" href="#/search?q=${encodeURIComponent(k)}">${k}</a>`)}</div>` : ''}
       </section>
       <div class="section"><h2>つながっている点</h2><span class="small muted">${hs.length}</span></div>
-      ${hs.map((h) => highlightCard(h, { library: state.library, lines: (idx.get(h.id) || []).filter((x) => x.id !== l.id) }))}
+      ${hs.map((h) => pointCard(h, { library: state.library, lines: (idx.get(h.id) || []).filter((x) => x.id !== l.id) }))}
       ${siblings.length ? html`<div class="section"><h2>同じ面の線</h2></div><div class="lines-of-plane">${siblings.map((s) => html`<a class="line-row" href="#/knowledge/line/${s.id}"><b>${s.name}</b><span>${s.summary}</span></a>`)}</div>` : ''}`;
   },
 };
@@ -263,9 +266,9 @@ export const planeView = {
 
 export const isolatedView = {
   render({ state }) {
-    const hs = (state.analysis?.isolated || []).map((id) => state.library.highlights[id]).filter((h) => h && !h.deleted);
+    const hs = (state.analysis?.isolated || []).map((id) => analysisPointById(state.library, id)).filter(Boolean);
     return html`<a class="back" href="#/knowledge">‹ 知識</a><div class="page-head"><h1>まだつながっていない点</h1></div>
-      ${hs.map((h) => highlightCard(h, { library: state.library }))}`;
+      ${hs.map((h) => pointCard(h, { library: state.library }))}`;
   },
 };
 
