@@ -18,10 +18,11 @@ const strArray = { type: 'array', items: str };
 /**
  * 線を作るときの点 1 つの書き方。書名（思いつきは「思いつき」）・線を引いた文・取り込んだメモと、
  * 読者が自分で付けたメモ・タグ（「読者自身の言葉」として取り込んだメモと分ける）
- * p = { text, label, thought?, note?, userNote?, tags? }
+ * p = { text, label, thought?, aiAnswer?, note?, userNote?, tags? }
+ * aiAnswer: 問いかけの答えを保存したメモ（AI が書いた文なので「読者自身の言葉」とは書かない）
  */
 export function pointLine(p, i) {
-  const head = p.thought ? `[${i + 1}]（${truncate(p.label, 20)}・読者自身の言葉）` : `[${i + 1}]『${truncate(p.label, 40)}』`;
+  const head = p.aiAnswer ? `[${i + 1}]（AI の答えを保存したもの・読者自身の言葉ではない）` : p.thought ? `[${i + 1}]（${truncate(p.label, 20)}・読者自身の言葉）` : `[${i + 1}]『${truncate(p.label, 40)}』`;
   const own = [p.userNote ? `メモ: ${truncate(p.userNote.replace(/\s+/g, ' '), 160)}` : '', p.tags?.length ? `タグ: ${p.tags.slice(0, 8).map((t) => '#' + t).join(' ')}` : ''].filter(Boolean).join(' ／ ');
   return `${head} ${truncate(p.text.replace(/\s+/g, ' '), 280)}${p.note ? `（取り込んだメモ: ${truncate(p.note.replace(/\s+/g, ' '), 120)}）` : ''}${own ? `（読者自身の言葉: ${own}）` : ''}`;
 }

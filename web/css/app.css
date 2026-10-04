@@ -248,6 +248,10 @@ details li { margin: 4px 0; }
 .sheet legend { padding: 0 4px; font-size: 0.85rem; color: var(--ink-2); }
 .sheet fieldset label.check span { overflow-wrap: anywhere; }
 
+/* 問いかける（答えの本文は改行を残す） */
+.answer-text { font-family: var(--serif); line-height: 1.9; white-space: pre-wrap; overflow-wrap: anywhere; }
+.search-modes { margin-top: 10px; }
+
 /* リンク（点・メモ・永久ノートどうし）と、意味の近い点 */
 .link-list { list-style: none; margin: 0; padding: 0; }
 .link-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; padding: 8px 10px; margin-bottom: 6px; border-radius: 10px; border: 1px solid var(--line); background: var(--surface); }

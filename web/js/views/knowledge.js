@@ -111,7 +111,7 @@ export const knowledge = {
     const summary = aiSummary(state.settings, state.servedByCompanion);
     const pending = a ? pendingPoints(analysisPoints(state.library), a) : 0;
     const runBtn = html`<button class="btn primary" data-action="run-analysis" ${job?.running || s.points < 4 ? 'disabled' : ''}>${a ? '分析し直す' : '点をつないで分析する'}</button>`;
-    const head = html`<div class="page-head"><div><h1>知識</h1><div class="sub">点 ${s.points} → 線 ${a?.lines.length ?? '–'} → 面 ${a?.planes.length ?? '–'} → 立体</div></div></div>
+    const head = html`<div class="page-head"><div><h1>知識</h1><div class="sub">点 ${s.points} → 線 ${a?.lines.length ?? '–'} → 面 ${a?.planes.length ?? '–'} → 立体</div></div><a class="btn small" href="#/ask">問いかける</a></div>
       <div class="card stack">
         <p class="small">AI: ${summary || html`<b>未設定</b> — <a href="#/settings">AI の接続を設定する</a>`}</p>
         ${s.points < 4 ? html`<p class="notice">分析には 4 件以上の点が必要です。<a href="#/import">取り込む</a>か、上の「メモ」で思いつきを書いてください。</p>` : ''}

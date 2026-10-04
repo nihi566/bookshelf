@@ -79,7 +79,8 @@ export function lineSample(ordered, isFavorite, max = LINE_SAMPLE_SIZE) {
 
 /** AI に渡す点の形（prompts.js の pointLine） */
 function promptPoint(library, p) {
-  return { text: p.text, label: pointLabel(library, p), thought: isThought(p), note: p.note || '', userNote: p.userNote || '', tags: p.tags || [] };
+  // 問いかけの答えを保存したメモは AI が書いた文（読者自身の言葉として重く見させない）
+  return { text: p.text, label: pointLabel(library, p), thought: isThought(p), aiAnswer: p.answerTo?.kind === 'ask', note: p.note || '', userNote: p.userNote || '', tags: p.tags || [] };
 }
 
 /**
