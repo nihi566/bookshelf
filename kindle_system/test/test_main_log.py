@@ -250,6 +250,35 @@ class RunIntegrationOnlyAsinsTest(unittest.TestCase):
         clear_session.assert_not_called()
         prompt.assert_not_called()
 
+    def test_returns_true_when_all_books_are_processed(self):
+        # 戻り値で成否を返す（run.py sync が失敗のとき 0 以外で終わるため）
+        with patch.object(main, "init_db"), \
+             patch.object(main, "extract_samples", return_value=[]), \
+             patch.object(main, "get_purchased_asins", return_value=set()), \
+             patch.object(main, "clear_session"), \
+             contextlib.redirect_stdout(io.StringIO()):
+            ok = asyncio.run(main.run_integration(xml_path="dummy.xml", workers=1, only_asins={"S1"}))
+
+        self.assertIs(ok, True)
+
+
+class RunIntegrationXmlFailureTest(unittest.TestCase):
+    """XML の解析に失敗したら False を返す（backlog 20261004-sync-exit-zero-on-failure）。"""
+
+    def test_returns_false_when_xml_parse_fails(self):
+        buf = io.StringIO()
+        with patch.object(main, "init_db"), \
+             patch.object(main, "get_or_create_session_start", return_value="2026-01-01T00:00:00"), \
+             patch.object(main, "get_session_processed_asins", return_value=set()), \
+             patch.object(main, "extract_samples", side_effect=ValueError("壊れた XML")), \
+             patch.object(main, "clear_session") as clear_session, \
+             contextlib.redirect_stdout(buf):
+            ok = asyncio.run(main.run_integration(xml_path="dummy.xml", workers=1, start=1))
+
+        self.assertIs(ok, False)
+        self.assertIn("XML パースに失敗", buf.getvalue())
+        clear_session.assert_not_called()
+
 
 if __name__ == "__main__":
     unittest.main()

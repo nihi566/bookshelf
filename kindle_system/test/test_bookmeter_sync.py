@@ -76,6 +76,23 @@ class SyncBookmeterWishlistNormalTest(unittest.TestCase):
         )
         self.assertTrue(any("開始" in l for l in lines))
         self.assertTrue(any("完了" in l for l in lines))
+        self.assertFalse(result["fetch_failed"])
+
+
+class SyncBookmeterWishlistFetchFailureTest(unittest.TestCase):
+    """一覧の取得に失敗したことを呼び出し元が見分けられる（0 件の成功と区別する）。
+
+    run.py sync はこれを見て 0 以外で終わる（backlog 20261004-sync-exit-zero-on-failure）。
+    """
+
+    @patch("src.bookmeter_sync.fetch_wish_books", side_effect=RuntimeError("接続できません"))
+    def test_fetch_failure_is_reported_in_result(self, _mock_fetch):
+        lines = []
+        result = asyncio.run(sync_bookmeter_wishlist(progress_cb=lines.append))
+
+        self.assertTrue(result["fetch_failed"])
+        self.assertEqual(result["total"], 0)
+        self.assertTrue(any("取得に失敗" in l for l in lines))
 
 
 class SyncBookmeterWishlistManualAsinTest(unittest.TestCase):

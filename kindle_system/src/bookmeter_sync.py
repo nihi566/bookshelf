@@ -76,6 +76,7 @@ async def sync_bookmeter_wishlist(progress_cb: Optional[ProgressCallback] = None
             "registered":    int,        # 登録・クロールまで完了した件数
             "skipped":       int,        # スキップした件数（ASIN解決失敗・登録失敗・クロール失敗）
             "failed_titles": list[str],  # スキップした本のタイトル一覧
+            "fetch_failed":  bool,       # 読書メーターの一覧を取得できなかった（0 件の成功と区別する）
         }
     """
 
@@ -93,7 +94,7 @@ async def sync_bookmeter_wishlist(progress_cb: Optional[ProgressCallback] = None
         books = await asyncio.to_thread(fetch_wish_books)
     except Exception as e:
         emit(f"[エラー] 読書メーター取得に失敗しました: {e}")
-        return {"total": 0, "registered": 0, "skipped": 0, "failed_titles": []}
+        return {"total": 0, "registered": 0, "skipped": 0, "failed_titles": [], "fetch_failed": True}
 
     emit(f"[OK] 読書メーターから「読みたい本」を {len(books)} 件取得しました。")
 
@@ -203,4 +204,5 @@ async def sync_bookmeter_wishlist(progress_cb: Optional[ProgressCallback] = None
         "registered": registered,
         "skipped": skipped,
         "failed_titles": failed_titles,
+        "fetch_failed": False,
     }
