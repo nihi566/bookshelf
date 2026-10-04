@@ -12,12 +12,14 @@
 
 import { feedbackByStatus } from '../model.js';
 import { analysisPoints, embedText, isThought, legacyEmbedText, pointLabel } from '../points.js';
-import { bookKey, hash } from '../text.js';
-import { PROMPT_VERSION, RECOMMEND_KINDS, RELATION_TYPES, linePrompt, pickPrompt, planePrompt, recommendPrompt, searchPrompt, solidPrompt } from './prompts.js';
+import { bookKey, hash, maskSecrets, truncate } from '../text.js';
+import { PROMPT_VERSION, RECOMMEND_KINDS, RELATION_TYPES, farPrompt, linePrompt, pickPrompt, planePrompt, recommendPrompt, searchPrompt, solidPrompt } from './prompts.js';
 import { centroid, dot, l2normalize, tfidfEmbed } from './vectors.js';
 import { carryLines, carryPlanes } from './incremental.js';
 import { diffAnalyses } from './changes.js';
-import { findDiscoveries, mergeDiscoveries } from './discoveries.js';
+import { farDiscovery, findDiscoveries, mergeDiscoveries } from './discoveries.js';
+import { FAR_MAX_UNREADABLE, farCandidates, farId, judgeFarPairs, mergeFarConnections, pickReps } from './far.js';
+import { farReactionsOf, wrongFarIds } from '../far-reactions.js';
 import { EMBED_BATCH_SIZE } from './llm.js';
 import { isAnalysisShape } from './shape.js';
 import { searchBooks, verifyBooks } from './recommend.js';
@@ -25,6 +27,10 @@ import { titleKey, wishlistForRecommend } from '../wishlist.js';
 
 // おすすめの候補に混ぜる欲しい本の冊数（多すぎると小さなモデルが選びきれない）
 const WISHLIST_CANDIDATES = 8;
+// おすすめに毎回 1 冊以上入れる種類（広げる・揺さぶる）。好みに閉じないため、AI が選ばなければ足す
+export const REQUIRED_KINDS = Object.freeze(['broaden', 'challenge']);
+// AI が理由を書けなかったときに、足した本に添える理由
+const KIND_REASON = { broaden: 'いまの面の隣の分野へ、読書を広げる本として足しました。', challenge: 'いまの考えとは別の立場から、考えを揺さぶる本として足しました。' };
 
 // 2: 線を小さくした（点 8 件で線 1 本・上限 400 本）。前の版の分析は引き継がず、最初から作り直す
 export const ANALYSIS_VERSION = 2;
@@ -47,8 +53,9 @@ const REBUILD_MIN_ADDED = 40;
 export const TFIDF_HINT = '埋め込みモデルを使わず、文字の並びだけで点をつないでいます。ありふれた言葉でつながりやすく、面の名前が似通いがちです。PC で ollama pull bge-m3 を実行し、埋め込みモデルに bge-m3 を設定すると、意味の近さでつなげます。';
 
 // embeddings.keys: 点ごとに、埋め込んだ文のハッシュ（自分のメモ・タグを書き換えた点だけ埋め込み直すため）
+// far: 遠い組み合わせの AI の判定（判定した組を二度判定せず、分析のたびに新しい組を試すため）
 export function emptyCache() {
-  return { embeddings: { model: '', vectors: {}, keys: {} }, llm: {} };
+  return { embeddings: { model: '', vectors: {}, keys: {} }, llm: {}, far: {} };
 }
 
 // 線を作る AI に見せる点の数（中心に近い点から）
@@ -92,6 +99,8 @@ export async function analyzeLibrary({ library, llm: rawLlm, cache = emptyCache(
   const check = () => {
     if (signal?.aborted) throw new Error('分析を中止しました');
   };
+  // 前の版のキャッシュには遠い組み合わせの判定が無い
+  if (!plainObject(cache.far)) cache.far = {};
   // 線・面・立体を作るために AI を呼んだ回数（おすすめの本は数えない）。変わったところだけ呼んだかを結果に残す
   const calls = { chat: 0, embed: 0 };
   const llm = {
@@ -272,19 +281,25 @@ export async function analyzeLibrary({ library, llm: rawLlm, cache = emptyCache(
   const changes = diffAnalyses(previous, analysis);
   // rebuilt の理由: full（作り直しを指定）/ grew（点が大きく増えた）/ format（前回と分析の版・埋め込みの方法が違う）
   if (changes) analysis.changes = base ? changes : { previousAt: changes.previousAt, rebuilt: true, reason: full ? 'full' : grew ? 'grew' : 'format', addedLines: [], grownLines: [], removedLines: [], connectedPoints: [] };
-  // 発見（前回の分析との差から。前回を引き継いだときだけ作り、それまでの発見は点が残っていれば持ち越す）
   const indexOf = new Map(points.map((p, i) => [p.id, i]));
+  const alive = (id) => indexOf.has(id);
+  // 点の出どころ（本の ID。思いつきは 1 つずつ別の出どころ）
+  const sourceOf = (id) => (isThought(points[indexOf.get(id)]) ? id : points[indexOf.get(id)]?.bookId || id);
+
+  // 4.5 遠いつながり（別の本・別の面にある、近さが低めの点の組を AI に判定させる。おすすめの本と同じく、線・面・立体の回数には数えない）
+  check();
+  const far = await findFarConnections({ library, analysis, previous, points, vectors, indexOf, sourceOf, textKeyById, llm: rawLlm, cache, signal, onProgress });
+  analysis.farConnections = mergeFarConnections(far.found, previous?.farConnections, alive, wrongFarIds(library));
+  analysis.stats.far = { candidates: far.candidates, calls: far.calls, found: far.found.length };
+  // エラー文は長さも切る（分析の形の確かめで、長すぎる説明は受け入れないため）
+  if (far.error) analysis.farNote = `遠い組み合わせの判定に失敗しました（${truncate(maskSecrets(far.error), 300)}）。次の分析でもう一度試します。`;
+
+  // 発見（前回の分析との差から。前回を引き継いだときだけ作り、それまでの発見は点が残っていれば持ち越す）。
+  // 新しい遠いつながりは線の ID に依らないので、作り直した分析でも発見にする（最初の分析では作らない）
   const foundNow = base
-    ? findDiscoveries({
-        previous: base,
-        lines: analysis.lines,
-        sourceOf: (id) => (isThought(points[indexOf.get(id)]) ? id : points[indexOf.get(id)]?.bookId || id),
-        vectorOf: (id) => vectors[indexOf.get(id)],
-        formerIdsOf: formerIdsIn(library),
-        now: analysis.createdAt,
-      })
+    ? findDiscoveries({ previous: base, lines: analysis.lines, sourceOf, vectorOf: (id) => vectors[indexOf.get(id)], formerIdsOf: formerIdsIn(library), now: analysis.createdAt })
     : [];
-  analysis.discoveries = mergeDiscoveries(foundNow, previous?.discoveries, (id) => indexOf.has(id));
+  analysis.discoveries = mergeDiscoveries([...(previous ? far.found.map(farDiscovery) : []), ...foundNow], previous?.discoveries, alive);
 
   // 5. おすすめの本（立体が前回と同じなら、前回のおすすめをそのまま使う。'keep' なら立体が変わっても前回のものを残す）
   if (recommend) {
@@ -303,7 +318,7 @@ export async function analyzeLibrary({ library, llm: rawLlm, cache = emptyCache(
       } catch (e) {
         if (signal?.aborted) throw e;
         analysis.recommendations = [];
-        analysis.recommendationNote = `おすすめを選べませんでした（${e.message}）。「おすすめを選び直す」で再実行できます。`;
+        analysis.recommendationNote = `おすすめを選べませんでした（${maskSecrets(e.message)}）。「おすすめを選び直す」で再実行できます。`;
       }
       analysis.recommendedAt = new Date().toISOString();
     }
@@ -329,11 +344,28 @@ export async function recommendBooks({ library, analysis, llm, signal, onProgres
   const wishInfo = (w) => ({ asin: w.asin, price: w.price, ku: w.ku });
   const planeRef = (ref) => analysis.planes[parseInt(String(ref).replace(/[^\d]/g, ''), 10) - 1]?.id || null;
   const kindOf = (k) => (RECOMMEND_KINDS.includes(k) ? k : 'deepen');
+  const base = { solid: analysis.solid, planes: analysis.planes, prefs };
+  // 足りない種類を足すための依頼（失敗しても、それまでに選べた本は捨てない）
+  const ask = async (p) => {
+    try {
+      return await llm.chatJson({ ...p, signal });
+    } catch (e) {
+      if (signal?.aborted) throw e;
+      return null;
+    }
+  };
 
   if (verify) {
     onProgress({ stage: 'recommend', done: 0, total: 3, message: '本を探す方向を考えています' });
-    const s = await llm.chatJson({ ...searchPrompt({ solid: analysis.solid, planes: analysis.planes, count: Math.min(6, count), prefs }), signal });
-    const searches = objects(s?.searches).map((x) => ({ query: clean(x.query, 40), plane: x.plane, kind: kindOf(x.kind) })).filter((x) => x.query).slice(0, 6);
+    const s = await llm.chatJson({ ...searchPrompt({ ...base, count: Math.min(6, count) }), signal });
+    // AI の答えの中の壊れた項目（null など）は飛ばす
+    const toSearches = (v) => (Array.isArray(v) ? v : []).filter(isObject).map((x) => ({ query: clean(x.query, 40), plane: x.plane, kind: kindOf(x.kind) })).filter((x) => x.query);
+    const searches = toSearches(s?.searches).slice(0, 6);
+    // 広げる・揺さぶるの検索語が無ければ、その種類だけを頼んで足す（AI 任せにしない）
+    for (const kind of REQUIRED_KINDS.filter((k) => !searches.some((x) => x.kind === k))) {
+      const more = await ask(searchPrompt({ ...base, count: 2, kinds: [kind] }));
+      searches.push(...toSearches(more?.searches).filter((x) => !searches.some((y) => y.query === x.query)).slice(0, 2).map((x) => ({ ...x, kind })));
+    }
     const candidates = [];
     const seen = new Set(readKeys);
     // 欲しい本のうち、知識の全体像に近い本を先に候補にする
@@ -359,19 +391,37 @@ export async function recommendBooks({ library, analysis, llm, signal, onProgres
     }
     if (candidates.length) {
       onProgress({ stage: 'recommend', done: 2, total: 3, message: `見つかった ${candidates.length} 冊から選んでいます` });
-      const r = await llm.chatJson({ ...pickPrompt({ solid: analysis.solid, planes: analysis.planes, candidates, count, prefs }), signal, temperature: 0.3 });
-      const picked = new Set();
-      const recs = [];
-      for (const p of objects(r?.picks)) {
-        const c = namedCandidate(p.reason, candidates) || candidates[Number(p.candidate) - 1];
-        if (!c || picked.has(c)) continue;
-        picked.add(c);
-        // 欲しい本だけから来た候補は書誌 DB で確かめていない（search が無い）
+      const r = await llm.chatJson({ ...pickPrompt({ ...base, candidates, count }), signal, temperature: 0.3 });
+      // 欲しい本だけから来た候補は書誌 DB で確かめていない（search が無い）
+      const toRec = (c, p, kind = kindOf(p.kind || c.search?.kind)) => {
         const { search, description, wishlist: wished, ...verified } = c;
-        recs.push({ title: c.title, author: c.authors, planeId: planeRef(p.plane) || planeRef(search?.plane), kind: kindOf(p.kind || search?.kind), reason: clean(stripPlaneRefs(p.reason), 400), ...(search ? { query: search.query, verified } : {}), ...(wished ? { wishlist: wished } : {}) });
+        return { title: c.title, author: c.authors, planeId: planeRef(p.plane) || planeRef(search?.plane), kind, reason: clean(stripPlaneRefs(p.reason), 400), ...(search ? { query: search.query, verified } : {}), ...(wished ? { wishlist: wished } : {}) };
+      };
+      // 候補 → おすすめ（AI が選んだ候補）
+      const recOf = new Map();
+      for (const p of (Array.isArray(r?.picks) ? r.picks : []).filter(isObject)) {
+        const c = namedCandidate(p.reason, candidates) || candidates[Number(p.candidate) - 1];
+        if (!c || recOf.has(c)) continue;
+        recOf.set(c, toRec(c, p));
+      }
+      let recs = [...recOf.values()].slice(0, count);
+      // 広げる・揺さぶるの本が無ければ、その種類で探した候補から 1 冊選ばせて、その種類の理由を書かせる（理由を書けなければ決まった理由）。
+      // AI が「深める」として選んだ本も選び直せる（その本は種類と理由を書き換える）。広げる・揺さぶるとして選んだ本は動かさない
+      const movable = (c) => !recs.includes(recOf.get(c)) || !REQUIRED_KINDS.includes(recOf.get(c).kind);
+      for (const kind of recs.length ? REQUIRED_KINDS.filter((k) => !recs.some((x) => x.kind === k)) : []) {
+        const pool = candidates.filter((c) => c.search?.kind === kind && movable(c)).slice(0, 5);
+        if (!pool.length) continue;
+        const one = await ask(pickPrompt({ ...base, candidates: pool, count: 1, kinds: [kind] }));
+        const chosen = (x) => namedCandidate(x.reason, pool) || pool[Number(x.candidate) - 1];
+        const p = (Array.isArray(one?.picks) ? one.picks : []).filter(isObject).find(chosen);
+        const c = p ? chosen(p) : pool[0];
+        const rec = toRec(c, p && clean(p.reason, 400) ? p : { reason: KIND_REASON[kind] }, kind);
+        const old = recOf.get(c);
+        recs = recs.includes(old) ? recs.map((x) => (x === old ? rec : x)) : [...makeRoom(recs, count), rec];
+        recOf.set(c, rec);
       }
       onProgress({ stage: 'recommend', done: 3, total: 3, message: `おすすめの本を ${recs.length} 冊選びました` });
-      if (recs.length) return recs.slice(0, count);
+      if (recs.length) return recs;
     }
   }
 
@@ -380,21 +430,36 @@ export async function recommendBooks({ library, analysis, llm, signal, onProgres
   const seen = new Set();
   const rejected = [];
   let recs = [];
+  /** AI が挙げた本 → おすすめ（挙げられない本は rejected へ。挙げた本を返す） */
+  const take = (b, kind = kindOf(b?.kind)) => {
+    const rec = { title: clean(b?.title, 120), author: clean(b?.author, 80), planeId: planeRef(b?.plane), kind, reason: clean(stripPlaneRefs(b?.reason), 400) };
+    const key = bookKey(rec.title);
+    if (!rec.title || seen.has(key)) return null;
+    seen.add(key);
+    if (excluded(rec.title)) return void rejected.push(rec.title);
+    const w = wishByKey.get(titleKey(rec.title));
+    return w ? { ...rec, wishlist: wishInfo(w) } : rec;
+  };
   // 小さなモデルは既読の本を挙げがちなので、多めに頼み、足りなければ却下した本を伝えてもう一度だけ頼む
   for (let round = 0; round < 2 && recs.length < Math.ceil(count / 2); round++) {
-    const p = recommendPrompt({ solid: analysis.solid, planes: analysis.planes, readTitles, count: count + 2, avoid: rejected, prefs });
+    const p = recommendPrompt({ ...base, readTitles, count: count + 2, avoid: rejected });
     const r = await llm.chatJson({ ...p, signal, temperature: 0.5 + round * 0.2 });
-    for (const b of objects(r?.books)) {
-      const rec = { title: clean(b.title, 120), author: clean(b.author, 80), planeId: planeRef(b.plane), kind: kindOf(b.kind), reason: clean(stripPlaneRefs(b.reason), 400) };
-      const key = bookKey(rec.title);
-      if (!rec.title || seen.has(key)) continue;
-      seen.add(key);
-      const w = wishByKey.get(titleKey(rec.title));
-      if (excluded(rec.title)) rejected.push(rec.title);
-      else recs.push(w ? { ...rec, wishlist: wishInfo(w) } : rec);
+    for (const b of Array.isArray(r?.books) ? r.books : []) {
+      const rec = take(b);
+      if (rec) recs.push(rec);
     }
   }
   recs = recs.slice(0, count);
+  // 広げる・揺さぶるの本が無ければ、その種類だけを頼んで 1 冊足す（AI 任せにしない）
+  for (const kind of recs.length ? REQUIRED_KINDS.filter((k) => !recs.some((x) => x.kind === k)) : []) {
+    const r = await ask(recommendPrompt({ ...base, readTitles, count: 2, avoid: [...rejected, ...recs.map((x) => x.title)], kinds: [kind] }));
+    for (const b of Array.isArray(r?.books) ? r.books : []) {
+      const rec = take(b, kind);
+      if (!rec) continue;
+      recs = [...makeRoom(recs, count), rec];
+      break;
+    }
+  }
   if (verify) {
     onProgress({ stage: 'recommend', done: 0, total: 1, message: '書誌データベースで実在を確認しています' });
     recs = await verifyBooks(recs, { fetchImpl, signal });
@@ -403,6 +468,18 @@ export async function recommendBooks({ library, analysis, llm, signal, onProgres
   }
   onProgress({ stage: 'recommend', done: 1, total: 1, message: `おすすめの本を ${recs.length} 冊選びました` });
   return recs;
+}
+
+/**
+ * おすすめに 1 冊足すための空きを作る（count 冊そろっていれば、後ろから見て、同じ種類がほかにもある本か、
+ * 必ず入れる種類ではない本を 1 冊外す）
+ */
+function makeRoom(recs, count) {
+  if (recs.length < count) return recs;
+  const n = new Map();
+  for (const r of recs) n.set(r.kind, (n.get(r.kind) || 0) + 1);
+  for (let i = recs.length - 1; i >= 0; i--) if (n.get(recs[i].kind) > 1 || !REQUIRED_KINDS.includes(recs[i].kind)) return recs.filter((_, j) => j !== i);
+  return recs.slice(0, -1);
 }
 
 /** おすすめが選べなかったときの説明（画面に出す） */
@@ -447,6 +524,63 @@ function strList(v, n, max) {
 }
 
 /**
+ * 遠いつながりを探す（G6）: 線ごとの中心にいちばん近い点と、まだつながらない点のうち、別の本・別の面にある近さが低めの組を
+ * 最大 10 組選び、AI に「共通する考えがあるか」を判定させる。前に判定した組（キャッシュ）・反応を付けた組・前回までに
+ * 見つかった組は選ばない（分析のたびに、まだ試していない組を試す）。
+ * 判定は cache.far に { a, b, shared, idea?, explanation?, at } で残す（読めない答えは { a, b, unreadable: 回数, at }）
+ * @returns {Promise<{ found: object[], calls: number, candidates: number, error: string }>}
+ */
+async function findFarConnections({ library, analysis, previous, points, vectors, indexOf, sourceOf, textKeyById, llm, cache, signal, onProgress }) {
+  const judged = cache.far;
+  // 判定の指紋: 2 点（並びに依らない）と、それぞれの文（自分のメモ・タグを含む）・モデル・プロンプトの版
+  const sig = (a, b) => 'far:' + hash([PROMPT_VERSION, llm.chatModel, ...[a, b].sort().map((id) => `${id}:${textKeyById.get(id)}`)].join('|'));
+  const current = (k, v) => typeof v?.a === 'string' && typeof v?.b === 'string' && indexOf.has(v.a) && indexOf.has(v.b) && sig(v.a, v.b) === k;
+  const known = new Set([...Object.keys(farReactionsOf(library)), ...(previous?.farConnections || []).map((f) => f.id)]);
+  // 前の分析で「ある」と判定したのに、その分析が保存されなかった組（判定のあとで中止・失敗した）。判定し直さず、今回の結果に入れる
+  const recovered = Object.entries(judged)
+    .filter(([k, v]) => v?.shared === true && current(k, v) && typeof v.at === 'string' && (!previous || v.at > previous.createdAt) && !known.has(farId(v.a, v.b)))
+    .map(([, v]) => ({ id: farId(v.a, v.b), a: v.a, b: v.b, idea: v.idea, explanation: v.explanation, foundAt: v.at }));
+  for (const f of recovered) known.add(f.id);
+  const planeOfLine = new Map(analysis.planes.flatMap((p) => p.lineIds.map((id) => [id, p.id])));
+  // 代表の点は上限まで（まだつながらない点が多いときは、前に判定した組に入った回数が少ない点から）
+  const judgedCount = new Map();
+  for (const v of Object.values(judged)) for (const id of [v?.a, v?.b]) if (typeof id === 'string') judgedCount.set(id, (judgedCount.get(id) || 0) + 1);
+  const reps = pickReps(
+    [...analysis.lines.map((l) => ({ id: l.highlightIds[0], plane: planeOfLine.get(l.id) || null, isolated: false })), ...analysis.isolated.map((id) => ({ id, plane: null, isolated: true }))].filter((r) => indexOf.has(r.id)),
+    (id) => judgedCount.get(id) || 0,
+  ).map((r) => ({ ...r, vector: vectors[indexOf.get(r.id)], source: sourceOf(r.id) }));
+  // 判定済み（「ある」「ない」）の組と、答えが何度も読めなかった組は選ばない
+  const done = (v) => typeof v?.shared === 'boolean' || (v?.unreadable || 0) >= FAR_MAX_UNREADABLE;
+  const candidates = farCandidates({ reps, skip: (c) => known.has(c.id) || done(judged[sig(c.a, c.b)]) });
+  const pointOf = (id) => promptPoint(library, points[indexOf.get(id)]);
+  const at = analysis.createdAt;
+  const r = await judgeFarPairs({
+    candidates,
+    llm,
+    signal,
+    onProgress,
+    now: at,
+    promptOf: (c) => farPrompt(pointOf(c.a), pointOf(c.b)),
+    remember: (c, v) => {
+      const k = sig(c.a, c.b);
+      judged[k] = v ? { a: c.a, b: c.b, ...v, at } : { a: c.a, b: c.b, unreadable: (judged[k]?.unreadable || 0) + 1, at };
+    },
+  });
+  // 使わなくなった判定（消えた点・文を書き換えた点・モデルやプロンプトを変えたときの組）をキャッシュから外す。
+  // 残す数にも上限を置く（分析のたびに 10 組ずつ増えるので、古い判定から外す。外した組はいつか判定し直すことがある）
+  for (const [k, v] of Object.entries(judged)) if (!current(k, v)) delete judged[k];
+  const keys = Object.keys(judged);
+  if (keys.length > FAR_CACHE_KEEP) {
+    const stamp = (k) => (typeof judged[k].at === 'string' ? judged[k].at : '');
+    for (const k of keys.sort((x, y) => (stamp(x) < stamp(y) ? -1 : stamp(x) > stamp(y) ? 1 : 0)).slice(0, keys.length - FAR_CACHE_KEEP)) delete judged[k];
+  }
+  return { ...r, found: [...recovered, ...r.found], candidates: candidates.length };
+}
+
+// 遠い組み合わせの判定を残す数（1 件は百数十字なので、上限まで残しても 1 MB に届かない）
+const FAR_CACHE_KEEP = 5000;
+
+/**
  * Kindle で伸ばしたハイライトの、置き換わる前の点の ID（伸ばした回数ぶんたどる）。
  * 伸ばしただけの点を、発見で「新しくつながった点」と数えないため
  */
@@ -485,8 +619,11 @@ function dedupeNames(items) {
 export function serializeCache(cache) {
   const vectors = {};
   for (const [id, v] of Object.entries(cache.embeddings?.vectors || {})) vectors[id] = toBase64(new Uint8Array(v.buffer, v.byteOffset, v.byteLength));
-  return { embeddings: { model: cache.embeddings?.model || '', vectors, keys: cache.embeddings?.keys || {} }, llm: cache.llm || {} };
+  return { embeddings: { model: cache.embeddings?.model || '', vectors, keys: cache.embeddings?.keys || {} }, llm: cache.llm || {}, far: cache.far || {} };
 }
+
+const plainObject = (v) => Boolean(v) && typeof v === 'object' && !Array.isArray(v);
+const isObject = (v) => Boolean(v) && typeof v === 'object';
 
 export function deserializeCache(data) {
   if (!data) return emptyCache();
@@ -505,8 +642,7 @@ export function deserializeCache(data) {
   }
   // keys が壊れていたら持たない（前の版のキャッシュと同じに扱い、文が同じ点は使い続ける）
   const keys = data.embeddings?.keys;
-  const plain = (v) => v && typeof v === 'object' && !Array.isArray(v);
-  return { embeddings: { model: data.embeddings?.model || '', vectors, keys: plain(keys) ? keys : {} }, llm: plain(data.llm) ? data.llm : {} };
+  return { embeddings: { model: data.embeddings?.model || '', vectors, keys: plainObject(keys) ? keys : {} }, llm: plainObject(data.llm) ? data.llm : {}, far: plainObject(data.far) ? data.far : {} };
 }
 
 function toBase64(bytes) {

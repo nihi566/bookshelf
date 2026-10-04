@@ -17,6 +17,10 @@ function sampleLibrary() {
   return lib;
 }
 
+// G5-2 の回数には、おすすめの本と G6 の遠い組み合わせの判定を含めない
+const notFar = (b) => b.response_format?.json_schema?.name !== 'far';
+const chatsSince = (fake, from) => fake.calls.bodies.slice(from).filter(notFar).length;
+
 /** 線 1 本に入っている点の文に、ほんの少し言葉を足した新しい点を、別の本として足す（その線の近くに来る） */
 function addNearPoint(lib, analysis) {
   const line = analysis.lines.find((l) => l.highlightIds.length >= 3 && l.highlightIds.every((id) => id.startsWith('h')));
@@ -36,10 +40,10 @@ test('G5-2: 点を 1 件足した再分析で AI を呼ぶのは 5 回以下。�
     assert.equal(first.incremental, false);
     const { line, added } = addNearPoint(lib, first);
 
-    const before = { chat: fake.calls.chat, embed: fake.calls.embed };
+    const before = { bodies: fake.calls.bodies.length, embed: fake.calls.embed };
     const second = (await analyzeLibrary({ library: lib, llm, cache: deserializeCache(JSON.parse(JSON.stringify(serializeCache(cache)))), previous: first, options: { recommend: false } })).analysis;
-    const used = fake.calls.chat - before.chat + (fake.calls.embed - before.embed);
-    assert.ok(used <= 5, `AI を呼んだ回数 ${used}（チャット ${fake.calls.chat - before.chat}・埋め込み ${fake.calls.embed - before.embed}）`);
+    const used = chatsSince(fake, before.bodies) + (fake.calls.embed - before.embed);
+    assert.ok(used <= 5, `AI を呼んだ回数 ${used}（チャット ${chatsSince(fake, before.bodies)}・埋め込み ${fake.calls.embed - before.embed}）`);
     assert.ok(second.stats.calls.chat + second.stats.calls.embed <= 5);
     assert.equal(second.incremental, true);
     // 新しい点は、元にした点のある既存の線に加わる（線の ID はそのまま）
@@ -68,10 +72,10 @@ test('G5-2: キャッシュが無くても、前回の結果を引き継げば�
     const first = (await analyzeLibrary({ library: lib, llm, options: { recommend: false } })).analysis;
     // サンプルの点と同じ文字の並びを 1 つも持たない思いつき（偽の埋め込みでは近さが 0）
     addThought(lib, { text: 'zz qq xx vv ww' });
-    const before = fake.calls.chat;
+    const before = fake.calls.bodies.length;
     const second = (await analyzeLibrary({ library: lib, llm, previous: first, options: { recommend: false } })).analysis;
     // キャッシュが空なので点の埋め込みはやり直すが、線・面・立体は前回の結果を使う
-    assert.equal(fake.calls.chat - before, 0);
+    assert.equal(chatsSince(fake, before), 0);
     assert.deepEqual(second.lines.map((l) => [l.id, l.name]), first.lines.map((l) => [l.id, l.name]));
     assert.equal(second.solid.title, first.solid.title);
   } finally {
@@ -163,7 +167,8 @@ test('G5-2: 埋め込みモデルが無い（文字 n-gram）ときも、点を 
   const lib = emptyLibrary();
   mergeParsed(lib, SAMPLE_BOOKS);
   let chat = 0;
-  const llm = { chatModel: 'stub', chatJson: async (p) => (chat++, p.name === 'line' ? { name: `線${chat}`, summary: '要約', insight: '', keywords: [] } : p.name === 'plane' ? { name: `面${chat}`, summary: '要約' } : { title: '核', core: '', relations: [], principles: [], questions: [] }) };
+  // 遠い組み合わせの判定（G6）は数えない
+  const llm = { chatModel: 'stub', chatJson: async (p) => (p.name === 'far' ? { shared: false, idea: '', explanation: '' } : (chat++, p.name === 'line' ? { name: `線${chat}`, summary: '要約', insight: '', keywords: [] } : p.name === 'plane' ? { name: `面${chat}`, summary: '要約' } : { title: '核', core: '', relations: [], principles: [], questions: [] })) };
   const cache = emptyCache();
   let prev = (await analyzeLibrary({ library: lib, llm, cache, options: { recommend: false } })).analysis;
   const extra = ['習慣は小さな仕組みから始まる。', '注意を守ることは時間を守ること。', '書くことで考えがまとまる。', '信頼は約束を守ることで生まれる。', '休むことも仕事の一部である。', '環境を変えると行動が変わる。'];

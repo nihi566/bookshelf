@@ -20,6 +20,8 @@ import { autoAnalyzeDue, autoConfig, pendingPoints } from '../web/core/auto-anal
 import { analysisShapeError } from '../web/core/analysis/shape.js';
 import { wishlistForRecommend } from '../web/core/wishlist.js';
 import { parseFiles } from '../web/core/parsers/index.js';
+// 画面に出すエラーの文から、URL に書いたパスワード（http://user:pass@…）を伏せる
+import { maskSecrets } from '../web/core/text.js';
 
 const WEB_ROOT = path.join(REPO_ROOT, 'web');
 const MIME = {
@@ -222,9 +224,6 @@ export function createCompanionServer({ store, log = console.log, catalogFetch, 
       log(`[analyze] 分析の記録を state.json に書けませんでした: ${e.message}`);
     }
   }
-
-  /** 画面に出すエラーの文から、URL に書いたパスワード（http://user:pass@…）を伏せる */
-  const maskSecrets = (s) => String(s || '').replace(/(\/\/)[^/\s:@]+:[^/\s@]+@/g, '$1***@');
 
   /** ジョブを始める（終わるのは待たない。万一の例外も拾って、プロセスを落とさない） */
   function startJob(...args) {

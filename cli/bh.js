@@ -20,6 +20,7 @@ import { ACCEPT, parseFiles } from '../web/core/parsers/index.js';
 import { createLlmClient } from '../web/core/analysis/llm.js';
 import { TFIDF_HINT, analyzeLibrary, recommendBooks, recommendationNote } from '../web/core/analysis/pipeline.js';
 import { autoConfig } from '../web/core/auto-analysis.js';
+import { visibleFarConnections } from '../web/core/far-reactions.js';
 import { truncate } from '../web/core/text.js';
 
 // bh serve が自動の分析の条件を確かめる間隔（点が増えるたびではなく、間隔を空けてまとめて分析する）
@@ -154,7 +155,12 @@ async function main() {
         await store.saveState({ ...st, autoAnalysis: { ...(st.autoAnalysis || {}), lastRunAt: analysis.createdAt, lastSuccessAt: new Date().toISOString(), lastError: '', lastErrorAt: null, lastTrigger: 'manual' } });
         process.stdout.write('\n');
         const { chat, embed } = analysis.stats.calls;
-        console.log(`${analysis.incremental ? '前回の線・面を引き継ぎました' : '最初から作り直しました'}（AI を呼んだ回数: チャット ${chat}・埋め込み ${embed}。おすすめの本は除く）`);
+        console.log(`${analysis.incremental ? '前回の線・面を引き継ぎました' : '最初から作り直しました'}（AI を呼んだ回数: チャット ${chat}・埋め込み ${embed}。おすすめの本と遠い組み合わせの判定は除く）`);
+        // 遠いつながりは、画面と同じく「ちがう」とした組を除き、「面白い」とした組を含める
+        const far = analysis.stats.far;
+        const farShown = visibleFarConnections(analysis, library);
+        if (far) console.log(`遠い組み合わせ: ${far.calls} 組を AI が読み、遠いつながりを ${far.found} 組見つけました（出している遠いつながり ${farShown.length} 組）`);
+        if (analysis.farNote) console.log(`! ${analysis.farNote}`);
         if (analysis.model.embed === 'tfidf') console.log(`\n! ${TFIDF_HINT}（bh config embed bge-m3）`);
         console.log(`\n■ 立体: ${analysis.solid.title}\n${analysis.solid.core}\n`);
         for (const p of analysis.planes) {
@@ -164,6 +170,7 @@ async function main() {
             console.log(`   ─ 線: ${l.name}（点 ${l.highlightIds.length}）`);
           }
         }
+        for (const f of farShown.slice(0, 5)) console.log(`◇ 遠いつながり: ${f.idea} — ${f.explanation}`);
         printRecommendations(analysis);
       }
       break;

@@ -24,13 +24,15 @@
 ## データモデル（`web/core/model.js`）
 
 ```
-Library = { version, books: { [id]: Book }, highlights: { [id]: Highlight }, feedback, thoughts: { [id]: Thought }, discoveryReads: { [id]: readAt }, updatedAt }
+Library = { version, books: { [id]: Book }, highlights: { [id]: Highlight }, feedback, thoughts: { [id]: Thought }, discoveryReads: { [id]: readAt },
+            farReactions: { [id]: FarReaction }, updatedAt }
 Book      = { id: 'b'+hash(書名の正規化), title, author, sources: ['kindle'|'playbooks'|'paper'|'memo'], asin?, volumeId?, cover?（アップロードした表紙の data URL）, technical?（技術書か。無ければ書名から推定）, updatedAt, deleted? }
 Highlight = { id: 'h'+hash(bookId+本文の正規化), bookId, source, kind: 'highlight'|'note',
               text, note, chapter, location, locationEnd, page, color, createdAt,
               favorite, tags, userNote, importedAt, updatedAt, deleted?, supersededBy? }
 Thought   = { id: 't'+時刻+乱数, text, status: 'inbox'|'done'|'discarded', answerTo?: { kind, id?, question },
               createdAt, updatedAt }                    // 消したものは { id, deleted: true, createdAt, updatedAt } だけ残す
+FarReaction = { id: 'f'+hash(2 点の ID), a, b, idea, explanation, status: 'interesting'|'wrong'|'', updatedAt }  // 遠いつながりへの反応
 ```
 
 - **思いつき（Thought）**は本に属さないメモ（フリートノート。`web/core/thoughts.js`）。「メモ」と呼ぶものが他にもある（読書メモ = source `memo` の点 / 取り込んだメモ = `note` / 自分のメモ = `userNote`）ので、コードでは thought と呼ぶ。本文を直しても ID は変わらない
@@ -49,19 +51,23 @@ Thought   = { id: 't'+時刻+乱数, text, status: 'inbox'|'done'|'discarded', a
   - 伸ばしたハイライトに置き換わった点（`supersededBy`）は、どちらの端末から来ても消えたまま
 - 包含関係での置き換え（伸ばしたハイライト）は Kindle だけで、位置が重なるか、位置が無ければ同じページのときだけ行う（Play ブックスの別ページの短いハイライトを消さない）
 - おすすめへの反応は `library.feedback[書名キー] = { status: read|want|no|'', updatedAt }` に持ち、同期では新しい方を採る
+- 遠いつながりへの反応（面白い・ちがう。`web/core/far-reactions.js`）は `library.farReactions` に、組の点と説明ごと持つ（分析の結果から消えても「面白い」の組を出すため）。同じ反応をもう一度付けると外す（`status: ''`）。同期では `updatedAt` が新しい方を採る（`mergeCollections`）。古い版のデータ（`farReactions` が無い）は空として読む
 - バックアップは `{ format: 'book-highlights/backup', library, analysis }`。取り込み（Web・`bh import`・サーバ共通の `web/core/importing.js`）では、ライブラリを統合し、分析結果は手元より新しいときだけ採用する
 - リポジトリ名は `bookshelf` に変えたが、データ形式名（`book-highlights/backup` など）・IndexedDB の名前・`bh serve` の応答の `app` は旧名 `book-highlights` のまま残す（変えると既存のバックアップ・端末に保存したデータ・古い版のアプリと合わなくなる）
 
 ## 分析結果（`web/core/analysis/pipeline.js`）
 
 ```
-Analysis = { version: 2, createdAt, model: { chat, embed }, incremental, stats: { points, thoughts, lines, planes, isolated, calls: { chat, embed } },
+Analysis = { version: 2, createdAt, model: { chat, embed }, incremental,
+  stats: { points, thoughts, lines, planes, isolated, calls: { chat, embed }, far: { candidates, calls, found } },
   lines:  [{ id, name, summary, insight, keywords, highlightIds, bookIds, sig }],   // 線
   planes: [{ id, name, summary, lineIds, sig }],                                     // 面
   solid:  { title, core, relations: [{ from, to, type, description }], principles, questions, sig },  // 立体
   isolated: [highlightId],                                                           // まだつながらない点
   changes?: { previousAt, rebuilt?, addedLines, grownLines, removedLines, connectedPoints },  // 前回からの変化
-  discoveries: [{ id, kind: 'cross'|'line'|'isolated', lineId, lineName, reason, pointIds: [a, b], foundAt }],  // 発見（新しい順・最大 60）
+  farConnections: [{ id: 'f…', a, b, idea, explanation, foundAt }],                  // 遠いつながり（新しい順・最大 50）
+  farNote?,                                                                          // 遠い組み合わせの判定に失敗したときの説明
+  discoveries: [{ id, kind: 'cross'|'line'|'isolated'|'far', lineId, lineName, reason, pointIds: [a, b], foundAt }],  // 発見（新しい順・最大 60）
   recommendations: [{ title, author, kind, planeId, reason, verified }] }
 ```
 
@@ -80,6 +86,16 @@ Analysis = { version: 2, createdAt, model: { chat, embed }, incremental, stats: 
   - 前回と分析の版（`version`）か埋め込みの方法が違うとき・`full` を指定したときは最初から作り直す（`changes.rebuilt`）
 - **自動の分析**（`bh serve`。判断は `web/core/auto-analysis.js`）: 1 分ごとに確かめ、前回の分析のあとに点（思いつきを含む）が 10 件以上増えたか、24 時間以上たって 1 件以上増えたら、増分の分析を始める。手動の分析中・取り込みの最中（`/api/import` を受けている間・Google ドライブの確認中）は始めない。失敗しても `analysis.json` は書き換えず、`state.json` の `autoAnalysis` に理由と時刻を残し、30 分あけて試し直す。`bh config auto on|off` / `auto-points` / `auto-hours` で変えられる
 - **発見**（`web/core/analysis/discoveries.js`）: 前回を引き継いだ分析のたびに、前回との差から作る。cross = 既にある線に増えた点と、その線の別の本の点でいちばん近いもの / line = 新しい線（別の本の 2 点）/ isolated = 前回「まだつながらない点」だった点が線に入った。思いつきは 1 つずつ別の出どころとして数える。1 回の分析で最大 20 件、残すのは新しい順に 60 件（点が消えた発見は外す）。最初の分析・作り直しでは作らない（すべてが新しくなるため）。既読は `library.discoveryReads = { [ID]: 読んだ時刻 }` に持ち、同期ではどちらかで読んでいれば既読（時刻は早い方）
+- **遠いつながり**（`web/core/analysis/far.js`）: 立体のあと、分析のたびに作る
+  - 代表の点 = 線ごとに中心にいちばん近い点 + まだつながらない点。別の本（思いつきは 1 つずつ別）・別の面（まだつながらない点はどの面とも別）の組だけを候補にし、組の近さ（内積）のうち下から 15%〜45% の帯から選ぶ（近すぎる組は線で足り、遠すぎる組はこじつけになる）
+  - 帯の中を近い順に、同じ点は 1 回の分析で 1 組まで、最大 10 組。まだつながらない点を含む組に先に半分（5 組）を割り当てる。乱数は使わない（同じ点・同じ判定済みの組なら同じ候補）。組の 2 点は ID の順
+  - ローカル LLM が 1 組ずつ「共通する考えがあるか」を判定する（`farPrompt`。最大 10 回。G5-2 の回数には数えず `stats.far.calls` に残す）。共通する考えと説明がそろった組だけを残す。依頼が続けて 2 回失敗したら残りの組は次の分析に回し、`farNote` に理由を出す（URL の利用者名・パスワードは伏せる）
+  - 判定は `cache.far['far:' + hash(版・モデル・2 点の ID と文のハッシュ)] = { a, b, shared, idea?, explanation?, at }` に残し、判定済みの組・反応を付けた組・前回までに見つかった組は候補にしない（分析のたびに、まだ試していない組を試す）。答えが読めなかった組（`shared` が無い・「ある」なのに共通する考えが空）は「ない」と覚えず `unreadable` を数え、2 回読めなければ試さない。消えた点・文を書き換えた点の判定は外し、残すのは新しい 5,000 件まで
+  - 「ある」と判定したあとで分析が中止・失敗して保存されなかった組（`at` が前回の分析より新しい）は、次の分析で判定し直さずに結果と発見に入れる
+  - 代表の点は 600 個まで（線の代表を先に、残りをまだつながらない点のうち判定に入った回数が少ない点で埋める）。組の近さは型付き配列で持ち、点が 1 万件を超えても重くしない
+  - 見つかった遠いつながりは、あとで点の文を書き換えても残す（判定し直さない）
+  - 「ちがう」とした組は候補にしない。結果には残し、画面（`visibleFarConnections`）・発見の一覧・`bh analyze` の表示で隠す（取り消したらまた出せるように）。反応が候補の選び方に渡るのは「その組を飛ばす」ことだけで、本・面・分野で候補を狭めない
+  - 新しく見つかった遠いつながりは発見（`kind: 'far'`。`lineName` = 共通する考え、`reason` = なぜつながるか）にする。線の ID に依らないので、作り直した分析でも作る（最初の分析では作らない）。「ちがう」とした組の発見は画面に出さない
 - **履歴**: PC の `data/history/<分析した時刻>.json` に直近 12 回分を残す（`history/index.json` は要約）。`GET /api/history` で一覧、`GET /api/history/<id>` で 1 回分。スマホには最新の結果（`changes` 入り）だけを同期し、過去の分析は開いたときに PC から取る
 - **自分の言葉**: 埋め込みの文は「線を引いた文 + 取り込んだメモ + 自分のメモ + タグ」（`embedText`。印は付けない）。線を作る AI への入力では、取り込んだメモと分けて自分のメモ・タグを「読者自身の言葉」と示す。思いつきは書名の代わりに「思いつき」と示す
 - `response_format` は `json_schema` → `json_object` → なし の順に自動で緩める（LM Studio は `json_object` 非対応、古いサーバは `json_schema` 非対応）。壊れた JSON は 1 回だけ言い直させる
@@ -94,6 +110,7 @@ Analysis = { version: 2, createdAt, model: { chat, embed }, incremental, stats: 
 1. **書誌 DB を使う版（通常）**：LLM は「検索語」だけを決める → Google Books（関連度順）で実在する候補を集める（既読の本は除く）→ LLM が番号で選び、理由を書く。選ばれる本は必ず実在する
 2. **検索できないとき**：LLM に書名を挙げさせ、Google Books → 国立国会図書館サーチ（タイトル + 著者で照合。CORS 対応でブラウザからも使える）で確認。見つからない本には印を付け、確認できた本を先に並べる
 3. おすすめの段階で失敗しても、線・面・立体の結果は捨てない（`recommendationNote` に理由を残し、「おすすめを選び直す」で再実行できる）
+4. **広げる・揺さぶるを必ず入れる**（G6-6。`REQUIRED_KINDS`）: 最初の依頼で「broaden と challenge を 1 つ以上ずつ」と頼み（「興味なし」の方向に近くても challenge は入れる）、それでも無い種類は、その種類だけの依頼（`searches-kind` / `picks-kind` / `recommendations-kind`）で検索語・候補・書名を足す。AI が「深める」として選んだ本でも、その種類の検索で見つけた本なら種類と理由を書き直させる。足すとき冊数がそろっていれば、同じ種類がほかにもある本を後ろから 1 冊外す。その種類の候補が見つからなければ足さない（書名を作らない）
 
 ## 画面の安全性
 
