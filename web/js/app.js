@@ -7,7 +7,9 @@ import { kindleAlertBlock, openSheet, toast } from './ui.js';
 import { book, books, home, search } from './views/library.js';
 import { autoStatusBlock, historyView, isolatedView, knowledge, lineView, planeView } from './views/knowledge.js';
 import { discoveriesView, discoveryView } from './views/discoveries.js';
+import { farView } from './views/far.js';
 import { markDiscoveryRead } from '../core/discovery-reads.js';
+import { FAR_REACTIONS, farConnectionById, reactFar } from '../core/far-reactions.js';
 import { importView, kindleSyncBlock, settingsView } from './views/settings.js';
 import { wishlist } from './views/wishlist.js';
 import { records } from './views/records.js';
@@ -41,6 +43,8 @@ const ROUTES = [
   [/^\/knowledge\/line\/(?<id>[\w-]+)$/, lineView, 'knowledge'],
   [/^\/knowledge\/plane\/(?<id>[\w-]+)$/, planeView, 'knowledge'],
   [/^\/knowledge\/isolated$/, isolatedView, 'knowledge'],
+  // 遠いつながり（別の本・別の面の点の組を AI が読み、共通する考えがあったもの）
+  [/^\/knowledge\/far$/, farView, 'knowledge'],
   // 過去の分析（履歴は PC にだけある）
   [/^\/knowledge\/history\/(?<id>[0-9TZ]+)$/, historyView, 'knowledge'],
   // 発見（ホームの「発見」から開く）
@@ -665,6 +669,17 @@ const actions = {
     const f = setFeedback(state.library, { title: r.title, author: r.author }, el.dataset.status);
     await persistLibrary();
     toast(f.status ? `「${r.title}」を「${FEEDBACK_LABELS[f.status]}」にしました。次のおすすめに反映します` : '反応を外しました');
+    render({ keepScroll: true });
+    autoSyncAfterChange();
+  },
+  // 遠いつながりへの反応（面白い: 残り続ける / ちがう: もう出さない）。「ちがう」とした組は画面に無いので、反応の記録からも探す
+  async 'far-react'(el) {
+    if (!state.loaded) return toast('まだ端末のデータを読み込んでいます。少し待ってから押してください');
+    const f = farConnectionById(state.analysis, state.library, el.dataset.id);
+    if (!f || !Object.hasOwn(FAR_REACTIONS, el.dataset.status)) return;
+    const r = reactFar(state.library, f, el.dataset.status);
+    await persistLibrary();
+    toast(r.status === 'wrong' ? '「ちがう」にしました。この組はもう出しません（すべての遠いつながりの画面で取り消せます）' : r.status === 'interesting' ? '「面白い」にしました。分析し直しても残ります' : '反応を外しました');
     render({ keepScroll: true });
     autoSyncAfterChange();
   },

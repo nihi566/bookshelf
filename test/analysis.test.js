@@ -147,7 +147,8 @@ test('analyzeLibrary: 点→線→面→立体→おすすめ。キャッシュ�
     const stages = new Set();
     const cache = emptyCache();
     const { analysis } = await analyzeLibrary({ library: lib, llm, cache, onProgress: (p) => stages.add(p.stage), options: { fetchImpl: verifyFetch } });
-    assert.deepEqual([...stages], ['embed', 'lines', 'planes', 'solid', 'recommend']);
+    // far: 遠い組み合わせの判定（G6）
+    assert.deepEqual([...stages], ['embed', 'lines', 'planes', 'solid', 'far', 'recommend']);
     const lineIds = new Set(analysis.lines.map((l) => l.id));
     // 全ての点は、いずれかの線か「まだつながらない点」に入る
     const covered = new Set([...analysis.lines.flatMap((l) => l.highlightIds), ...analysis.isolated]);
@@ -172,11 +173,18 @@ test('analyzeLibrary: 点→線→面→立体→おすすめ。キャッシュ�
     assert.doesNotMatch(picks.messages[1].content, /小さな習慣の力』/);
     assert.equal(analysis.recommendationNote, '');
 
-    // キャッシュの保存と復元 → 2 回目は線・面・立体の LLM 呼び出しも埋め込みも無し（線の説明文の埋め込みもキャッシュから）
+    // キャッシュの保存と復元 → 2 回目は線・面・立体の LLM 呼び出しも埋め込みも無し（線の説明文の埋め込みもキャッシュから）。
+    // 遠い組み合わせは、前に判定した組を判定し直さず、まだ試していない組だけを判定する（G6）
     const restored = deserializeCache(JSON.parse(JSON.stringify(serializeCache(cache))));
-    const before = { ...fake.calls };
+    const before = { ...fake.calls, bodies: fake.calls.bodies.length };
+    const farPairs = (from, to) => fake.calls.bodies.slice(from, to).filter((b) => b.response_format?.json_schema?.name === 'far').map((b) => b.messages[1].content);
     const again = await analyzeLibrary({ library: lib, llm, cache: restored, options: { recommend: false } });
-    assert.equal(fake.calls.chat, before.chat);
+    const newBodies = fake.calls.bodies.slice(before.bodies);
+    assert.deepEqual(newBodies.filter((b) => b.response_format?.json_schema?.name !== 'far'), []);
+    assert.equal(fake.calls.chat - before.chat, again.analysis.stats.far.calls, '遠い組み合わせの判定のほかは呼ばない');
+    assert.ok(again.analysis.stats.far.calls <= 10);
+    const firstPairs = new Set(farPairs(0, before.bodies));
+    assert.ok(farPairs(before.bodies).every((p) => !firstPairs.has(p)), '前に判定した組は判定し直さない');
     assert.equal(fake.calls.embed, before.embed, '埋め込みもキャッシュから');
     assert.deepEqual(again.analysis.stats.calls, { chat: 0, embed: 0 });
     assert.deepEqual(again.analysis.lines.map((l) => l.name), analysis.lines.map((l) => l.name));

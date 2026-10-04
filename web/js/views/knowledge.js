@@ -12,12 +12,14 @@ import { amazonKindleUrl, findWishlistBook, formatPrice } from '../../core/wishl
 import { loadWishlist } from '../wishlist-data.js';
 import { companion } from '../services.js';
 import { answerBlock } from './thoughts.js';
+import { farBlock } from './far.js';
 
 const STAGES = [
   ['embed', '点'],
   ['lines', '線'],
   ['planes', '面'],
   ['solid', '立体'],
+  ['far', '遠い組'],
   ['recommend', '本'],
 ];
 const KIND = { deepen: '深める', broaden: '広げる', challenge: '揺さぶる' };
@@ -112,7 +114,7 @@ export const knowledge = {
         <p class="small">AI: ${summary || html`<b>未設定</b> — <a href="#/settings">AI の接続を設定する</a>`}</p>
         ${s.points < 4 ? html`<p class="notice">分析には 4 件以上の点が必要です。<a href="#/import">取り込む</a>か、上の「メモ」で思いつきを書いてください。</p>` : ''}
         <div class="row">${runBtn}${a ? html`<button class="btn" data-action="rerun-recommend" ${job?.running ? 'disabled' : ''}>おすすめを選び直す</button>` : ''}</div>
-        ${a ? html`<p class="small muted">前回の分析: ${isoDate(a.createdAt)}・${a.model?.chat}${a.model?.embed ? ' / ' + a.model.embed : ''}・点 ${a.stats.points}${a.stats.calls ? `・AI を呼んだ回数 ${a.stats.calls.chat + a.stats.calls.embed}` : ''}</p>
+        ${a ? html`<p class="small muted">前回の分析: ${isoDate(a.createdAt)}・${a.model?.chat}${a.model?.embed ? ' / ' + a.model.embed : ''}・点 ${a.stats.points}${a.stats.calls ? `・AI を呼んだ回数 ${a.stats.calls.chat + a.stats.calls.embed}` : ''}${a.stats.far ? `（ほかに遠い組の判定 ${a.stats.far.calls}）` : ''}</p>
           <p class="small">前回の分析のあとに増えた点: <b>${pending}</b> 件${pending ? '（「分析し直す」で、変わったところだけ作り直します）' : ''}</p>` : ''}
         <div id="auto-status">${autoStatusBlock(state)}</div>
         ${a ? html`<p class="small"><button type="button" class="btn small" data-action="run-analysis-full" ${job?.running ? 'disabled' : ''}>最初から作り直す</button> <span class="muted">線・面を前回から引き継がず、すべて作り直します（時間がかかります）</span></p>` : ''}
@@ -147,6 +149,8 @@ export const knowledge = {
 
       <div class="section"><h2>面（テーマ）</h2><span class="small muted">${a.planes.length}</span></div>
       ${a.planes.map((p) => planeCard(a, p))}
+
+      ${farBlock(state)}
 
       ${recs.length || a.recommendationNote
         ? html`<div class="section"><h2>おすすめの本</h2><span class="small muted">${isoDate(a.recommendedAt || a.createdAt)}</span></div>

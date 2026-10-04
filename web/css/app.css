@@ -233,6 +233,18 @@ details li { margin: 4px 0; }
 .partner-label { display: block; font-size: 0.75rem; color: var(--ink-3); }
 .partner-text { font-family: var(--serif); font-size: 0.92rem; line-height: 1.7; margin: 2px 0; overflow-wrap: anywhere; }
 
+/* 遠いつながり（別の本・別の面の点の組に、AI が共通する考えを見つけたもの） */
+.layer-label.far, .disc-item.far .disc-kind { color: var(--layer-solid); }
+.disc-item.far { border-left-color: var(--layer-solid); }
+.far-card { border-left: 4px solid var(--layer-solid); }
+.far-card h3 { margin: 0; font-family: var(--serif); }
+.far-pair { display: grid; gap: 8px; }
+.far-side { min-width: 0; padding: 8px 12px; border-radius: 10px; background: var(--surface-2); }
+.far-text { margin: 0 0 2px; font-family: var(--serif); font-size: 0.92rem; line-height: 1.7; overflow-wrap: anywhere; }
+.far-react .chip { min-height: 36px; }
+.far-wrong li { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
+.far-wrong li + li { margin-top: 8px; }
+
 /* 思いつき（本に属さないメモ）と受け箱 */
 .hl.thought { --hl-color: var(--accent); }
 .badge.thought { background: var(--accent-soft); color: var(--accent); }

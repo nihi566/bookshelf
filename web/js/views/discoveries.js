@@ -3,12 +3,20 @@ import { html } from '../html.js';
 import { isoDate, truncate } from '../../core/text.js';
 import { analysisPointById, isThought, pointLabel } from '../../core/points.js';
 import { discoveriesOf, isRead, unreadDiscoveries } from '../../core/discovery-reads.js';
+import { farIdOfDiscovery, visibleFarConnections, wrongFarIds } from '../../core/far-reactions.js';
 import { lineIndex, pointCard } from '../ui.js';
+import { farCard } from './far.js';
 
 // ホームに並べる未読の発見の数（残りは「すべての発見」で見る）
 const ON_HOME = 3;
 
-const KIND_LABEL = { cross: '本をまたいだつながり', line: '新しい線', isolated: 'つながった点' };
+const KIND_LABEL = { cross: '本をまたいだつながり', line: '新しい線', isolated: 'つながった点', far: '遠いつながり' };
+
+/** 「ちがう」とした遠いつながりの発見は出さない */
+const shown = (state) => {
+  const wrong = wrongFarIds(state.library);
+  return (d) => !wrong.has(farIdOfDiscovery(d));
+};
 
 /** 点の出どころ（本。思いつきは 1 つずつ別のもの） */
 const sourceOf = (p) => (isThought(p) ? p.id : p.bookId);
@@ -17,16 +25,16 @@ const sourceOf = (p) => (isThought(p) ? p.id : p.bookId);
 function discoveryRow(state, d) {
   const [a, b] = d.pointIds.map((id) => analysisPointById(state.library, id));
   const quote = (p) => (p ? `「${truncate(p.text.replace(/\s+/g, ' '), 40)}」（${truncate(pointLabel(state.library, p), 16)}）` : '（消えた点）');
-  return html`<li><a class="disc-item" href="#/discovery/${d.id}">
+  return html`<li><a class="disc-item ${d.kind === 'far' ? 'far' : ''}" href="#/discovery/${d.id}">
     <span class="disc-kind">${KIND_LABEL[d.kind] || '発見'}${isRead(state.library, d.id) ? '' : html` <span class="badge new">未読</span>`}</span>
     <span class="disc-pair">${quote(a)} ⇄ ${quote(b)}</span>
-    <span class="disc-why">線「${d.lineName || ''}」</span>
+    <span class="disc-why">${d.kind === 'far' ? '共通する考え' : '線'}「${d.lineName || ''}」</span>
   </a></li>`;
 }
 
-/** ホームに出す未読の発見（両側の点が今も見られるものだけ。消した・捨てた点の発見は数えない） */
+/** ホームに出す未読の発見（両側の点が今も見られるものだけ。消した・捨てた点の発見と、「ちがう」とした遠いつながりは数えない） */
 export function homeDiscoveries(state) {
-  return unreadDiscoveries(state.analysis, state.library).filter((d) => d.pointIds.every((id) => analysisPointById(state.library, id)));
+  return unreadDiscoveries(state.analysis, state.library).filter(shown(state)).filter((d) => d.pointIds.every((id) => analysisPointById(state.library, id)));
 }
 
 /** ホームの「発見」（未読があるときだけ出す） */
@@ -73,9 +81,17 @@ export const discoveryView = {
   render({ state, params }) {
     const d = findDiscovery(state, params.id);
     if (!d) return html`<a class="back" href="#/">‹ ホーム</a><p class="empty">この発見は見つかりません（分析し直して、つながりの点が消えた可能性があります）。<a href="#/discoveries">すべての発見へ</a></p>`;
+    const idx = lineIndex(state.analysis);
+    if (d.kind === 'far') {
+      // 遠いつながり: 共通する考えと、なぜつながるか（反応もここで付けられる）
+      const f = visibleFarConnections(state.analysis, state.library).find((x) => x.id === farIdOfDiscovery(d));
+      return html`<a class="back" href="#/">‹ ホーム</a>
+        <div class="page-head"><div><h1>${KIND_LABEL.far}</h1><div class="sub">${isoDate(d.foundAt)} の分析で見つかりました</div></div></div>
+        <p class="help">別の本・別の面にある 2 つの点を AI が読み、根っこで共通する考えを見つけました。</p>
+        ${f ? farCard(state, f, idx) : html`<p class="card small muted">この遠いつながりは「ちがう」としたか、分析し直して消えました。<a href="#/knowledge/far">すべての遠いつながりへ</a></p>`}`;
+    }
     const line = (state.analysis.lines || []).find((l) => l.id === d.lineId);
     const points = d.pointIds.map((id) => analysisPointById(state.library, id));
-    const idx = lineIndex(state.analysis);
     return html`<a class="back" href="#/">‹ ホーム</a>
       <div class="page-head"><div><h1>${KIND_LABEL[d.kind] || '発見'}</h1><div class="sub">${isoDate(d.foundAt)} の分析で見つかりました</div></div></div>
       <section class="card stack">
@@ -93,11 +109,11 @@ export const discoveryView = {
 
 export const discoveriesView = {
   render({ state }) {
-    const all = discoveriesOf(state.analysis);
-    const unread = unreadDiscoveries(state.analysis, state.library).length;
+    const all = discoveriesOf(state.analysis).filter(shown(state));
+    const unread = unreadDiscoveries(state.analysis, state.library).filter(shown(state)).length;
     return html`<a class="back" href="#/">‹ ホーム</a>
       <div class="page-head"><div><h1>すべての発見</h1><div class="sub">${all.length} 件（未読 ${unread} 件）</div></div></div>
-      <p class="help">分析のたびに、前回からの差で見つかったつながり（本をまたいだつながり・新しい線・つながった点）です。</p>
+      <p class="help">分析のたびに、前回からの差で見つかったつながり（本をまたいだつながり・新しい線・つながった点・遠いつながり）です。</p>
       ${all.length ? html`<ul class="disc-list">${all.map((d) => discoveryRow(state, d))}</ul>` : html`<p class="empty">まだ発見はありません。点が増えて分析し直すと見つかります。</p>`}`;
   },
 };

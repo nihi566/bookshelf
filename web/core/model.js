@@ -12,6 +12,7 @@ import { isUploadedCover } from './covers.js';
 import { mergeCollections } from './collections.js';
 import { mergeThought, normalizeThought, pointThoughts } from './thoughts.js';
 import { mergeReads } from './discovery-reads.js';
+import { mergeFarReactions } from './far-reactions.js';
 
 export const SOURCES = {
   kindle: 'Kindle',
@@ -390,6 +391,8 @@ export function mergeLibraries(base, incoming) {
   out.thoughts = mergeCollections(base.thoughts, incoming.thoughts, { stickyDelete: true, normalize: normalizeThought, mergeItem: mergeThought });
   // 発見の既読は、どちらかで読んでいれば既読（読んだ時刻は早い方）
   out.discoveryReads = mergeReads(base.discoveryReads, incoming.discoveryReads);
+  // 遠いつながりへの反応（面白い・ちがう）は、付けた時刻が新しい方
+  out.farReactions = mergeFarReactions(base.farReactions, incoming.farReactions);
   out.updatedAt = later(base.updatedAt, incoming.updatedAt);
   return out;
 }

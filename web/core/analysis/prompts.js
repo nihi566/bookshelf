@@ -71,6 +71,35 @@ ${list}${more > 0 ? `\n（ほかに近い線が ${more} 本あります）` : ''
   };
 }
 
+/**
+ * 遠いつながりの判定: 別の本・別のテーマにある 2 つの点に、根っこで共通する考えがあるか。
+ * a・b = { text, label, thought?, note?, userNote?, tags? }（pointLine と同じ形）
+ */
+export function farPrompt(a, b) {
+  const one = (p, mark) => pointLine(p, 0).replace(/^\[1\]/, `[${mark}]`);
+  return {
+    system: SYSTEM,
+    name: 'far',
+    user: `次の 2 つの点は、別の本・別のテーマにあり、ふつうは結びつけて読まないものです。
+
+${one(a, 'A')}
+${one(b, 'B')}
+
+2 つの根っこに、共通する考え（同じことを別の言葉で言っている、同じ原理の別の現れ、など）があるかを判定してください。
+- 言葉が似ているだけ・こじつけになるなら shared は false にする
+- shared が true なら、共通する考えを短く名付け、なぜつながるかを 1〜2 文で書く（点の文をそのまま繰り返さない。「A」「B」と書かず、それぞれの中身で指す）
+
+出力する JSON:
+{"shared": true, "idea": "共通する考え（20字以内）", "explanation": "なぜつながるか（1〜2文）"}`,
+    schema: {
+      type: 'object',
+      properties: { shared: { type: 'boolean' }, idea: str, explanation: str },
+      required: ['shared', 'idea', 'explanation'],
+      additionalProperties: false,
+    },
+  };
+}
+
 export const RELATION_TYPES = ['支える', '対立する', '具体化する', '補完する'];
 
 export function solidPrompt(planes) {
@@ -120,7 +149,28 @@ ${list}
   };
 }
 
-export const RECOMMEND_KINDS = ['deepen', 'broaden', 'challenge'];
+export const RECOMMEND_KINDS = Object.freeze(['deepen', 'broaden', 'challenge']);
+const KIND_TEXT = { deepen: '「deepen」（既存の面を掘り下げる）', broaden: '「broaden」（隣の分野へつなぐ）', challenge: '「challenge」（反対の立場・盲点を突く）' };
+const CHALLENGE_NOTE = '「challenge」は、興味なしとした方向に近くても入れる';
+
+/** 頼む種類（知らない種類は除く。空ならすべての種類） */
+function kindsOf(kinds) {
+  const ks = RECOMMEND_KINDS.filter((k) => kinds.includes(k));
+  return ks.length ? ks : RECOMMEND_KINDS;
+}
+
+/**
+ * おすすめの種類の指示。すべての種類なら、広げる・揺さぶるを必ず入れるよう頼む（好みに閉じないため）。
+ * 一部なら、その種類だけを頼む（AI が選ばなかった種類を足すとき）
+ */
+function kindLine(ks) {
+  const note = ks.includes('challenge') ? `（${CHALLENGE_NOTE}）` : '';
+  if (ks.length < RECOMMEND_KINDS.length) return `- kind はすべて${ks.map((k) => KIND_TEXT[k]).join('か')}にする${note}`;
+  return `- kind は${ks.map((k) => KIND_TEXT[k]).join('、')}をバランスよく。「broaden」と「challenge」を 1 つ以上ずつ入れる${note}`;
+}
+
+/** 種類を絞った依頼は別の名前にする（ログ・テストで、最初の依頼と見分けるため） */
+const kindName = (name, ks) => (ks.length < RECOMMEND_KINDS.length ? `${name}-kind` : name);
 
 /** おすすめへの反応から「好み」を伝える行（無ければ空） */
 export function preferenceLines(prefs = {}) {
@@ -131,12 +181,13 @@ export function preferenceLines(prefs = {}) {
   return lines.join('\n');
 }
 
-export function recommendPrompt({ solid, planes, readTitles, count = 6, avoid = [], prefs = {} }) {
+export function recommendPrompt({ solid, planes, readTitles, count = 6, avoid = [], prefs = {}, kinds: wanted = RECOMMEND_KINDS }) {
+  const kinds = kindsOf(wanted);
   const refs = planes.map((_, i) => `P${i + 1}`);
   const list = planes.map((p, i) => `P${i + 1}「${p.name}」: ${truncate(p.summary, 160)}`).join('\n');
   return {
     system: SYSTEM,
-    name: 'recommendations',
+    name: kindName('recommendations', kinds),
     user: `読者の知識の全体像は次のとおりです。
 
 核: ${solid?.core || '(なし)'}
@@ -148,10 +199,10 @@ ${list}
 - 読者がまだ読んでいない、実在する本だけを挙げる（書名と著者名は正確に。自信が無い本は挙げない）
 - 読者が既に読んだ本（挙げてはいけない）: ${readTitles.slice(0, 60).join('、')}${avoid.length ? `\n- 次の本も挙げてはいけない: ${avoid.join('、')}` : ''}${preferenceLines(prefs) ? `\n${preferenceLines(prefs)}` : ''}
 - 日本語で読める本を優先する
-- kind は「deepen」（既存の面を掘り下げる）、「broaden」（隣の分野へつなぐ）、「challenge」（反対の立場・盲点を突く）をバランスよく
+${kindLine(kinds)}
 
 出力する JSON:
-{"books": [{"title": "書名", "author": "著者名", "plane": "P1", "kind": "deepen", "reason": "この読者の知識に照らした推薦理由（1〜2文）"}]}`,
+{"books": [{"title": "書名", "author": "著者名", "plane": "P1", "kind": "${kinds[0]}", "reason": "この読者の知識に照らした推薦理由（1〜2文）"}]}`,
     schema: {
       type: 'object',
       properties: {
@@ -159,7 +210,7 @@ ${list}
           type: 'array',
           items: {
             type: 'object',
-            properties: { title: str, author: str, plane: { type: 'string', enum: refs }, kind: { type: 'string', enum: RECOMMEND_KINDS }, reason: str },
+            properties: { title: str, author: str, plane: { type: 'string', enum: refs }, kind: { type: 'string', enum: kinds }, reason: str },
             required: ['title', 'author', 'plane', 'kind', 'reason'],
             additionalProperties: false,
           },
@@ -172,12 +223,13 @@ ${list}
 }
 
 /** おすすめ（書誌 DB を使う版）1: 本を探すための検索語を決める */
-export function searchPrompt({ solid, planes, count = 5, prefs = {} }) {
+export function searchPrompt({ solid, planes, count = 5, prefs = {}, kinds: wanted = RECOMMEND_KINDS }) {
+  const kinds = kindsOf(wanted);
   const refs = planes.map((_, i) => `P${i + 1}`);
   const list = planes.map((p, i) => `P${i + 1}「${p.name}」: ${truncate(p.summary, 160)}`).join('\n');
   return {
     system: SYSTEM,
-    name: 'searches',
+    name: kindName('searches', kinds),
     user: `読者の知識の全体像は次のとおりです。
 
 核: ${solid?.core || '(なし)'}
@@ -187,10 +239,10 @@ ${list}
 
 この読者が次に読む本を書店で探すための検索語を ${count} 個考えてください。
 - query は本のテーマを表す短い日本語（1〜3 語。例: 「習慣 行動科学」「ストア哲学」）${preferenceLines(prefs) ? `\n${preferenceLines(prefs)}` : ''}
-- kind は「deepen」（既存の面を掘り下げる）、「broaden」（隣の分野へつなぐ）、「challenge」（反対の立場・盲点を突く）をバランスよく
+${kindLine(kinds)}
 
 出力する JSON:
-{"searches": [{"query": "検索語", "plane": "P1", "kind": "deepen"}]}`,
+{"searches": [{"query": "検索語", "plane": "P1", "kind": "${kinds[0]}"}]}`,
     schema: {
       type: 'object',
       properties: {
@@ -198,7 +250,7 @@ ${list}
           type: 'array',
           items: {
             type: 'object',
-            properties: { query: str, plane: { type: 'string', enum: refs }, kind: { type: 'string', enum: RECOMMEND_KINDS } },
+            properties: { query: str, plane: { type: 'string', enum: refs }, kind: { type: 'string', enum: kinds } },
             required: ['query', 'plane', 'kind'],
             additionalProperties: false,
           },
@@ -211,13 +263,14 @@ ${list}
 }
 
 /** おすすめ（書誌 DB を使う版）2: 実在する候補の中から選ばせる */
-export function pickPrompt({ solid, planes, candidates, count = 6, prefs = {} }) {
+export function pickPrompt({ solid, planes, candidates, count = 6, prefs = {}, kinds: wanted = RECOMMEND_KINDS }) {
+  const kinds = kindsOf(wanted);
   const refs = planes.map((_, i) => `P${i + 1}`);
   const list = planes.map((p, i) => `P${i + 1}「${p.name}」: ${truncate(p.summary, 120)}`).join('\n');
   const books = candidates.map((c, i) => `[${i + 1}] 『${truncate(c.title, 60)}』${c.authors ? ` ${truncate(c.authors, 40)}` : ''}${c.publishedDate ? `（${String(c.publishedDate).slice(0, 4)}）` : ''}${c.description ? ` — ${truncate(c.description, 100)}` : ''}`).join('\n');
   return {
     system: SYSTEM,
-    name: 'picks',
+    name: kindName('picks', kinds),
     user: `読者の知識の全体像:
 核: ${solid?.core || '(なし)'}
 面:
@@ -228,10 +281,10 @@ ${books}
 
 候補の中から、この読者に次に読んでほしい本を最大 ${count} 冊選び、読者の知識に照らした理由を書いてください。
 - candidate は候補の番号${preferenceLines(prefs) ? `\n${preferenceLines(prefs)}` : ''}
-- kind は「deepen」（既存の面を掘り下げる）、「broaden」（隣の分野へつなぐ）、「challenge」（反対の立場・盲点を突く）
+${kindLine(kinds)}
 
 出力する JSON:
-{"picks": [{"candidate": 1, "plane": "P1", "kind": "deepen", "reason": "推薦理由（1〜2文）"}]}`,
+{"picks": [{"candidate": 1, "plane": "P1", "kind": "${kinds[0]}", "reason": "推薦理由（1〜2文）"}]}`,
     schema: {
       type: 'object',
       properties: {
@@ -239,7 +292,7 @@ ${books}
           type: 'array',
           items: {
             type: 'object',
-            properties: { candidate: { type: 'integer' }, plane: { type: 'string', enum: refs }, kind: { type: 'string', enum: RECOMMEND_KINDS }, reason: str },
+            properties: { candidate: { type: 'integer' }, plane: { type: 'string', enum: refs }, kind: { type: 'string', enum: kinds }, reason: str },
             required: ['candidate', 'plane', 'kind', 'reason'],
             additionalProperties: false,
           },
