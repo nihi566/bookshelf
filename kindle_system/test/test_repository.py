@@ -1301,7 +1301,7 @@ class GetPaidPricePointsTest(unittest.TestCase):
 
 class GetAllPricePointsTest(unittest.TestCase):
     """repository.get_all_price_points()（wishlist.json のスクレイピングの履歴用に、全冊の価格の記録を
-    1 回の問い合わせで取る）のテスト。KU・取得失敗の行も含め、本ごと・時刻順に返すこと。
+    1 回の問い合わせで取る）のテスト。KU・取得失敗の行も含め、本ごと・時刻順に、キャンペーン文と一緒に返すこと。
     """
 
     setUp = GetPriceHistoryTest.setUp
@@ -1315,16 +1315,16 @@ class GetAllPricePointsTest(unittest.TestCase):
             self._insert_price(session, "B0BBBBBBB2", sell_price=700, timestamp="2026-01-01T00:00:00")
             self._insert_price(session, "B0AAAAAAA1", sell_price=0, timestamp="2026-02-01T00:00:00", is_unlimited=1)
             self._insert_price(session, "B0AAAAAAA1", sell_price=None, timestamp="2026-03-01T00:00:00")
-            self._insert_price(session, "B0AAAAAAA1", sell_price=1000, timestamp="2026-01-01T00:00:00", point_value=100)
+            self._insert_price(session, "B0AAAAAAA1", sell_price=1000, timestamp="2026-01-01T00:00:00", point_value=100, campaign_text="期間限定キャンペーン")
             session.commit()
 
         self.assertEqual(
             repository.get_all_price_points(),
             [
-                {"paid_asin": "B0AAAAAAA1", "actual_price": 900, "is_unlimited": 0, "timestamp": "2026-01-01T00:00:00"},
-                {"paid_asin": "B0AAAAAAA1", "actual_price": 0, "is_unlimited": 1, "timestamp": "2026-02-01T00:00:00"},
-                {"paid_asin": "B0AAAAAAA1", "actual_price": None, "is_unlimited": 0, "timestamp": "2026-03-01T00:00:00"},
-                {"paid_asin": "B0BBBBBBB2", "actual_price": 700, "is_unlimited": 0, "timestamp": "2026-01-01T00:00:00"},
+                {"paid_asin": "B0AAAAAAA1", "actual_price": 900, "is_unlimited": 0, "campaign_text": "期間限定キャンペーン", "timestamp": "2026-01-01T00:00:00"},
+                {"paid_asin": "B0AAAAAAA1", "actual_price": 0, "is_unlimited": 1, "campaign_text": "", "timestamp": "2026-02-01T00:00:00"},
+                {"paid_asin": "B0AAAAAAA1", "actual_price": None, "is_unlimited": 0, "campaign_text": "", "timestamp": "2026-03-01T00:00:00"},
+                {"paid_asin": "B0BBBBBBB2", "actual_price": 700, "is_unlimited": 0, "campaign_text": "", "timestamp": "2026-01-01T00:00:00"},
             ],
         )
 

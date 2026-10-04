@@ -93,6 +93,35 @@ class BuildFeedTest(unittest.TestCase):
         books = [_book(asin="B0FEED0005", price=None, ku=True, price_history=always), _book(asin="B0FEED0006", price=1000, price_history=left)]
         self.assertEqual(_entries(report.build_feed(_wishlist(*books), SITE)), [])
 
+    def test_new_campaign_becomes_an_entry(self):
+        history = [
+            {"at": "2026-09-30T09:00:00", "price": 1000, "ku": False},
+            {"at": "2026-10-01T09:00:00", "price": None, "ku": False},
+            {"at": "2026-10-02T09:00:00", "price": 1000, "ku": False, "campaign": "期間限定キャンペーン"},
+            {"at": "2026-10-03T09:00:00", "price": 1000, "ku": False, "campaign": "期間限定キャンペーン"},
+        ]
+        book = _book(price=1000, sell_price=1500, points=500, campaign="期間限定キャンペーン", price_history=history)
+        [entry] = _entries(report.build_feed(_wishlist(book), SITE))
+        self.assertIn("キャンペーン", entry["title"])
+        self.assertIn("期間限定キャンペーン", entry["title"])
+        self.assertIn("500 pt", entry["title"])
+        self.assertIn("欲しい本", entry["title"])
+        self.assertTrue(entry["updated"].startswith("2026-10-02T09:00:00"), "取得に失敗した回は飛ばして、キャンペーンが付いた回の時刻")
+        self.assertIn("campaign:B0FEED0001:", entry["id"])
+
+    def test_campaign_that_was_always_there_changed_text_ended_or_on_purchased_book_is_not_an_entry(self):
+        always = [{"at": "2026-10-01T09:00:00", "price": 900, "ku": False, "campaign": "お得"}, {"at": "2026-10-02T09:00:00", "price": 900, "ku": False, "campaign": "お得"}]
+        changed = [{"at": "2026-10-01T09:00:00", "price": 900, "ku": False, "campaign": "お得"}, {"at": "2026-10-02T09:00:00", "price": 900, "ku": False, "campaign": "期間限定キャンペーン"}]
+        ended = [{"at": "2026-10-01T09:00:00", "price": 900, "ku": False}, {"at": "2026-10-02T09:00:00", "price": 900, "ku": False, "campaign": "お得"}, {"at": "2026-10-03T09:00:00", "price": 900, "ku": False}]
+        started = [{"at": "2026-10-01T09:00:00", "price": 900, "ku": False}, {"at": "2026-10-02T09:00:00", "price": 900, "ku": False, "campaign": "お得"}]
+        books = [
+            _book(asin="B0FEED0007", campaign="お得", price_history=always),
+            _book(asin="B0FEED0008", campaign="期間限定キャンペーン", price_history=changed),
+            _book(asin="B0FEED0009", campaign="", price_history=ended),
+            _book(asin="B0FEED0010", campaign="お得", price_history=started, purchased=True),
+        ]
+        self.assertEqual(_entries(report.build_feed(_wishlist(*books), SITE)), [])
+
     def test_titles_are_escaped_and_bad_asin_links_to_the_site(self):
         book = _book(asin="", title="A & B <C>", price=700, price_prev=1000, price_changed_at="2026-10-02T08:00:00")
         xml_text = report.build_feed(_wishlist(book), SITE)

@@ -89,7 +89,7 @@ python report.py [--allow-shrink]
 ```
 
 蔵書一覧（読みたい本 / 購入済み本 / 全部）を `PUBLIC_SITE_DIR`（bookshelf の `web/wishlist-site/`）の
-`wishlist.json`（データだけ。形式 `kindle-wishlist` v1）と `feed.xml`（値下がり・読み放題入りの Atom フィード）として書き出す。
+`wishlist.json`（データだけ。形式 `kindle-wishlist` v1）と `feed.xml`（値下がり・読み放題入り・キャンペーン開始の Atom フィード）として書き出す。
 この 2 つは生成物なので直接編集しない。
 
 画面は持たない。欲しい本の一覧は bookshelf アプリの本タブ「欲しい本」
