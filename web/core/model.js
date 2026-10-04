@@ -22,8 +22,9 @@ export const LIBRARY_VERSION = 1;
 
 // ---- 技術書（IT の教科書）。線は残して見られるが、「点」には数えない（件数・今日の点・AI 分析から外す） ----
 
-// 英字の語は前後が英字でないときだけ一致させる（"digital" の git、"javanese" の java などに反応しない）
-const TECH_WORDS = /(?<![a-z])(?:sql|mysql|postgresql|php|python|javascript|typescript|java|ruby|rails|golang|rust|c\+\+|c#|html|css|linux|unix|git|github|docker|kubernetes|aws|azure|gcp|tcp\/ip|http|api|react|vue|laravel|devops)(?![a-z])/;
+// 英字の語は前後が英字でないときだけ一致させる（"digital" の git、"javanese" の java などに反応しない）。
+// 後読み（?<!）は古い iOS Safari でモジュールごと読めなくなるので使わない
+const TECH_WORDS = /(?:^|[^a-z])(?:sql|mysql|postgresql|php|python|javascript|typescript|java|ruby|rails|golang|rust|c\+\+|c#|html|css|linux|unix|git|github|docker|kubernetes|aws|azure|gcp|tcp\/ip|http|api|react|vue|laravel|devops)(?![a-z])/;
 const TECH_PHRASES = /データベース|db設計|プログラミング|プログラマ|ソフトウェア|フロントエンド|バックエンド|インフラ|ネットワーク入門|オブジェクト指向|アルゴリズム|データ構造|機械学習|深層学習|ディープラーニング|コマンドライン|シェルスクリプト|itエンジニア|要件定義|システム設計|システム開発|aiのしくみ|web技術|webを支える|コンピュータ|情報処理|テスト駆動|リファクタリング/;
 
 /** 書名から IT の教科書かどうかを推定する */
@@ -83,12 +84,14 @@ export function highlightIdFor(bookId, text) {
  * reviveDeleted: false … 削除済みの本は復活させずに飛ばす（ブラウザ拡張の自動取り込みなど、人が操作していない取り込み用）
  */
 export function mergeParsed(library, parsedBooks, { now = new Date().toISOString(), reviveDeleted = true } = {}) {
-  const stats = { books: 0, booksAdded: 0, booksUpdated: 0, added: 0, updated: 0, unchanged: 0, skippedDeleted: 0, skippedDeletedBooks: 0 };
+  // memoTitles: 読書メモの書名を既にある本の書名に合わせたもの（取り込み結果で知らせる）
+  const stats = { books: 0, booksAdded: 0, booksUpdated: 0, added: 0, updated: 0, unchanged: 0, skippedDeleted: 0, skippedDeletedBooks: 0, memoTitles: [] };
   for (const pb of parsedBooks) {
     // 書名・著者は 1 行にする（改行入りの書名で Markdown の見出しが崩れないように）
     const rawTitle = cleanText(pb.title).replace(/\s+/g, ' ');
     if (!rawTitle) continue;
     const title = pb.source === 'memo' ? noteBookTitle(library, rawTitle) : rawTitle;
+    if (title !== rawTitle) stats.memoTitles.push({ from: rawTitle, to: title });
     const bookId = bookIdFor(title);
     let book = library.books[bookId];
     const isNew = !book;
@@ -149,7 +152,9 @@ export function mergeParsed(library, parsedBooks, { now = new Date().toISOString
         continue;
       }
       // 読書メモは Kindle・Play ブックスの線を写したものが多い。既にある線に含まれる文は増やさない
-      if (pb.source === 'memo' && existing.some((h) => compact(h.text).includes(compact(ph.text)))) {
+      // 短い文（「習慣」など）はどの線にも含まれがちなので、含む判定はある程度の長さの文だけにする
+      const c = compact(ph.text);
+      if (pb.source === 'memo' && existing.some((h) => (c.length >= MEMO_CONTAINED_MIN ? compact(h.text).includes(c) : compact(h.text) === c))) {
         stats.unchanged++;
         continue;
       }
@@ -201,6 +206,8 @@ export function mergeParsed(library, parsedBooks, { now = new Date().toISOString
   library.updatedAt = now;
   return stats;
 }
+
+const MEMO_CONTAINED_MIN = 12;
 
 /** 空白・改行の違いを無視して比べるための形 */
 function compact(text) {
@@ -328,6 +335,8 @@ function mergeHighlight(a, b) {
 
 function mergeBook(a, b) {
   const out = mergeItem(a, b, BOOK_USER_FIELDS);
+  // ほかの端末から届いた表紙は形を確かめる（画像の data URL でなければ・大きすぎれば持たない）
+  if ('cover' in out && !isUploadedCover(out.cover)) delete out.cover;
   const rank = (x) => (Object.keys(SOURCES).indexOf(x) + 1 || 99);
   out.sources = [...new Set([...(a.sources || []), ...(b.sources || [])])].sort((x, y) => rank(x) - rank(y) || x.localeCompare(y));
   out.createdAt = [a.createdAt, b.createdAt].filter(Boolean).sort()[0] || out.createdAt;
@@ -348,6 +357,8 @@ export function mergeLibraries(base, incoming) {
       out[kind][id] = cur ? merge(cur, item) : structuredClone(item);
     }
   }
+  // 片方にしか無かった本の表紙も形を確かめる（mergeBook を通らないため）
+  for (const b of Object.values(out.books)) if ('cover' in b && !isUploadedCover(b.cover)) delete b.cover;
   // 置き換わった古い点に、置き換え先より新しい自分の編集（もう一方の端末で未同期だったもの）があれば引き継ぐ
   for (const h of Object.values(out.highlights)) {
     const target = h.supersededBy && out.highlights[h.supersededBy];
@@ -510,7 +521,8 @@ export function updateBook(library, bookId, patch, now = new Date().toISOString(
     else delete b.technical;
   }
   b.updatedAt = now;
-  b.userUpdatedAt = now;
+  // 表紙・技術書を変えたときだけ利用者の編集時刻を進める（著者だけの修正で、別の端末で付けた表紙を負かさない）
+  if ('cover' in patch || 'technical' in patch) b.userUpdatedAt = now;
   library.updatedAt = now;
   return b;
 }

@@ -26,7 +26,8 @@ const HELP = `使い方: bh <コマンド> [オプション]
   import <ファイル|フォルダ...> [--dry-run]
                                       ハイライトを取り込む（My Clippings.txt / Kindle のエクスポート HTML /
                                       ブックマークレットの JSON / Play Books のメモ .docx .html .md / それらの .zip /
-                                      Obsidian などの読書メモ .md）。フォルダは中のファイルをすべて（入れ子も）読む。
+                                      自分で書いた読書メモ .md）。フォルダは中のファイルをすべて（入れ子も）読むので、
+                                      ノートアプリの保管場所全体ではなく、読書メモのフォルダを指定する。
                                       --dry-run は保存せずに結果だけ表示する
   analyze [--no-recommend]            ローカル LLM で 点→線→面→立体 を分析
   recommend                           おすすめの本を選び直す
@@ -62,7 +63,8 @@ async function collectImportFiles(target, base = target) {
   const out = [];
   const entries = (await readdir(target, { withFileTypes: true })).sort((a, b) => a.name.localeCompare(b.name));
   for (const e of entries) {
-    if (e.name.startsWith('.')) continue;
+    // 隠しフォルダ（.obsidian など）とシンボリックリンク（たどると循環しうる）は読まない
+    if (e.name.startsWith('.') || e.isSymbolicLink()) continue;
     const p = path.join(target, e.name);
     if (e.isDirectory() || IMPORT_EXTENSIONS.has(path.extname(e.name).toLowerCase())) out.push(...(await collectImportFiles(p, base)));
   }
@@ -106,6 +108,7 @@ async function main() {
         if (r.analysisChanged) await store.saveAnalysis(r.analysis);
       }
       const s = r.stats;
+      for (const m of s.memoTitles) console.log(`→ 読書メモ「${m.from}」は既にある本『${m.to}』にまとめました`);
       console.log(`${dryRun ? '（試し・保存していません）' : ''}取り込み: 新しい点 ${s.added} 件、更新 ${s.updated} 件、既存 ${s.unchanged} 件（新しい本 ${s.booksAdded} 冊）${r.analysisChanged ? '。バックアップの新しい分析結果も反映しました' : ''}`);
       break;
     }

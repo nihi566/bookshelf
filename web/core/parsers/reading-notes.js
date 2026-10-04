@@ -5,7 +5,7 @@
 // - 箇条書きで始まる塊 … いちばん外側の項目ごとに 1 点（入れ子の項目は「・」を付けてその点に含める）
 // - 文で始まる塊 … 塊ごと 1 点（中の箇条書きは「・」を付けて含める）
 // - 「・」でつないだ行（「・A ・B」）… 「・」ごとに分ける
-// - Play ブックスの書き出しを貼ったメモ（ページへのリンク + 改行で切れた断片）… リンクの間の断片を 1 点につなぐ
+// - Play ブックスの書き出しを貼ったメモ（ページへのリンク + 改行で切れた断片）… リンクの直後の断片を 1 点につなぐ
 // - 画像の埋め込み（![[…]]）… 点にせず、名前だけ数える（画像は取り込めないので知らせる）
 //
 // ParsedBook = { title, author: '', source: 'memo', highlights: [{ text, chapter }], images: [ファイル名] }
@@ -13,9 +13,16 @@
 const HEADING = /^#{1,6}(?:\s+(.*))?$/;
 const RULE = /^\s*(?:[-*_]\s*){3,}$/;
 const LIST_ITEM = /^(\s*)(?:(?:[-*+]|\d+[.)])\s+|・\s*)(.*)$/;
-const EMBED = /!\[\[([^\]|]+)(?:\|[^\]]*)?\]\]/g;
+// 括弧の中身は長さに上限を付ける（閉じ括弧の無い長い行で、開き括弧ごとに行末まで探し直して固まらないように）
+const EMBED = /!\[\[([^\]|\n]{1,300})(?:\|[^\]\n]{0,100})?\]\]/g;
+const MD_IMAGE = /!\[[^\]\n]{0,300}\]\(([^)\s]{1,2000})[^)\n]{0,300}\)/g;
 const PLAY_LINK = /^https?:\/\/www\.google\.com\/url\?q=https?:\/\/play\.google\.com\/books\//;
-const FRONT_MATTER = /^---\n[\s\S]*?\n---(?:\n|$)/;
+// 「キー: 値」で始まるときだけ front matter とみなす（区切り線で始まるメモの本文を消さない）
+const FRONT_MATTER = /^---\n[\w.-]+[ \t]*:[^\n]*\n(?:[\s\S]*?\n)??---(?:\n|$)/;
+// タグだけの行（#読書 #本）は本文ではない
+const TAGS_ONLY = /^\s*(?:#[^\s#]+\s*)+$/;
+// 1 行の長さの上限（貼り付けの事故などで極端に長い行があっても処理が終わるように）
+const LINE_MAX = 20000;
 // 小見出しとみなす 1 行の長さの上限と、文の終わりの記号（これで終わる行は小見出しではなく文）
 const LABEL_MAX = 20;
 const SENTENCE_END = /[。．.!！?？」』）)]$/;
@@ -32,10 +39,15 @@ function inline(s) {
     .replace(/<br\s*\/?>/gi, '\n')
     .replace(/\*\*|__|==|~~/g, '')
     .replace(/(^|[^\p{L}\p{N}_])_([^_\n]+)_(?![\p{L}\p{N}_])/gu, '$1$2')
-    .replace(/\[\[([^\]|]+)\|([^\]]+)\]\]/g, '$2')
-    .replace(/\[\[([^\]]+)\]\]/g, '$1')
-    .replace(/\[([^\]]+)\]\((?:[^)\s]+)\)/g, '$1')
+    .replace(/\[\[([^\]|\n]{1,300})\|([^\]\n]{1,300})\]\]/g, '$2')
+    .replace(/\[\[([^\]\n]{1,300})\]\]/g, '$1')
+    .replace(/\[([^\]\n]{1,300})\]\([^)\s]{1,2000}\)/g, '$1')
     .trim();
+}
+
+/** Play ブックスの断片をつなぐ。日本語はそのまま、英数字どうしの境目だけ空白を入れる */
+function joinFragments(parts) {
+  return parts.reduce((acc, p) => (acc && /[A-Za-z0-9,.;:]$/.test(acc) && /^[A-Za-z0-9]/.test(p) ? `${acc} ${p}` : acc + p), '');
 }
 
 /** 字の無い断片（「1.」や記号だけ）は点にしない */
@@ -91,11 +103,12 @@ function paragraphPoint(lines) {
 export function parseReadingNote(markdown, title) {
   const text = String(markdown ?? '').replace(/^﻿/, '').replace(/\r\n?/g, '\n').replace(FRONT_MATTER, '');
   const rawLines = text.split('\n');
-  const playExport = rawLines.some((l) => PLAY_LINK.test(l.trim()));
   const images = [];
   const highlights = [];
   let chapter = '';
   let block = [];
+  // Play ブックスのページへのリンクの直後の塊は、改行で切れた 1 つの線の断片
+  let afterPlayLink = false;
   // 句点で終わらない短い 1 行（「Column」「資格を取る」などの小見出し）は、次の点の頭に付ける
   let labels = [];
 
@@ -115,9 +128,9 @@ export function parseReadingNote(markdown, title) {
     if (!block.length) return;
     const lines = block;
     block = [];
-    if (playExport) {
-      // 改行で切れた 1 つの線の断片。日本語なのでそのままつなぐ
-      push(lines.map((l) => inline(l.match(LIST_ITEM)?.[2] ?? l)).join(''));
+    if (afterPlayLink) {
+      afterPlayLink = false;
+      push(joinFragments(lines.map((l) => inline(l.match(LIST_ITEM)?.[2] ?? l))));
       return;
     }
     if (LIST_ITEM.test(lines[0])) {
@@ -132,22 +145,30 @@ export function parseReadingNote(markdown, title) {
     push(paragraphPoint(lines));
   };
 
+  const takeImage = (_, name) => {
+    images.push(name.trim());
+    return '';
+  };
   for (let raw of rawLines) {
     // 引用は記号だけ外して本文として読む
-    raw = raw.replace(/^(\s*>\s?)+/, '');
-    raw = raw.replace(EMBED, (_, name) => {
-      images.push(name.trim());
-      return '';
-    });
+    raw = raw.slice(0, LINE_MAX).replace(/^(\s*>\s?)+/, '');
+    raw = raw.replace(EMBED, takeImage).replace(MD_IMAGE, takeImage);
     const line = raw.replace(/\s+$/, '');
-    if (PLAY_LINK.test(line.trim()) || RULE.test(line) || !line.trim()) {
+    if (PLAY_LINK.test(line.trim())) {
+      flush();
+      afterPlayLink = true;
+      continue;
+    }
+    if (RULE.test(line) || !line.trim()) {
       flush();
       continue;
     }
+    if (TAGS_ONLY.test(line)) continue;
     const h = line.match(HEADING);
     if (h) {
       flush();
       releaseLabels();
+      afterPlayLink = false;
       const name = inline(h[1] || '');
       if (name) chapter = name;
       continue;

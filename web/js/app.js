@@ -141,6 +141,7 @@ async function importFiles(files) {
       out.innerHTML = String(html`<div class="card" style="margin-top:12px">
         <p class="notice ${stats.added || stats.backups ? 'ok' : ''}">${summary}${r.analysisChanged ? '（バックアップの新しい分析結果も反映）' : ''}</p>
         <ul class="result-list">${results.map((r) => html`<li>${r.error ? '✗' : '✓'} <b>${r.name}</b><br><span class="small muted">${r.error || `${r.formatLabel} — 本 ${r.books} 冊 / 点 ${r.highlights} 件${r.images ? `（画像 ${r.images} 枚は取り込めません）` : ''}`}</span></li>`)}</ul>
+        ${stats.memoTitles?.length ? html`<p class="small muted">既にある本にまとめた読書メモ: ${stats.memoTitles.map((m) => `「${m.from}」→『${m.to}』`).join('、')}</p>` : ''}
         <div class="row" style="margin-top:8px"><a class="btn small" href="#/books">本を見る</a></div>
       </div>`);
     }
@@ -413,7 +414,11 @@ async function coverDataUrl(file) {
   const canvas = document.createElement('canvas');
   canvas.width = Math.max(1, Math.round(img.width * scale));
   canvas.height = Math.max(1, Math.round(img.height * scale));
-  canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+  const g = canvas.getContext('2d');
+  // JPEG は透明を持てないので、透過 PNG が黒くならないよう白で塗ってから描く
+  g.fillStyle = '#fff';
+  g.fillRect(0, 0, canvas.width, canvas.height);
+  g.drawImage(img, 0, 0, canvas.width, canvas.height);
   img.close?.();
   for (const quality of [0.85, 0.7, 0.55]) {
     const url = canvas.toDataURL('image/jpeg', quality);
@@ -473,7 +478,10 @@ const actions = {
         <div class="row spread"><span></span><span class="row"><button class="btn" value="cancel">やめる</button><button class="btn primary" value="save">保存</button></span></div>`,
       async (data) => {
         try {
-          const patch = { author: data.get('author'), technical: TECHNICAL_VALUES[data.get('technical')] ?? null };
+          // 変えた欄だけを送る（変えていない表紙・技術書の編集時刻を進めて、別の端末の編集を負かさない）
+          const patch = { author: data.get('author') };
+          const technical = TECHNICAL_VALUES[data.get('technical')] ?? null;
+          if (technical !== (typeof b.technical === 'boolean' ? b.technical : null)) patch.technical = technical;
           const cover = await coverDataUrl(data.get('cover'));
           if (cover) patch.cover = cover;
           else if (data.get('removeCover')) patch.cover = '';
