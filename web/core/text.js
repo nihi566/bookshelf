@@ -61,7 +61,8 @@ export function sliceChars(s, max) {
  * （画面・分析結果・履歴・バックアップに残る文に入れないため）
  */
 export function maskSecrets(s) {
-  return String(s || '').replace(/(\/\/)[^/\s:@]+:[^/\s@]+@/g, '$1***@');
+  // 「利用者名:パスワード@」も「トークンだけ@」も伏せる
+  return String(s || '').replace(/(\/\/)[^/\s@]+@/g, '$1***@');
 }
 
 /** 本の同一性判定用キー。記号・空白を落として表記ゆれに強くする */

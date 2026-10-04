@@ -55,6 +55,7 @@ test('文字数で切る: 2 つで 1 文字の文字（絵文字・一部の漢�
 
 test('エラー文から、URL に書いた利用者名・パスワードを伏せる', () => {
   assert.equal(maskSecrets('接続できません (http://user:secret@127.0.0.1:9): x'), '接続できません (http://***@127.0.0.1:9): x');
+  assert.equal(maskSecrets('接続できません (https://tok3n@pc.example.ts.net/llm): x'), '接続できません (https://***@pc.example.ts.net/llm): x', 'トークンだけの利用者名も伏せる');
   assert.equal(maskSecrets('http://127.0.0.1:9 と https://a.example/b@c'), 'http://127.0.0.1:9 と https://a.example/b@c');
   assert.equal(maskSecrets(undefined), '');
 });

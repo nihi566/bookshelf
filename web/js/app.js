@@ -13,6 +13,8 @@ import { pointView } from './views/point.js';
 import { noteActions } from './note-actions.js';
 import { linkPickerView } from './views/links.js';
 import { linkActions } from './link-actions.js';
+import { askResultBlock, askView, semanticAvailability } from './views/ask.js';
+import { askActions } from './ask-actions.js';
 import { markDiscoveryRead } from '../core/discovery-reads.js';
 import { FAR_REACTIONS, farConnectionById, reactFar } from '../core/far-reactions.js';
 import { importView, kindleSyncBlock, settingsView } from './views/settings.js';
@@ -56,6 +58,8 @@ const ROUTES = [
   [/^\/point\/(?<id>[\w-]+)$/, pointView, 'knowledge'],
   // リンクを張る相手を選ぶ（点・メモ・永久ノートから）
   [/^\/link\/(?<id>[\w-]+)$/, linkPickerView, 'knowledge'],
+  // 問いかける（PC の AI が、自分の点を根拠に答える）
+  [/^\/ask$/, askView, 'knowledge'],
   // 過去の分析（履歴は PC にだけある）
   [/^\/knowledge\/history\/(?<id>[0-9TZ]+)$/, historyView, 'knowledge'],
   // 発見（ホームの「発見」から開く）
@@ -502,7 +506,23 @@ function technicalField(b) {
 
 const TECHNICAL_VALUES = { auto: null, yes: true, no: false };
 
+/**
+ * 問いかけた結果を出す。問いかける画面の答えの欄とボタンだけを差し替える
+ * （答えは数十秒あとに届くので、ほかの画面や、書き直している質問の欄を描き直さない）
+ */
+function renderAskResult() {
+  if (parseHash().path !== '/ask') return;
+  const box = document.querySelector('#view #ask-result');
+  if (box) box.innerHTML = String(askResultBlock(state));
+  const btn = document.querySelector('#view #ask-submit');
+  if (btn) btn.disabled = semanticAvailability(state) !== 'ok' || state.ask?.status === 'pending';
+}
+
+// 問いかける（質問を PC に送る・答えをメモにする。中身は ask-actions.js）
+const askOps = askActions({ state, ask: (question) => companion.ask(question), persist: persistLibrary, sync: autoSyncAfterChange, render: renderAskResult, toast });
+
 const actions = {
+  'ask-save': () => askOps.save(),
   'register-book'() {
     openSheet(
       html`<h2>紙の本を登録</h2>
@@ -731,6 +751,11 @@ const actions = {
 const forms = {
   search(form) {
     form.querySelector('input')?.blur();
+  },
+  ask(form) {
+    // 検索の画面から引き継いだ言葉（?q=）を URL から外す（描き直しても、送った質問の欄が引き継いだ言葉に戻らないように）
+    if (location.hash !== '#/ask') history.replaceState(null, '', '#/ask');
+    return askOps.submit(new FormData(form).get('question'));
   },
   async 'add-highlight'(form) {
     const d = new FormData(form);
