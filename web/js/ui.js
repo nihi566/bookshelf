@@ -64,6 +64,7 @@ export function highlightCard(h, { library, lines = [], query = '', showBook = t
         <button class="icon-btn ${h.favorite ? 'on' : ''}" data-action="fav" data-id="${h.id}" aria-pressed="${String(Boolean(h.favorite))}" aria-label="お気に入り">${h.favorite ? '★' : '☆'}</button>
         <button class="icon-btn" data-action="edit" data-id="${h.id}" aria-label="メモ・タグを編集">✎</button>
         <button class="icon-btn" data-action="copy" data-id="${h.id}" aria-label="引用をコピー">⧉</button>
+        <a class="icon-btn" href="#/point/${h.id}" aria-label="点のページを開く（永久ノート）">↗</a>
       </div>
     </div>
   </article>`;
@@ -91,9 +92,12 @@ export function thoughtCard(t, { lines = [], query = '', moves = false } = {}) {
       <div class="hl-actions">
         <button class="icon-btn" data-action="edit-thought" data-id="${t.id}" aria-label="メモを編集">✎</button>
         <button class="icon-btn" data-action="copy" data-id="${t.id}" aria-label="メモをコピー">⧉</button>
+        <a class="icon-btn" href="#/point/${t.id}" aria-label="点のページを開く（永久ノート）">↗</a>
       </div>
     </div>
-    ${moves ? html`<div class="row thought-moves">${(STATUS_MOVES[t.status] || []).map(([status, label]) => html`<button type="button" class="btn small" data-action="thought-status" data-id="${t.id}" data-status="${status}">${label}</button>`)}</div>` : ''}
+    ${moves
+      ? html`<div class="row thought-moves">${(STATUS_MOVES[t.status] || []).map(([status, label]) => html`<button type="button" class="btn small" data-action="thought-status" data-id="${t.id}" data-status="${status}">${label}</button>`)}${t.status === 'inbox' ? html`<button type="button" class="btn small" data-action="thought-to-note" data-id="${t.id}">永久ノートにする</button>` : ''}</div>`
+      : ''}
   </article>`;
 }
 
@@ -146,8 +150,9 @@ export function sheetDirty(before, after) {
   return key(before) !== key(after);
 }
 
-// Enter で送ってよい 1 行の入力欄（チェックボックスなどは除く）
-const TEXT_INPUT = /^(text|search|url|email|tel|number|password)$/;
+// Enter を「保存」として扱う入力欄（1 行の入力欄と、チェックボックス・ラジオボタン）。
+// ここに無い欄で Enter を押すと、ブラウザは並びの最初のボタン（「やめる」「削除」など）を押したことにしてしまう
+const TEXT_INPUT = /^(text|search|url|email|tel|number|password|checkbox|radio)$/;
 
 /**
  * 下から出るシート。content は html``、onSubmit(formData, action) を返す。
@@ -170,10 +175,9 @@ export function openSheet(content, onSubmit) {
   // 確認なしで消えないよう、Enter は「保存」ボタンを押したことにする
   form.addEventListener('keydown', (e) => {
     if (e.key !== 'Enter' || e.isComposing || e.target.tagName !== 'INPUT' || !TEXT_INPUT.test(e.target.type)) return;
-    const save = form.querySelector('button[value="save"]');
-    if (!save) return;
+    // 「保存」が無いシートでは何もしない（最初のボタンを押したことにしない）
     e.preventDefault();
-    save.click();
+    form.querySelector('button[value="save"]')?.click();
   });
   form.addEventListener('submit', async (e) => {
     e.preventDefault();

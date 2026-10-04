@@ -48,15 +48,31 @@ ${list}
   };
 }
 
-/** 面を作る依頼。lines は面の中心に近い線から（最大 12 本）、more は見せていない線の数 */
-export function planePrompt(lines, { more = 0 } = {}) {
+/**
+ * 読者が自分でまとめた線（永久ノート）を、面・立体を作る AI に見せる段落（G3-5）。無ければ空（前と同じ依頼文になる）
+ * notes = [{ title, body }]
+ */
+export function humanLines(notes) {
+  if (!notes?.length) return '';
+  const list = notes.map((n, i) => `[N${i + 1}] ${humanLine(n)}`).join('\n');
+  return `\n\n読者が自分の言葉でまとめた「人間がまとめた線」（永久ノート）。AI が作った線より重く見て、その考えを中心に組み立ててください:\n${list}`;
+}
+
+/** AI に見せる永久ノート 1 件（題 40 字・本文 200 字。面・立体の指紋もこの文で作る） */
+export function humanLine(n) {
+  const oneLine = (v) => String(v || '').replace(/\s+/g, ' ').trim();
+  return `${truncate(oneLine(n.title) || '（題なし）', 40)}: ${truncate(oneLine(n.body), 200)}`;
+}
+
+/** 面を作る依頼。lines は面の中心に近い線から（最大 12 本）、more は見せていない線の数、notes はこの面の点を根拠にした永久ノート */
+export function planePrompt(lines, { more = 0, notes = [] } = {}) {
   const list = lines.map((l, i) => `[${i + 1}] ${l.name}: ${truncate(l.summary, 200)}`).join('\n');
   return {
     system: SYSTEM,
     name: 'plane',
     user: `次の線（概念）は近いものとして集まりました。これらを束ねる「面（テーマ）」を作ってください。
 
-${list}${more > 0 ? `\n（ほかに近い線が ${more} 本あります）` : ''}
+${list}${more > 0 ? `\n（ほかに近い線が ${more} 本あります）` : ''}${humanLines(notes)}
 
 線の名前や本の名前を並べるのではなく、線に共通する考えの中身を自分の言葉で書いてください。
 
@@ -102,7 +118,8 @@ ${one(b, 'B')}
 
 export const RELATION_TYPES = ['支える', '対立する', '具体化する', '補完する'];
 
-export function solidPrompt(planes) {
+/** 立体を作る依頼。notes は永久ノート（人間がまとめた線。新しく直したものから最大 12 件） */
+export function solidPrompt(planes, { notes = [] } = {}) {
   const refs = planes.map((_, i) => `P${i + 1}`);
   // 面ごとに線の名前は 12 本まで（線が多いと小さなモデルの読める長さを超える）
   const names = (ls) => `${ls.slice(0, 12).map((l) => l.name).join('、')}${ls.length > 12 ? ` ほか ${ls.length - 12} 本` : ''}`;
@@ -114,7 +131,7 @@ export function solidPrompt(planes) {
     name: 'solid',
     user: `読者の知識は次の面（テーマ）でできています。面どうしの関係を見て、知識を「立体」として組み立ててください。
 
-${list}
+${list}${humanLines(notes)}
 
 - relations の type は「支える」「対立する」「具体化する」「補完する」のどれか 1 つ
 - principles は「〜する」で終わる、明日から実践できる行動の原則
