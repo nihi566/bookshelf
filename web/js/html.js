@@ -13,7 +13,16 @@ class Raw {
 export const raw = (s) => new Raw(String(s ?? ''));
 
 export function esc(v) {
-  return String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+  return toText(v).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+}
+
+/** 文字にする。文字にできない値（ほかの端末から届いた壊れた分析など）は空にする（画面全体が描けなくならないように） */
+function toText(v) {
+  try {
+    return String(v ?? '');
+  } catch {
+    return '';
+  }
 }
 
 function part(v) {

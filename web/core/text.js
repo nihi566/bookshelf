@@ -10,14 +10,34 @@ export function normalizeText(s) {
     .toLowerCase();
 }
 
-/** 表示用の整形（前後の空白と BOM を除き、連続する空行を詰める） */
+/** 表示用の整形（前後の空白と BOM を除き、行末の空白を落とし、連続する空行を詰める） */
 export function cleanText(s) {
   return String(s ?? '')
     .replace(/[​-‍﻿]/g, '')
     .replace(/\r\n?/g, '\n')
-    .replace(/[ \t]+\n/g, '\n')
+    .split('\n')
+    .map(trimSpacesEnd)
+    .join('\n')
     .replace(/\n{3,}/g, '\n\n')
     .trim();
+}
+
+/**
+ * 行末の半角空白とタブを落とす。正規表現（/[ \t]+\n/）で落とすと、改行の無い長い空白の並びで
+ * 処理時間が長さの 2 乗に増え、同期で届いた文 1 つでサーバが止まる
+ */
+function trimSpacesEnd(line) {
+  let i = line.length;
+  while (i > 0 && (line[i - 1] === ' ' || line[i - 1] === '\t')) i--;
+  return i === line.length ? line : line.slice(0, i);
+}
+
+/**
+ * エラー文などから、URL に書いた利用者名・パスワード（http://user:pass@host）を伏せる
+ * （画面・分析結果・履歴・バックアップに残る文に入れないため）
+ */
+export function maskSecrets(s) {
+  return String(s || '').replace(/(\/\/)[^/\s:@]+:[^/\s@]+@/g, '$1***@');
 }
 
 /** 本の同一性判定用キー。記号・空白を落として表記ゆれに強くする */
