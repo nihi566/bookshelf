@@ -562,7 +562,7 @@ const actions = {
   },
   async backup() {
     const data = JSON.stringify(makeBackup(state.library, state.analysis));
-    download(`book-highlights-backup-${new Date().toISOString().slice(0, 10)}.json`, data, 'application/json');
+    download(`bookshelf-backup-${new Date().toISOString().slice(0, 10)}.json`, data, 'application/json');
   },
   async 'clear-all'() {
     if (!confirm('この端末のハイライト・分析結果・設定をすべて消します。よろしいですか？')) return;

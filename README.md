@@ -1,4 +1,4 @@
-# 本 — book-highlights
+# 本 — bookshelf
 
 Play ブックスと Kindle で線を引いた箇所（ハイライト）を 1 か所に集めて **Obsidian に写し**、PC の **ローカル LLM** がそれらの「点」を **線 → 面 → 立体** に組み立てて、次に読む本を提案するシステムです。
 
@@ -54,13 +54,13 @@ GitHub Pages は静的ファイルしか置けず、スマホではローカル 
 
 ### 1. まず試す（インストール不要）
 
-GitHub Pages で公開した Web アプリ（このリポジトリなら `https://nihi566.github.io/book-highlights/`。公開手順は [docs/setup.md](docs/setup.md)）を開き、「サンプルで試す」を押します。架空の 8 冊・48 の点で画面を確認できます。ホーム画面に追加すればアプリのように使えます。
+GitHub Pages で公開した Web アプリ（このリポジトリなら `https://nihi566.github.io/bookshelf/`。公開手順は [docs/setup.md](docs/setup.md)）を開き、「サンプルで試す」を押します。架空の 8 冊・48 の点で画面を確認できます。ホーム画面に追加すればアプリのように使えます。
 
 ### 2. PC を準備する（Obsidian と AI）
 
 ```sh
-git clone https://github.com/nihi566/book-highlights.git
-cd book-highlights
+git clone https://github.com/nihi566/bookshelf.git
+cd bookshelf
 
 # ローカル LLM（例: Ollama）
 ollama pull qwen3.5:9b     # 日本語が得意なチャットモデル（PC の性能に合わせて 4b〜27b）

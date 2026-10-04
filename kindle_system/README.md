@@ -36,7 +36,7 @@ python run.py sync [--workers N] [--limit N] [--start N] [--target kindle|bookme
 
 公開（`publish()`）は次の順に進み、途中で失敗したら終了コード 1 で止まる。
 
-0. 公開先（`PUBLIC_SITE_DIR` = book-highlights の作業ツリー）が **main ブランチ・rebase / merge の途中でない・
+0. 公開先（`PUBLIC_SITE_DIR` = bookshelf の作業ツリー）が **main ブランチ・rebase / merge の途中でない・
    `wishlist.json` / `feed.xml` 以外に未コミットの変更が無い**ことを確かめる。どれかに当たれば git を何も変えずに止まる
    （人や他のセッションの作業を壊したり、データのコミットに巻き込んだりしないため。作業は worktree で行う）
 1. 公開用クローン（`PUBLIC_SITE_DIR`）を `git pull --rebase` で origin の最新に合わせる
@@ -88,19 +88,19 @@ python run.py purchase <asin> --off
 python report.py [--allow-shrink]
 ```
 
-蔵書一覧（読みたい本 / 購入済み本 / 全部）を `PUBLIC_SITE_DIR`（book-highlights の `web/wishlist-site/`）の
+蔵書一覧（読みたい本 / 購入済み本 / 全部）を `PUBLIC_SITE_DIR`（bookshelf の `web/wishlist-site/`）の
 `wishlist.json`（データだけ。形式 `kindle-wishlist` v1）と `feed.xml`（値下がり・読み放題入りの Atom フィード）として書き出す。
 この 2 つは生成物なので直接編集しない。
 
-画面は持たない。欲しい本の一覧は book-highlights アプリの本タブ「欲しい本」
-（https://nihi566.github.io/book-highlights/#/wishlist）が同じ場所からこの `wishlist.json` を読んで表示する。
+画面は持たない。欲しい本の一覧は bookshelf アプリの本タブ「欲しい本」
+（https://nihi566.github.io/bookshelf/#/wishlist）が同じ場所からこの `wishlist.json` を読んで表示する。
 見た目・操作を変えるときは `web/js/views/wishlist.js` / `web/core/wishlist.js` を直す。
 データの項目を変えるときは `report.py`（`build_wishlist`）と `test/test_report.py` を直し、
 Web アプリ側の読み込み（`parseWishlist`）も同じ版に合わせる。
 
 ### 「見た」・★評価とローカル LLM のおすすめ
 
-以下の「公開ページ」は、book-highlights アプリの欲しい本の画面を指す（タグの保存先・書き出しファイルの形式は旧画面と同じ）。
+以下の「公開ページ」は、bookshelf アプリの欲しい本の画面を指す（タグの保存先・書き出しファイルの形式は旧画面と同じ）。
 
 公開ページのカードでは、タグ（読みたい / 読みたくない / 購入済み / **見た**）に加えて、
 「見た」を選んだ本に **★1〜5 の評価** を付けられる（同じ★をもう一度押すと取り消し）。

@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// book-highlights の PC 用コマンド
+// bookshelf の PC 用コマンド
 //
 //   bh import <ファイル...>        Kindle / Play Books のハイライトを取り込む
 //   bh obsidian                    Obsidian の Vault に書き出す

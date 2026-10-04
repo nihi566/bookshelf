@@ -42,6 +42,7 @@ Highlight = { id: 'h'+hash(bookId+本文の正規化), bookId, source, kind: 'hi
 - 包含関係での置き換え（伸ばしたハイライト）は Kindle だけで、位置が重なるか、位置が無ければ同じページのときだけ行う（Play ブックスの別ページの短いハイライトを消さない）
 - おすすめへの反応は `library.feedback[書名キー] = { status: read|want|no|'', updatedAt }` に持ち、同期では新しい方を採る
 - バックアップは `{ format: 'book-highlights/backup', library, analysis }`。取り込み（Web・`bh import`・サーバ共通の `web/core/importing.js`）では、ライブラリを統合し、分析結果は手元より新しいときだけ採用する
+- リポジトリ名は `bookshelf` に変えたが、データ形式名（`book-highlights/backup` など）・Obsidian のタグ（`book-highlights/book` など）・IndexedDB の名前・`bh serve` の応答の `app` は旧名 `book-highlights` のまま残す（変えると既存のバックアップ・Vault のノート・端末に保存したデータ・古い版のアプリと合わなくなる）
 
 ## 分析結果（`web/core/analysis/pipeline.js`）
 

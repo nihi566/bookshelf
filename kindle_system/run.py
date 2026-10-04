@@ -41,15 +41,15 @@ from src.book_kind import KIND_BOOK, KIND_MANGA
 from src.bookmeter_sync import sync_bookmeter_wishlist
 from src.repository import get_book_marks, get_books, import_marks, init_db, set_wanted, set_purchased
 
-# 欲しい本の画面（book-highlights の web/core/wishlist.js の marksFile）の「見た・評価を書き出す」が作るファイル
+# 欲しい本の画面（bookshelf の web/core/wishlist.js の marksFile）の「見た・評価を書き出す」が作るファイル
 MARKS_FILE_FORMAT = "kindle-marks"
 MARKS_FILE_GLOB = "kindle-marks-*.json"
 
 # report.main() が PUBLIC_SITE_DIR に書き出し、publish() が公開するファイル。
-# 公開先は book-highlights の web/wishlist-site/。この 2 つ以外は commit しない（他の作業中の変更を巻き込まない）。
+# 公開先は bookshelf の web/wishlist-site/。この 2 つ以外は commit しない（他の作業中の変更を巻き込まない）。
 PUBLISHED_FILES = ["wishlist.json", "feed.xml"]
 
-# GitHub Pages は main への push でだけ公開される（book-highlights の .github/workflows/pages.yml）
+# GitHub Pages は main への push でだけ公開される（bookshelf の .github/workflows/pages.yml）
 PUBLISH_BRANCH = "main"
 
 # これがリポジトリの git フォルダにあれば、誰かが rebase / merge / cherry-pick の途中
@@ -66,7 +66,7 @@ def _git_output(args: list, cwd: str, git_env: dict) -> Optional[str]:
 
 def ensure_safe_to_publish(public_site_dir: str, git_env: dict) -> None:
     """
-    公開先は人や他のセッションが作業する book-highlights の作業ツリーの中なので、
+    公開先は人や他のセッションが作業する bookshelf の作業ツリーの中なので、
     pull・commit・push で他の作業を壊したり巻き込んだりしないことを先に確かめる。
     main 以外のブランチ / rebase・merge の途中 / 公開する 2 ファイル以外の（追跡中の）変更があれば、
     git を何も変えずに終了コード 1 で止める（未追跡のファイルは pull にも commit にも関わらないので許す）。

@@ -23,7 +23,7 @@ import report
 
 
 class BuildWishlistTest(unittest.TestCase):
-    """build_wishlist() が book-highlights アプリ向けの欲しい本データ（kindle-wishlist v1）を組み立てること。"""
+    """build_wishlist() が bookshelf アプリ向けの欲しい本データ（kindle-wishlist v1）を組み立てること。"""
 
     def _book(self, **overrides):
         book = {
@@ -277,7 +277,7 @@ class MainIntegrationTest(unittest.TestCase):
         self.assertIn("結合テスト本", self._read_wishlist_text())
 
     def test_main_does_not_write_index_html(self):
-        """画面は book-highlights に移したので、公開ページ（index.html）は作らない。
+        """画面は bookshelf に移したので、公開ページ（index.html）は作らない。
         公開リポジトリの index.html は欲しい本の画面へ移動する静的ページで、ここから上書きしてはいけない。"""
         self._run_main_with_marks({})
         self.assertFalse(os.path.exists(os.path.join(self.tmpdir, "index.html")))
@@ -401,7 +401,7 @@ class ShrinkGuardTest(unittest.TestCase):
 
 class RequirePublicSiteRepoTest(unittest.TestCase):
     """require_public_site_repo()：公開先は git リポジトリの中のフォルダであればよい
-    （book-highlights に合体したので、公開先はリポジトリ直下ではなく web/wishlist-site/ になる）。"""
+    （bookshelf に合体したので、公開先はリポジトリ直下ではなく web/wishlist-site/ になる）。"""
 
     def setUp(self):
         self.tmpdir = tempfile.mkdtemp(prefix="report_repo_check_test_")
@@ -430,7 +430,7 @@ class RequirePublicSiteRepoTest(unittest.TestCase):
 
 
 class HtmlGenerationRemovedTest(unittest.TestCase):
-    """HTML を作る処理は book-highlights の JS に一本化したので、report.py に残さない（直す場所を 1 か所にする）。"""
+    """HTML を作る処理は bookshelf の JS に一本化したので、report.py に残さない（直す場所を 1 か所にする）。"""
 
     def test_no_html_builders_remain(self):
         for name in ("build_html", "_PAGE_STYLE", "_PAGE_HEADER_HTML", "_PAGE_SCRIPT", "_build_book_row", "_build_price_history_svg"):

@@ -881,7 +881,7 @@ def get_or_create_by_paid_asin(
     return new_book
 
 
-# 欲しい本の画面のタグ（book-highlights の web/core/wishlist.js の TAG_LABELS と同じキー）。"seen" は「見た」。
+# 欲しい本の画面のタグ（bookshelf の web/core/wishlist.js の TAG_LABELS と同じキー）。"seen" は「見た」。
 MARK_TAGS = ("wanted", "unwanted", "purchased", "seen")
 # タイトルが無い本に wishlist.json が載せる題名（report.py）。書き出しファイルに載っても題名として扱わない
 UNKNOWN_TITLE = "(タイトル不明)"
