@@ -16,7 +16,7 @@ export function normalizeKindleReport(body) {
   if (!Number.isInteger(intervalMin) || intervalMin < 1 || intervalMin > 1440) throw new Error('intervalMin は 1〜1440 の整数で指定してください');
   const error = body.error ?? '';
   if (typeof error !== 'string') throw new Error('error は文字列で指定してください');
-  return { ok: body.ok, needLogin, added, intervalMin, error: error.replace(/[\u0000-\u001f\u007f]/g, '').slice(0, MAX_ERROR) };
+  return { ok: body.ok, needLogin, added, intervalMin, error: Array.from(error.replace(/[\u0000-\u001f\u007f]/g, '')).slice(0, MAX_ERROR).join('') };
 }
 
 /** 前回の保存内容に今回の報告を重ねる（最後の成功・最後に新しい点は、今回なかったら前回のまま） */

@@ -68,9 +68,12 @@ export function decodeEntities(s) {
   return String(s ?? '').replace(/&(#x[0-9a-f]+|#\d+|[a-z0-9]+);/gi, (m, e) => {
     if (e[0] === '#') {
       const code = e[1] === 'x' || e[1] === 'X' ? parseInt(e.slice(2), 16) : parseInt(e.slice(1), 10);
-      return Number.isFinite(code) ? String.fromCodePoint(code) : m;
+      // Unicode の範囲外（&#99999999; など）は fromCodePoint が投げるのでそのまま残す
+      return Number.isFinite(code) && code <= 0x10ffff ? String.fromCodePoint(code) : m;
     }
-    if (named[e] ?? named[e.toLowerCase()]) return named[e] ?? named[e.toLowerCase()];
+    // constructor・toString など、継承した名前を文字参照と取り違えない
+    if (Object.hasOwn(named, e)) return named[e];
+    if (Object.hasOwn(named, e.toLowerCase())) return named[e.toLowerCase()];
     const latin = LATIN1.indexOf(e);
     return latin >= 0 ? String.fromCharCode(160 + latin) : m;
   });
@@ -110,7 +113,10 @@ export function parseLooseDate(str) {
 
 function toIso(y, mo, d, h, mi, se) {
   const date = new Date(y, mo - 1, d, h, mi, se);
-  return Number.isNaN(date.getTime()) ? null : date.toISOString();
+  if (Number.isNaN(date.getTime())) return null;
+  // 2 月 30 日・13 月などは Date が別の日に繰り上げるので、存在しない日付として扱う
+  if (date.getFullYear() !== y || date.getMonth() !== mo - 1 || date.getDate() !== d) return null;
+  return date.toISOString();
 }
 
 /** 決定的な乱数（シード付き mulberry32）。クラスタリングの再現性のため */
@@ -129,6 +135,7 @@ export function seededRandom(seed = 1) {
 export function truncate(s, n) {
   const str = String(s ?? '');
   if (str.length <= n) return str;
+  if (!(n > 0)) return '';
   const chars = Array.from(str);
   return chars.length > n ? chars.slice(0, n - 1).join('') + '…' : str;
 }
