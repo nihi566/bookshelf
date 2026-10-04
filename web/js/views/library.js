@@ -151,8 +151,8 @@ export const book = {
           <h2 style="font-size:1rem;margin:0">線を引いた文を足す</h2>
           <label class="field"><span>文</span><textarea name="text" rows="3" required placeholder="本で線を引いた箇所を書き写す"></textarea></label>
           <div class="row" style="flex-wrap:nowrap;gap:8px">
-            <label class="field" style="flex:0 0 6.5em"><span>ページ</span><input type="text" name="page" inputmode="numeric" autocomplete="off"></label>
-            <label class="field grow"><span>章（任意）</span><input type="text" name="chapter" list="chapter-list" autocomplete="off"></label>
+            <label class="field" style="flex:0 0 6.5em;margin:0"><span>ページ</span><input type="text" name="page" inputmode="numeric" autocomplete="off"></label>
+            <label class="field grow" style="margin:0"><span>章（任意）</span><input type="text" name="chapter" list="chapter-list" autocomplete="off"></label>
           </div>
           <datalist id="chapter-list">${chapters.map((c) => html`<option value="${c}">`)}</datalist>
           <div class="row" style="justify-content:flex-end"><button class="btn primary" type="submit">追加</button></div>

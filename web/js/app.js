@@ -485,7 +485,7 @@ function technicalField(b) {
   const guess = b ? (guessTechnical(b.title) ? '技術書' : '技術書ではない') : '';
   const opt = (v, label) => html`<option value="${v}" ${v === value ? 'selected' : ''}>${label}</option>`;
   return html`<label class="field"><span>技術書（IT の教科書）か</span>
-    <select name="technical">${opt('auto', `書名から自動で判断${guess ? `（今は「${guess}」）` : ''}`)}${opt('yes', '技術書（線を点に数えない）')}${opt('no', '技術書ではない')}</select></label>`;
+    <select name="technical">${opt('auto', `自動${guess ? `（今: ${guess}）` : '（書名から判断）'}`)}${opt('yes', '技術書（線を点に数えない）')}${opt('no', '技術書ではない')}</select></label>`;
 }
 
 const TECHNICAL_VALUES = { auto: null, yes: true, no: false };
