@@ -678,8 +678,9 @@ test('G6-6: 足りない種類を足す依頼の答えが壊れていても（nu
 
 test('G6-6: 「興味なし」の反応があっても「揺さぶる」の枠は残る', async () => {
   const lib = emptyLibrary();
-  setFeedback(lib, { title: '反対の立場の本 1', author: '著者' }, 'no');
-  setFeedback(lib, { title: '耳の痛い本', author: '著者' }, 'no');
+  // 反応は新しい順に並ぶので、時刻を決めて並びを固定する（同じミリ秒かどうかで並びが変わらないように）
+  setFeedback(lib, { title: '反対の立場の本 1', author: '著者' }, 'no', '2026-10-04T10:00:01.000Z');
+  setFeedback(lib, { title: '耳の痛い本', author: '著者' }, 'no', '2026-10-04T10:00:00.000Z');
   const log = [];
   const recs = await recommendBooks({ library: lib, analysis: planesAnalysis, llm: deepenOnlyLlm(log), fetchImpl: fetchBooks, count: 6 });
   const challenge = recs.filter((r) => r.kind === 'challenge');
