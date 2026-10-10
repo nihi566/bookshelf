@@ -114,6 +114,8 @@ export async function detectCompanion(st = state, probe = probeCompanionOrigin) 
 
 /** PC と同期: ライブラリは双方向に統合、分析結果は新しい方を採用 */
 export async function syncWithPc() {
+  // 最後の同期は、PC に送る前の時刻で残す（同期の間に書いたメモを、届いていないのに同期済みと見せない。NIH-6）
+  const startedAt = new Date().toISOString();
   const merged = await companion.merge(state.library);
   state.library = mergeLibraries(state.library, merged);
   await save.library();
@@ -130,7 +132,7 @@ export async function syncWithPc() {
     await companion.putAnalysis(local);
     analysisDir = 'この端末→pc';
   }
-  state.lastSync = new Date().toISOString();
+  state.lastSync = startedAt;
   await save.lastSync();
   return { analysisDir };
 }
