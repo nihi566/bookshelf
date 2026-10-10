@@ -303,6 +303,8 @@ ul.card.plain.far-wrong { padding-left: 16px; } /* 箇条の点を出さない�
 .badge.thought { background: var(--accent-soft); color: var(--accent); }
 .thought-status.inbox { color: var(--warn); font-weight: 600; }
 .thought-moves { margin-top: 8px; }
+/* PC にまだ届いていないメモ（最後の同期より後に書いた・直した） */
+.badge.unsynced { background: var(--warn-soft); color: var(--warn); }
 /* 思いつきを自分で入れた線(グループ) */
 .assigned-line { margin: 6px 0 0; color: var(--layer-line); overflow-wrap: anywhere; }
 .assigned-line.missing { color: var(--warn); }

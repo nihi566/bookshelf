@@ -6,7 +6,7 @@ import { kindleSyncState } from '../core/kindle-status.js';
 import { bookCoverUrl } from '../core/covers.js';
 import { analysisPoints, isThought } from '../core/points.js';
 import { pendingPoints } from '../core/auto-analysis.js';
-import { THOUGHT_LABEL, THOUGHT_STATUS } from '../core/thoughts.js';
+import { THOUGHT_LABEL, THOUGHT_STATUS, isThoughtUnsynced } from '../core/thoughts.js';
 
 export const COLOR_VAR = {
   yellow: 'var(--hl-yellow)',
@@ -103,10 +103,24 @@ function assignedLineRow(assigned) {
 }
 
 /**
- * 思いつきのカード。moves: 状態を変えるボタンを出す（受け箱・メモの一覧）。
- * assigned: 自分で入れた線(グループ)（受け箱では入れる・外すボタンも出す）
+ * 思いつきに「PC に未同期」の印を出すときに渡すもの（thoughtCard の pcSync）。PC を使わない画面では null。
+ * PC に届かなかったまま（Tailscale がまだつながっていない等）の画面は、PC ではないと分かるまで PC を使う画面として扱う
+ * @param {{ settings: { ai: { mode: string, companionUrl: string } }, servedByCompanion: boolean, companionOriginChecked?: boolean, lastSync: string | null }} state
+ * @returns {{ lastSync: string | null } | null}
  */
-export function thoughtCard(t, { lines = [], query = '', moves = false, assigned = null } = {}) {
+export function pcSyncOf(state) {
+  const ai = state.settings?.ai;
+  if (ai?.mode !== 'companion') return null;
+  if (!state.servedByCompanion && !(ai.companionUrl || '').trim() && state.companionOriginChecked) return null;
+  return { lastSync: state.lastSync };
+}
+
+/**
+ * 思いつきのカード。moves: 状態を変えるボタンを出す（受け箱・メモの一覧）。
+ * assigned: 自分で入れた線(グループ)（受け箱では入れる・外すボタンも出す）。
+ * pcSync: pcSyncOf(state)。最後の同期より後に書いた・直したメモに「PC に未同期」と出す
+ */
+export function thoughtCard(t, { lines = [], query = '', moves = false, assigned = null, pcSync = null } = {}) {
   const lineButton = assigned
     ? html`<button type="button" class="btn small" data-action="thought-unline" data-id="${t.id}">線(グループ)から外す</button>`
     : t.status === 'inbox'
@@ -122,6 +136,7 @@ export function thoughtCard(t, { lines = [], query = '', moves = false, assigned
         <span class="badge thought">${THOUGHT_LABEL}</span>
         <span>${isoDate(t.createdAt)}</span>
         <span class="thought-status ${t.status}">${THOUGHT_STATUS[t.status] || ''}</span>
+        ${pcSync && isThoughtUnsynced(t, pcSync.lastSync) ? html`<span class="badge unsynced" title="この端末にだけあります。PC と同期すると消えます">PC に未同期</span>` : ''}
       </div>
       <div class="hl-actions">
         <button class="icon-btn" data-action="edit-thought" data-id="${t.id}" aria-label="メモを編集">✎</button>
