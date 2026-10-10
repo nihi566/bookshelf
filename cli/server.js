@@ -308,10 +308,10 @@ export function createCompanionServer({ store, log = console.log, catalogFetch, 
     }
   }
 
-  function publicDrive({ active, lastCheck, lastImport, error, problems = [] }) {
+  function publicDrive({ active, configured, lastCheck, lastImport, error, problems = [] }) {
     // 取り込めないドキュメントは画面に出すだけなので、数と長さを切って渡す
     const cut = (s, n) => String(s || '').slice(0, n);
-    return { active, lastCheck, lastImport, error, problemCount: problems.length, problems: problems.slice(0, DRIVE_PROBLEMS_MAX).map((p) => ({ name: cut(p.name, 200), error: cut(p.error, 300), modifiedTime: cut(p.modifiedTime, 40) })) };
+    return { active, configured, lastCheck, lastImport, error, problemCount: problems.length, problems: problems.slice(0, DRIVE_PROBLEMS_MAX).map((p) => ({ name: cut(p.name, 200), error: cut(p.error, 300), modifiedTime: cut(p.modifiedTime, 40) })) };
   }
 
   function publicJob() {

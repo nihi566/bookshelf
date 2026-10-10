@@ -292,6 +292,22 @@ export function kindleAlertBlock(state) {
 
 // ホームの 1 行に収めるため、失敗の理由はここまでで切る
 const ANALYSIS_ALERT_REASON_MAX = 80;
+const alertReason = (s) => {
+  const error = String(s);
+  return error.length > ANALYSIS_ALERT_REASON_MAX ? `${error.slice(0, ANALYSIS_ALERT_REASON_MAX)}…` : error;
+};
+
+/**
+ * ホームに出す Play ブックス（Google ドライブ）の自動取り込みの警告（1 行）。
+ * Google を使う設定をしていないとき（configured が true でない。古い bh も含む）・取り込めているときは空文字。
+ * 取り込めない本（problemCount）は直るまで続く状態なので、取り込みの画面にだけ出す
+ * @param {{ configured?: boolean, error?: string } | null | undefined} g /api/info の google
+ * @returns {string}
+ */
+export function playbooksSyncAlert(g) {
+  if (g?.configured !== true || !g.error) return '';
+  return `Play ブックスの自動取り込みに失敗しています（${alertReason(g.error)}）`;
+}
 
 /**
  * ホームに出す分析の失敗の警告（1 行）。自動の分析がオフのとき・失敗していないとき・最後の失敗より新しい成功があるときは空文字
@@ -301,15 +317,15 @@ const ANALYSIS_ALERT_REASON_MAX = 80;
 export function autoAnalysisAlert(au) {
   if (!au?.enabled || !au.lastError) return '';
   if (au.lastSuccessAt && au.lastErrorAt && au.lastSuccessAt >= au.lastErrorAt) return '';
-  const error = String(au.lastError);
-  const reason = error.length > ANALYSIS_ALERT_REASON_MAX ? `${error.slice(0, ANALYSIS_ALERT_REASON_MAX)}…` : error;
+  const reason = alertReason(au.lastError);
   const count = Number(au.failureCount) || 0;
   return count >= 2 ? `PC の分析が ${count} 回続けて失敗しています（${reason}）` : `PC の分析に失敗しています（${reason}）`;
 }
 
-/** ホームの先頭の警告欄（自動取り込み・分析の失敗）。PC モードで PC の情報を取れているときだけ出す。分析の警告は押すと知識の画面へ */
+/** ホームの先頭の警告欄（Kindle・Play ブックスの自動取り込み・分析の失敗）。PC モードで PC の情報を取れているときだけ出す。分析の警告は押すと知識の画面へ */
 export function homeAlertBlock(state) {
   if (state.settings.ai.mode !== 'companion' || !state.pcInfo) return '';
+  const playbooks = playbooksSyncAlert(state.pcInfo.google);
   const text = autoAnalysisAlert(state.pcInfo.autoAnalysis);
-  return html`${kindleAlertBlock(state)}${text ? html`<a class="notice err" href="#/knowledge" style="${ALERT_STYLE}">${text}（詳しく）</a>` : ''}`;
+  return html`${kindleAlertBlock(state)}${playbooks ? html`<a class="notice err" href="#/import" style="${ALERT_STYLE}">${playbooks}（詳しく）</a>` : ''}${text ? html`<a class="notice err" href="#/knowledge" style="${ALERT_STYLE}">${text}（詳しく）</a>` : ''}`;
 }
