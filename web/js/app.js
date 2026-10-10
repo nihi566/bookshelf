@@ -164,6 +164,15 @@ async function persistLibrary() {
   await save.library();
 }
 
+/** 削除した点を戻す（削除は印を付けるだけなので、印を外せばメモ・タグ・★ごと戻る） */
+async function undoDeleteHighlight(id) {
+  if (!updateHighlight(state.library, id, { deleted: false })) throw new Error('この点はもう見つかりません（同期で消えた可能性があります）');
+  await persistLibrary();
+  render({ keepScroll: true });
+  autoSyncAfterChange();
+  toast('元に戻しました');
+}
+
 /** 発見を開いたら既読にする（端末に保存し、PC と同期してほかの端末でも既読にする） */
 async function readDiscovery(id) {
   if (!state.loaded || !markDiscoveryRead(state.library, id)) return;
@@ -664,12 +673,13 @@ const actions = {
       async (data, action) => {
         if (action === 'delete') {
           updateHighlight(state.library, h.id, { deleted: true });
-          toast('削除しました');
         } else {
           // 文が空なら例外のままシートに出す（書いた内容はシートに残る）
           updateHighlight(state.library, h.id, { text: String(data.get('text') || ''), userNote: String(data.get('userNote') || '').trim(), tags: String(data.get('tags') || '').split(/[\s,、]+/) });
         }
         await persistLibrary();
+        // 保存できてから知らせる。確認なしの 1 押しで消えるので、押し間違えてもすぐ戻せるようにする
+        if (action === 'delete') toast('削除しました', 6000, { label: '元に戻す', run: () => undoDeleteHighlight(h.id) });
         render({ keepScroll: true });
         autoSyncAfterChange();
       },
