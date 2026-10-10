@@ -67,16 +67,41 @@ export const companion = {
   historyEntry: (id) => call(`/api/history/${encodeURIComponent(id)}`),
 };
 
-/** 同一オリジンでコンパニオンサーバが動いているか（http://localhost:8787 で開いた場合など） */
-export async function detectServedByCompanion() {
+/**
+ * 同一オリジンでコンパニオンサーバが動いているか（http://localhost:8787 や Tailscale の URL で開いた場合など）。
+ * 通信できなければ null（まだ分からない。Tailscale がつながっていない間も、画面はサービスワーカーのキャッシュから開ける）
+ */
+export async function probeCompanionOrigin(st = state) {
+  let res;
   try {
-    const res = await fetch('api/info', { headers: state.settings.ai.token ? { 'X-BH-Token': state.settings.ai.token } : {} });
-    if (!res.ok && res.status !== 401) return false;
-    if (res.status === 401) return true;
+    res = await fetch('api/info', { headers: st.settings.ai.token ? { 'X-BH-Token': st.settings.ai.token } : {} });
+  } catch {
+    return null;
+  }
+  if (res.status === 401) return true;
+  if (!res.ok) return false;
+  try {
     return (await res.json())?.app === 'book-highlights';
   } catch {
     return false;
   }
+}
+
+/**
+ * PC が配信している画面かを確かめ、st.servedByCompanion に入れる。
+ * 届かなかったときは確かめ直せるように残す（起動したときに 1 回だけ確かめると、そのとき PC に届かなかった画面は
+ * 開き直すまで同期しなくなり、スマホで書いたメモが PC に届かない。NIH-57）。
+ * 届いて PC ではないと分かった（GitHub Pages など）とき・PC の URL を設定しているときは問い合わせない。
+ * @returns {Promise<boolean>} 今回はじめて PC だと分かったか
+ */
+export async function detectCompanion(st = state, probe = probeCompanionOrigin) {
+  if (st.settings.ai.mode !== 'companion' || st.settings.ai.companionUrl.trim()) return false;
+  if (st.servedByCompanion || st.companionOriginChecked) return false;
+  const found = await probe(st);
+  if (found === null) return false;
+  st.companionOriginChecked = true;
+  st.servedByCompanion = found;
+  return found;
 }
 
 /** PC と同期: ライブラリは双方向に統合、分析結果は新しい方を採用 */
