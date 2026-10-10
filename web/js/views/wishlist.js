@@ -3,7 +3,7 @@
 import { html } from '../html.js';
 import { download } from '../services.js';
 import { bookSpine, toast } from '../ui.js';
-import { applyImportedMarks, bookmeterUrl, browserStore, cleanupSyncedMarks, collectMarks, filterWishlist, formatPrice, inShelf, KEYS, loadMarks, marksFile, memoryStore, openWishlistFilters, parseMarksFile, priceChange, priceSparkline, priceTotal, readingCounts, readingLookup, saveMarks, shelfCounts, TAG_FILTER_LABELS, TAG_LABELS, tagCounts, toggleMark } from '../../core/wishlist.js';
+import { applyImportedMarks, bookmeterUrl, browserStore, cleanupSyncedMarks, collectMarks, filterWishlist, formatPrice, inShelf, KEYS, loadMarks, marksFile, memoryStore, openWishlistFilters, pageWishlist, parseMarksFile, priceChange, priceSparkline, priceTotal, readingCounts, readingLookup, saveMarks, shelfCounts, TAG_FILTER_LABELS, TAG_LABELS, tagCounts, toggleMark, WISHLIST_PAGE_SIZE } from '../../core/wishlist.js';
 import { listBooks } from '../../core/model.js';
 import { isoDate } from '../../core/text.js';
 import { cachedWishlist, FEED_URL, FEED_WANTED_URL, loadWishlist } from '../wishlist-data.js';
@@ -109,6 +109,7 @@ function mountList(root, body, items, store, lastScraped) {
     <p class="notice err wl-price-error" id="wl-price-error" role="alert" hidden>価格の下限が上限より大きいため、価格の条件は使っていません。</p>
     <div class="row spread wl-count-row"><p class="small muted" id="wl-count" aria-live="polite"></p><button type="button" class="btn small" id="wl-reset" hidden>条件をクリア</button></div>
     <ul class="wl-list" id="wl-list"></ul>
+    <div class="row" style="margin-top:12px"><button type="button" class="btn" id="wl-more" hidden></button></div>
     <p class="empty" id="wl-empty" hidden>条件に一致する本がありません。検索語・種別・タグ・価格の条件を見直してください。</p>
     <div class="card wl-export">
       <p class="small" id="wl-marks-summary"></p>
@@ -120,11 +121,26 @@ function mountList(root, body, items, store, lastScraped) {
 
   const $ = (id) => body.querySelector(`#${id}`);
   const list = $('wl-list');
+  // 一覧は先頭から shown 件だけ描く（絞り込み・並べ替えのたびに 1 ページ目に戻し、タグ・★の付け外しでは今の件数を保つ）
+  let shown = WISHLIST_PAGE_SIZE;
+  let current = []; // いまの条件で絞り込んだ全件（「さらに表示」で続きを足すときに使う）
+  let shelfTotal = 0; // いまの分類（すべて/Kindle/…）の冊数
+
+  // 件数・合計は絞り込んだ全件で出し、描いていない分があれば表示中の件数と「さらに表示」を添える
+  const showPaging = (inCurrentShelf) => {
+    const p = pageWishlist(current, shown);
+    $('wl-count').textContent = `${current.length}件 / 全${inCurrentShelf}件${p.rest ? `（先頭 ${p.visible.length}件を表示中）` : 'を表示'}${totalText(current)}`;
+    $('wl-more').hidden = p.rest === 0;
+    $('wl-more').textContent = `さらに表示（次の ${p.next}件・残り ${p.rest}件）`;
+    return p;
+  };
 
   const renderItems = () => {
     const r = filterWishlist(items, filters);
+    current = r.items;
     // タグの選択肢に、いまの分類（すべて/Kindle/読書メーター/購入済み）で選ぶと残る件数を出す
     const inCurrentShelf = items.filter((item) => inShelf(item, filters.shelf));
+    shelfTotal = inCurrentShelf.length;
     const counts = tagCounts(inCurrentShelf);
     for (const option of $('wl-tag').options) option.textContent = `${TAG_FILTER_LABELS[option.value]}（${counts[option.value]}）`;
     // 「購入済み」タグの付け外しで分類の件数が変わる
@@ -134,12 +150,26 @@ function mountList(root, body, items, store, lastScraped) {
     for (const b of body.querySelectorAll('[data-wl-reading]')) b.textContent = readingLabel(b.dataset.wlReading, readings[b.dataset.wlReading]);
     $('wl-reading').hidden = filters.shelf !== 'purchased';
     $('wl-price-error').hidden = !r.priceRangeInvalid;
-    $('wl-count').textContent = `${r.items.length}件 / 全${inCurrentShelf.length}件を表示${totalText(r.items)}`;
     $('wl-reset').hidden = !((filters.shelf === 'purchased' && filters.reading !== 'all') || filters.q.trim() || filters.ku || filters.min !== '' || filters.max !== '' || filters.tag !== 'all' || filters.kind !== 'all' || filters.sort !== 'default');
     $('wl-empty').hidden = r.items.length !== 0;
-    list.innerHTML = String(html`${r.items.map(itemRow)}`);
+    list.innerHTML = String(html`${showPaging(inCurrentShelf.length).visible.map(itemRow)}`);
     const s = collectMarks(items, store);
     $('wl-marks-summary').textContent = `読んだ ${s.seen}件（★評価 ${s.rated}件）・まだ書き出していない変更 ${s.unexported}件${store.canStore ? '' : '（このブラウザには保存できないため、画面を閉じる前に書き出してください）'}`;
+  };
+
+  // 条件を変えたら 1 ページ目から描き直す
+  const refilter = () => {
+    shown = WISHLIST_PAGE_SIZE;
+    renderItems();
+  };
+
+  // 次のページの行だけを末尾に足す（描いた行は描き直さない）。足した最初の本へフォーカスを移す（キーボード操作で続きから読めるように）
+  const showMore = () => {
+    const from = list.children.length;
+    shown = from + WISHLIST_PAGE_SIZE;
+    const added = showPaging(shelfTotal).visible.slice(from);
+    list.insertAdjacentHTML('beforeend', String(html`${added.map(itemRow)}`));
+    list.children[from]?.querySelector('a, button')?.focus();
   };
 
   const setPressed = (attr, value) => {
@@ -152,18 +182,18 @@ function mountList(root, body, items, store, lastScraped) {
     if (btn.dataset.wlShelf) {
       filters.shelf = btn.dataset.wlShelf;
       setPressed('data-wl-shelf', filters.shelf);
-      return renderItems();
+      return refilter();
     }
     if (btn.dataset.wlReading) {
       filters.reading = btn.dataset.wlReading;
       setPressed('data-wl-reading', filters.reading);
-      return renderItems();
+      return refilter();
     }
     if (btn.dataset.wlKindFilter) {
       filters.kind = btn.dataset.wlKindFilter;
       saveFilter(KEYS.kindFilter, filters.kind === 'all' ? null : filters.kind);
       setPressed('data-wl-kind-filter', filters.kind);
-      return renderItems();
+      return refilter();
     }
     if (btn.id === 'wl-reset') {
       Object.assign(filters, { reading: 'all', q: '', sort: 'default', ku: false, min: '', max: '', tag: 'all', kind: 'all' });
@@ -175,8 +205,9 @@ function mountList(root, body, items, store, lastScraped) {
       $('wl-tag').value = 'all';
       $('wl-ku').checked = false;
       setPressed('data-wl-kind-filter', 'all');
-      return renderItems();
+      return refilter();
     }
+    if (btn.id === 'wl-more') return showMore();
     if (btn.id === 'wl-export') return exportMarks();
     if (btn.id === 'wl-import') return $('wl-import-file').click();
     const li = btn.closest('li[data-asin]');
@@ -197,7 +228,7 @@ function mountList(root, body, items, store, lastScraped) {
     $(id).addEventListener(id === 'wl-ku' || id === 'wl-sort' || id === 'wl-tag' ? 'change' : 'input', (e) => {
       filters[key] = transform(e.target);
       if (key === 'tag') saveFilter(KEYS.tagFilter, filters.tag === 'all' ? null : filters.tag);
-      renderItems();
+      refilter();
     });
   };
   onInput('wl-q', 'q');

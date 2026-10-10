@@ -551,3 +551,35 @@ test('FEED_WANTED_URL: 読みたい本・大きな値下がりだけのフィー
   assert.ok(name, 'report.py に PICKED_FEED_FILE がある');
   assert.equal(FEED_WANTED_URL, FEED_URL.replace(/feed\.xml$/, name));
 });
+
+test('pageWishlist: 絞り込み結果から先頭の表示件数分だけ切り出し、残りの件数と次に足す件数を返す（NIH-23）', async () => {
+  const { pageWishlist, WISHLIST_PAGE_SIZE } = await import('../web/core/wishlist.js');
+  assert.equal(WISHLIST_PAGE_SIZE, 100);
+  const items = Array.from({ length: 773 }, (_, i) => ({ i }));
+  const first = pageWishlist(items, WISHLIST_PAGE_SIZE);
+  assert.equal(first.visible.length, 100);
+  assert.deepEqual(first.visible.map(({ i }) => i).slice(0, 2), [0, 1]);
+  assert.equal(first.rest, 673);
+  assert.equal(first.next, 100);
+  // 最後のページは端数だけ足す
+  const last = pageWishlist(items, 700);
+  assert.equal(last.visible.length, 700);
+  assert.equal(last.rest, 73);
+  assert.equal(last.next, 73);
+  // 件数より多く表示しても、ある分だけ・残り 0
+  const all = pageWishlist(items.slice(0, 30), WISHLIST_PAGE_SIZE);
+  assert.equal(all.visible.length, 30);
+  assert.equal(all.rest, 0);
+  assert.equal(all.next, 0);
+  // 不正な表示件数は 1 ページ分として扱う（0 件にしない）
+  assert.equal(pageWishlist(items, 0).visible.length, 100);
+  assert.equal(pageWishlist(items, Number.NaN).visible.length, 100);
+});
+
+test('価格チェックの画面: 一覧は pageWishlist で切り出した分だけ描き、絞り込みのたびに 1 ページ目に戻す（NIH-23）', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const src = await readFile(new URL('../web/js/views/wishlist.js', import.meta.url), 'utf8');
+  assert.match(src, /pageWishlist\(/);
+  assert.doesNotMatch(src, /r\.items\.map\(itemRow\)/, '絞り込み結果の全件を描かない');
+  assert.match(src, /id="wl-more"/);
+});
