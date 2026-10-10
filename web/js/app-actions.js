@@ -134,6 +134,10 @@ export function appActions({ state, openSheet, toast, persist, saveAnalysis, syn
       render({ keepScroll: true });
       sync();
     },
+    // 削除した点の画面（#/trash）から戻す。通知の「元に戻す」と同じ処理
+    'restore-highlight'(el) {
+      return undoDeleteHighlight(el.dataset.id);
+    },
     async copy(el) {
       const h = pointById(state.library, el.dataset.id);
       if (!h) return;
