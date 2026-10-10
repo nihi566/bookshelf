@@ -1,0 +1,3 @@
+# 撮影ツール（100_claude の scripts/ui-screenshot.sh）で読み込ませないパス。1 行 1 つ（/正規表現/ か URL に含まれる文字列）
+# 配信元以外（PC の bh serve = localhost:8787 など）への通信は、ここに書かなくても既定で止まる
+wishlist-site/   # 利用者の実際の欲しい本のリスト（GitHub Pages で公開しているが、PR の画像には写さない）
