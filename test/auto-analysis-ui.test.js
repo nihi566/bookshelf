@@ -62,9 +62,9 @@ test('G5-4: 知識の画面で「前回から増えた線・大きくなった�
   const a = analysisOf(lib, { incremental: true, changes: { previousAt: '2026-10-03T00:00:00.000Z', addedLines: [{ id: 'l2', name: '注意の線', size: 2 }], grownLines: [{ id: 'l1', name: '仕組みの線', added: 1 }], removedLines: [{ id: 'lx', name: '消えた<線>', size: 3 }], connectedPoints: [{ pointId: e, lineId: 'l1' }] } });
   const out = String(knowledge.render({ state: st(lib, a) }));
   assert.match(out, /<h2>前回からの変化<\/h2>/);
-  assert.match(out, /新しい線 1<\/h3><div class="hl-lines"><a class="line-chip" href="#\/knowledge\/line\/l2">注意の線<\/a>/);
-  assert.match(out, /大きくなった線 1[\s\S]*?仕組みの線 (<span class="nowrap">)?＋1/);
-  assert.match(out, /消えた線 1<\/h3><p class="small muted">消えた&lt;線&gt;<\/p>/);
+  assert.match(out, /新しい線\(グループ\) 1<\/h3><div class="hl-lines"><a class="line-chip" href="#\/knowledge\/line\/l2">注意の線<\/a>/);
+  assert.match(out, /大きくなった線\(グループ\) 1[\s\S]*?仕組みの線 (<span class="nowrap">)?＋1/);
+  assert.match(out, /消えた線\(グループ\) 1<\/h3><p class="small muted">消えた&lt;線&gt;<\/p>/);
   assert.match(out, /新しくつながった点 1[\s\S]*?href="#\/knowledge\/line\/l1">仕組みの線に (<span class="nowrap">)?1 点/);
   assert.match(out, /<h2>分析の履歴<\/h2>[\s\S]*?id="analysis-history"/);
   assert.match(out, /前回の分析のあとに増えた点: <b>44<\/b> 件/);

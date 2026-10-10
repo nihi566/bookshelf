@@ -89,16 +89,16 @@ function changesBlock(a, { links = true } = {}) {
   if (!c) return '';
   const head = html`<div class="section"><h2>前回からの変化</h2><span class="small muted">${isoDate(c.previousAt)} から</span></div>`;
   if (c.rebuilt) return html`${head}<p class="card small">${REBUILT[c.reason] || REBUILT.format}（線 ${a.lines.length} 本・面 ${a.planes.length}）。次からは、変わったところだけを作り直します。</p>`;
-  if (!hasChanges(c)) return html`${head}<p class="card small muted">線の顔ぶれは変わりませんでした。</p>`;
+  if (!hasChanges(c)) return html`${head}<p class="card small muted">線(グループ)の顔ぶれは変わりませんでした。</p>`;
   const lineName = (id, fallback) => a.lines.find((l) => l.id === id)?.name || fallback;
   const chip = (id, label) => (links ? html`<a class="line-chip" href="#/knowledge/line/${id}">${label}</a>` : html`<span class="line-chip">${label}</span>`);
   const connected = new Map();
   for (const p of c.connectedPoints) connected.set(p.lineId, (connected.get(p.lineId) || 0) + 1);
   return html`${head}
     <section class="card stack changes">
-      ${c.addedLines.length ? html`<div><h3 class="small">新しい線 ${c.addedLines.length}</h3><div class="hl-lines">${c.addedLines.map((l) => chip(l.id, lineName(l.id, l.name)))}</div></div>` : ''}
-      ${c.grownLines.length ? html`<div><h3 class="small">大きくなった線 ${c.grownLines.length}</h3><div class="hl-lines">${c.grownLines.map((l) => chip(l.id, html`${lineName(l.id, l.name)} <span class="nowrap">＋${l.added}</span>`))}</div></div>` : ''}
-      ${c.removedLines.length ? html`<div><h3 class="small">消えた線 ${c.removedLines.length}</h3><p class="small muted">${c.removedLines.map((l) => l.name).join('、')}</p></div>` : ''}
+      ${c.addedLines.length ? html`<div><h3 class="small">新しい線(グループ) ${c.addedLines.length}</h3><div class="hl-lines">${c.addedLines.map((l) => chip(l.id, lineName(l.id, l.name)))}</div></div>` : ''}
+      ${c.grownLines.length ? html`<div><h3 class="small">大きくなった線(グループ) ${c.grownLines.length}</h3><div class="hl-lines">${c.grownLines.map((l) => chip(l.id, html`${lineName(l.id, l.name)} <span class="nowrap">＋${l.added}</span>`))}</div></div>` : ''}
+      ${c.removedLines.length ? html`<div><h3 class="small">消えた線(グループ) ${c.removedLines.length}</h3><p class="small muted">${c.removedLines.map((l) => l.name).join('、')}</p></div>` : ''}
       ${c.connectedPoints.length ? html`<div><h3 class="small">新しくつながった点 ${c.connectedPoints.length}</h3><div class="hl-lines">${[...connected].map(([id, n]) => chip(id, html`${lineName(id, '線')}に <span class="nowrap">${n} 点</span>`))}</div></div>` : ''}
     </section>`;
 }
@@ -119,18 +119,18 @@ export const knowledge = {
         ${a ? html`<p class="small muted">前回の分析: ${isoDate(a.createdAt)}・${a.model?.chat}${a.model?.embed ? ' / ' + a.model.embed : ''}・点 ${a.stats.points}${a.stats.calls ? `・AI を呼んだ回数 ${a.stats.calls.chat + a.stats.calls.embed}` : ''}${a.stats.far ? `（ほかに遠い組の判定 ${a.stats.far.calls}）` : ''}</p>
           <p class="small">前回の分析のあとに増えた点: <b>${pending}</b> 件${pending ? '（「分析し直す」で、変わったところだけ作り直します）' : ''}</p>` : ''}
         <div id="auto-status">${autoStatusBlock(state)}</div>
-        ${a ? html`<p class="small"><button type="button" class="btn small" data-action="run-analysis-full" ${job?.running ? 'disabled' : ''}>最初から作り直す</button> <span class="muted">線・面を前回から引き継がず、すべて作り直します（時間がかかります）</span></p>` : ''}
+        ${a ? html`<p class="small"><button type="button" class="btn small" data-action="run-analysis-full" ${job?.running ? 'disabled' : ''}>最初から作り直す</button> <span class="muted">線(グループ)・面を前回から引き継がず、すべて作り直します（時間がかかります）</span></p>` : ''}
         ${a?.model?.embed === 'tfidf' ? html`<p class="notice">${TFIDF_HINT}</p>` : ''}
       </div>
       ${jobPanel(job)}`;
     if (!a) {
       return html`${head}
-        <div class="section"><h2>点・線・面・立体</h2></div>
+        <div class="section"><h2>点・線(グループ)・面・立体</h2></div>
         ${layerNav(state)}
         <div class="section"><h2>分析のしくみ</h2></div>
         <ol class="card help stack" style="padding-left:2em">
           <li><b style="color:var(--layer-point)">点</b> — ハイライトを埋め込みベクトルにします（埋め込みモデルが無ければ文字の特徴で代用）。</li>
-          <li><b style="color:var(--layer-line)">線</b> — 意味の近い点を束ね、LLM が共通する考えを一段抽象化した「概念」にします。本をまたいだつながりが見つかります。</li>
+          <li><b style="color:var(--layer-line)">線(グループ)</b> — 意味の近い点を束ね、LLM が共通する考えを一段抽象化した「概念」にします。本をまたいだつながりが見つかります。</li>
           <li><b style="color:var(--layer-plane)">面</b> — 近い線を束ね、LLM がテーマとしてまとめます。</li>
           <li><b style="color:var(--layer-solid)">立体</b> — 面どうしの関係から、知識の核・行動の原則を組み立てます。</li>
           <li><b>本</b> — 立体と「問い」から次に読む本を選び、書誌データベースで実在を確認します。</li>
@@ -140,7 +140,7 @@ export const knowledge = {
     }
     const recs = a.recommendations || [];
     return html`${head}
-      <div class="section"><h2>点・線・面・立体</h2><span class="small muted">押すとそれぞれのページへ</span></div>
+      <div class="section"><h2>点・線(グループ)・面・立体</h2><span class="small muted">押すとそれぞれのページへ</span></div>
       ${layerNav(state)}
       <a class="solid-link" href="#/solid"><span class="layer-label solid">立体 ・ 知識の核</span><b>${a.solid.title}</b></a>
 
@@ -162,7 +162,7 @@ export const knowledge = {
       ${wantList(state.library)}
 
       ${a.isolated?.length ? html`<div class="section"><h2>まだつながっていない点</h2><span class="small muted">${a.isolated.length}</span></div>
-        <p class="help">どの線にも入らなかった点です。読書を重ねると、いつか線になるかもしれません。</p>
+        <p class="help">どの線(グループ)にも入らなかった点です。読書を重ねると、いつか線になるかもしれません。</p>
         <a class="btn small" href="#/knowledge/isolated">見る</a>` : ''}
 
       ${pcConfigured(state) ? html`<div class="section"><h2>分析の履歴</h2><span class="small muted">PC に直近 12 回分</span></div><div id="analysis-history"><p class="small muted">PC に問い合わせています…</p></div>` : ''}`;
@@ -199,8 +199,8 @@ export const knowledge = {
 function changeSummary(c) {
   if (!c) return '最初の分析';
   if (c.rebuilt) return '最初から作り直した';
-  const parts = [c.addedLines ? `新しい線 ${c.addedLines}` : '', c.grownLines ? `大きくなった線 ${c.grownLines}` : '', c.removedLines ? `消えた線 ${c.removedLines}` : '', c.connectedPoints ? `つながった点 ${c.connectedPoints}` : ''].filter(Boolean);
-  return parts.join('・') || '線の顔ぶれは変わらず';
+  const parts = [c.addedLines ? `新しい線(グループ) ${c.addedLines}` : '', c.grownLines ? `大きくなった線(グループ) ${c.grownLines}` : '', c.removedLines ? `消えた線(グループ) ${c.removedLines}` : '', c.connectedPoints ? `つながった点 ${c.connectedPoints}` : ''].filter(Boolean);
+  return parts.join('・') || '線(グループ)の顔ぶれは変わらず';
 }
 
 /** PC（コンパニオン）を使う設定で、PC の場所が分かっているか（GitHub Pages で開いただけなら localhost に問い合わせない） */
@@ -254,7 +254,7 @@ export const historyView = {
             <p class="core">${a.solid?.core || ''}</p>
             ${a.solid?.principles?.length ? html`<div><h3 class="small">行動の原則</h3><ul class="plain">${a.solid.principles.map((p) => html`<li>${p}</li>`)}</ul></div>` : ''}
           </section>
-          <div class="section"><h2>面と線</h2></div>
+          <div class="section"><h2>面と線(グループ)</h2></div>
           ${a.planes.map((p) => html`<section class="card plane-card"><div class="layer-label plane">面</div><h3>${p.name}</h3><p class="small">${p.summary}</p>
             <ul class="plain small">${p.lineIds.map((id) => a.lines.find((l) => l.id === id)).filter(Boolean).map((l) => html`<li><b>${l.name}</b> <span class="muted">点 ${l.highlightIds.length}</span></li>`)}</ul></section>`)}`);
       },
@@ -300,7 +300,7 @@ export const lineView = {
   render({ state, params }) {
     const a = state.analysis;
     const l = a?.lines.find((x) => x.id === params.id);
-    if (!l) return html`<p class="empty">線が見つかりません（分析し直して無くなった可能性があります）。<a href="#/lines">線の一覧へ</a></p>`;
+    if (!l) return html`<p class="empty">線(グループ)が見つかりません（分析し直して無くなった可能性があります）。<a href="#/lines">線(グループ)の一覧へ</a></p>`;
     const plane = a.planes.find((p) => p.lineIds.includes(l.id));
     // 線の点（本に引いた線と思いつき）
     const hs = l.highlightIds.map((id) => analysisPointById(state.library, id)).filter(Boolean);
@@ -310,8 +310,8 @@ export const lineView = {
     const books = new Set(hs.filter((h) => !isThought(h)).map((h) => h.bookId));
     const thoughts = hs.filter(isThought).length;
     const siblings = plane ? plane.lineIds.filter((id) => id !== l.id).map((id) => a.lines.find((x) => x.id === id)).filter(Boolean) : [];
-    return html`<a class="back" href="${plane ? `#/knowledge/plane/${plane.id}` : '#/lines'}">‹ ${plane ? plane.name : '線'}</a>
-      <div class="layer-label line">線 ・ ${books.size} 冊の本${thoughts ? `と思いつき ${thoughts} 件` : ''}をつなぐ</div>
+    return html`<a class="back" href="${plane ? `#/knowledge/plane/${plane.id}` : '#/lines'}">‹ ${plane ? plane.name : '線(グループ)'}</a>
+      <div class="layer-label line">線(グループ) ・ ${books.size} 冊の本${thoughts ? `と思いつき ${thoughts} 件` : ''}をつなぐ</div>
       <h1 style="margin:4px 0 12px">${l.name}</h1>
       <section class="card stack">
         <p style="font-family:var(--serif);line-height:1.9">${l.summary}</p>
@@ -323,11 +323,11 @@ export const lineView = {
       <div class="section"><h2>つながっている点</h2><span class="small muted">${hs.length}</span></div>
       ${hs.map((h) => pointCard(h, { library: state.library, lines: (idx.get(h.id) || []).filter((x) => x.id !== l.id) }))}
       ${related.length
-        ? html`<div class="section"><h2>関わる点（ほかの線から）</h2><span class="small muted">${related.length}</span></div>
-          <p class="help">ほかの線に入っている点のうち、この線の点と同じくらい、この線の中心に近い点です。</p>
+        ? html`<div class="section"><h2>関わる点（ほかの線(グループ)から）</h2><span class="small muted">${related.length}</span></div>
+          <p class="help">ほかの線(グループ)に入っている点のうち、この線の点と同じくらい、この線の中心に近い点です。</p>
           ${related.map((h) => pointCard(h, { library: state.library, lines: idx.get(h.id) || [] }))}`
         : ''}
-      ${siblings.length ? html`<div class="section"><h2>同じ面の線</h2></div><div class="lines-of-plane">${siblings.map((s) => html`<a class="line-row" href="#/knowledge/line/${s.id}"><b>${s.name}</b><span>${s.summary}</span></a>`)}</div>` : ''}`;
+      ${siblings.length ? html`<div class="section"><h2>同じ面の線(グループ)</h2></div><div class="lines-of-plane">${siblings.map((s) => html`<a class="line-row" href="#/knowledge/line/${s.id}"><b>${s.name}</b><span>${s.summary}</span></a>`)}</div>` : ''}`;
   },
 };
 
@@ -345,7 +345,7 @@ export const planeView = {
       <section class="card stack"><p style="font-family:var(--serif);line-height:1.9">${p.summary}</p>
         <div class="row"><a class="btn small" href="#/outline/new?plane=${p.id}">文章の骨組みを作る</a><span class="small muted">この面から、人に読ませる文章の見出し・要点・引用を作ります</span></div>
       </section>
-      <div class="section"><h2>線</h2><span class="small muted">${lines.length}</span></div>
+      <div class="section"><h2>線(グループ)</h2><span class="small muted">${lines.length}</span></div>
       <div class="lines-of-plane">${lines.map((l) => html`<a class="line-row" href="#/knowledge/line/${l.id}"><b>${l.name}</b><span>${l.summary}</span><em>点 ${l.highlightIds.length}</em></a>`)}</div>
       ${citingNotesBlock(state.library, new Set(lines.flatMap((l) => l.highlightIds)), 'この面の点を根拠にしている永久ノート')}
       ${rels.length ? html`<div class="section"><h2>他の面との関係</h2></div><ul class="card plain">${rels.map((r) => {

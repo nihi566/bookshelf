@@ -193,7 +193,7 @@ test('G7-2: ホームの上の方に、未読の発見が新しい順に最大 3
   const block = out.match(/<section class="discoveries"[\s\S]*?<\/section>/)[0];
   assert.deepEqual([...block.matchAll(/href="#\/discovery\/(d\d)"/g)].map((m) => m[1]), ['d0', 'd2', 'd3'], '新しい順に未読の 3 件');
   assert.match(block, /ほか 1 件の未読を見る/);
-  assert.match(block, /線「仕組み&lt;線&gt;」/, 'エスケープする');
+  assert.match(block, /線\(グループ\)「仕組み&lt;線&gt;」/, 'エスケープする');
   assert.ok(out.indexOf('class="discoveries"') < out.indexOf('今日の点'), 'ホームの上の方（今日の点より前）');
   assert.ok(block.includes(a.text.slice(0, 10)) && block.includes(b.text.slice(0, 10)), 'どの点とどの点か');
   // すべて読めば出さない
@@ -219,7 +219,7 @@ test('G7-2: 発見を開くと「どの点とどの点が、なぜつながっ�
   const { state, a, b } = stateWith((a, b) => [{ id: 'd0', kind: 'cross', lineId: 'l1', lineName: '仕組みの線', reason: '理由', pointIds: [a.id, b.id], foundAt: T }]);
   const out = String(discoveryView.render({ state, params: { id: 'd0' } }));
   assert.match(out, /<h1>本をまたいだつながり<\/h1>/);
-  assert.match(out, /同じ線「<a href="#\/knowledge\/line\/l1">仕組みの線<\/a>」に入りました。仕組みが行動をつくる/);
+  assert.match(out, /同じ線\(グループ\)「<a href="#\/knowledge\/line\/l1">仕組みの線<\/a>」に入りました。仕組みが行動をつくる/);
   assert.equal((out.match(/<article class="hl"/g) || []).length, 2, '両側の点');
   assert.ok(out.includes(a.text) && out.includes(b.text));
   const opened = [];
@@ -238,7 +238,7 @@ test('G7-3: 今日の点に、その点とつながる別の本の点を 1 件�
   assert.equal(m.point.id, b.id, '同じ線の、別の本の点');
   assert.notEqual(m.point.bookId, a.bookId);
   const out = String(partnerBlock(state, a));
-  assert.match(out, /つながる別の本の点 ・ <a href="#\/knowledge\/line\/l1">線「仕組みの線」<\/a>/);
+  assert.match(out, /つながる別の本の点 ・ <a href="#\/knowledge\/line\/l1">線\(グループ\)「仕組みの線」<\/a>/);
   const lone = Object.values(state.library.highlights).find((h) => !state.analysis.lines[0].highlightIds.includes(h.id));
   assert.equal(String(partnerBlock(state, lone)), '', '線に入っていない点には添えない');
   // ホームの今日の点に出る

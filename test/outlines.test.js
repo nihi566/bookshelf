@@ -480,7 +480,7 @@ test('G9-1・G9-3: 骨組みの操作: 選んだ材料で作って保存し、�
   assert.match(log.toasts.at(-1), /Markdown をコピーしました/);
   // 消す（確かめてから）
   await actions['outline-delete']({ dataset: { id: o.id } });
-  assert.match(log.asked[0], /材料の面・線・ノート・点は消えません/);
+  assert.match(log.asked[0], /材料の面・線\(グループ\)・ノート・点は消えません/);
   assert.equal(outlinesOf(lib)[o.id].deleted, true);
   assert.deepEqual(log.went.at(-1), '#/outlines');
   // 消したものには何もしない・読み込み前は作らない
@@ -566,7 +566,7 @@ test('G9-1〜G9-3: 画面: 骨組みの画面は見出し・要点・引用（�
   const noPc = String(outlineNewView.render({ state: { ...state, settings: { ai: { mode: 'direct', companionUrl: '' } } }, query: new URLSearchParams() }));
   assert.match(noPc, /PC（bh serve）とつながっているとき/);
   assert.match(noPc, /id="outline-submit" disabled>/);
-  assert.match(String(outlineNewView.render({ state: { ...state, analysis: null }, query: new URLSearchParams() })), /面と線は、分析すると選べます/);
+  assert.match(String(outlineNewView.render({ state: { ...state, analysis: null }, query: new URLSearchParams() })), /面と線\(グループ\)は、分析すると選べます/);
   assert.match(String(outlineNewView.render({ state: { ...state, outlineDraft: { status: 'pending' } }, query: new URLSearchParams() })), /PC の AI が骨組みを作っています[\s\S]*id="outline-submit" disabled>|id="outline-submit" disabled>[\s\S]*PC の AI が骨組みを作っています/);
   // 一覧・知識の画面の欄・入口
   assert.match(String(outlinesView.render({ state })), /href="#\/outline\/oui1"[\s\S]*題&lt;script&gt;[\s\S]*節 1 ・ 面「面A」・永久ノート「自分の考え&lt;b&gt;」/);

@@ -34,7 +34,7 @@ export function notesSummaryBlock(state) {
   return html`<div class="section"><h2>永久ノート</h2>${notes.length ? html`<a class="small" href="#/notes">すべて見る（${notes.length}）</a>` : html`<a class="small" href="#/notes">ノートの一覧へ</a>`}</div>
     ${notes.length
       ? html`<ul class="note-list">${notes.slice(0, ON_KNOWLEDGE).map((n) => noteRow(state.library, n))}</ul>`
-      : html`<p class="card small muted">自分の言葉で「1 ノート = 1 アイデア」を書いて残す場所です。線を開いて「この線を永久ノートにする」と、AI の線を下書きにできます。分析し直しても変わりません。</p>`}`;
+      : html`<p class="card small muted">自分の言葉で「1 ノート = 1 アイデア」を書いて残す場所です。線(グループ)を開いて「この線を永久ノートにする」と、AI の線を下書きにできます。分析し直しても変わりません。</p>`}`;
 }
 
 /**
@@ -80,7 +80,7 @@ export const notesView = {
       <p class="small muted" style="margin-top:8px">${list.length} 件</p>
       ${list.length
         ? html`<ul class="note-list">${list.map((n) => noteRow(state.library, n))}</ul>`
-        : html`<p class="empty">${q ? '見つかりませんでした' : 'まだ永久ノートはありません。知識の画面で線を開いて「この線を永久ノートにする」か、受け箱のメモの「永久ノートにする」、上の「＋ ノート」から作れます。'}</p>`}`;
+        : html`<p class="empty">${q ? '見つかりませんでした' : 'まだ永久ノートはありません。知識の画面で線(グループ)を開いて「この線を永久ノートにする」か、受け箱のメモの「永久ノートにする」、上の「＋ ノート」から作れます。'}</p>`}`;
   },
 };
 
@@ -88,7 +88,7 @@ export const notesView = {
 function fromLabel(state, n) {
   if (n.from?.kind === 'line') {
     const line = (state.analysis?.lines || []).find((l) => l.id === n.from.id);
-    return line ? html`<a href="#/knowledge/line/${line.id}">線「${line.name}」</a>から作成` : html`線「${n.from.name || ''}」から作成`;
+    return line ? html`<a href="#/knowledge/line/${line.id}">線(グループ)「${line.name}」</a>から作成` : html`線(グループ)「${n.from.name || ''}」から作成`;
   }
   if (n.from?.kind === 'thought') return '受け箱のメモから作成';
   return '';

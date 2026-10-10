@@ -110,7 +110,7 @@ test('線の画面: 思いつきの点も並び、「N 冊の本と思いつき 
   const [h] = Object.values(lib.highlights);
   const analysis = { lines: [{ id: 'l1', name: '線の名前', summary: '要約', insight: '', keywords: [], highlightIds: [h.id, t.id], bookIds: [h.bookId] }], planes: [], solid: { relations: [] } };
   const out = String(lineView.render({ state: state(lib, analysis), params: { id: 'l1' } }));
-  assert.match(out, /線 ・ 1 冊の本と思いつき 1 件をつなぐ/);
+  assert.match(out, /線\(グループ\) ・ 1 冊の本と思いつき 1 件をつなぐ/);
   assert.match(out, /<article class="hl thought" data-hl="t[^"]+">\s*<p class="hl-text">線に入った思いつき<\/p>/);
 });
 

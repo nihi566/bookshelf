@@ -17,7 +17,7 @@ export function layerNav(state, current = '') {
     html`<a class="stat ${key}" href="${href}" ${key === current ? html`aria-current="page"` : ''}><b>${count}</b><span>${label}</span></a>`;
   return html`<nav class="stats layer-nav" aria-label="点・線・面・立体">
     ${item('point', '#/search', libraryStats(state.library).points, '全ての点')}
-    ${item('line', '#/lines', a ? a.lines.length : '–', '線')}
+    ${item('line', '#/lines', a ? a.lines.length : '–', '線(グループ)')}
     ${item('plane', '#/planes', a ? a.planes.length : '–', '面')}
     ${item('solid', '#/solid', a ? 1 : '–', '立体')}
   </nav>`;
@@ -26,12 +26,12 @@ export function layerNav(state, current = '') {
 export const linesView = {
   render({ state }) {
     const a = state.analysis;
-    if (!a) return html`<a class="back" href="#/knowledge">‹ 知識</a>${notYet('線')}`;
+    if (!a) return html`<a class="back" href="#/knowledge">‹ 知識</a>${notYet('線(グループ)')}`;
     const planeOf = new Map(a.planes.flatMap((p) => p.lineIds.map((id) => [id, p])));
     const lines = [...a.lines].sort((x, y) => y.highlightIds.length - x.highlightIds.length);
     return html`<a class="back" href="#/knowledge">‹ 知識</a>
       ${layerNav(state, 'line')}
-      <div class="page-head"><div><h1>線</h1><div class="sub">点をつなぐ概念 ${lines.length} 本（点の多い順）</div></div></div>
+      <div class="page-head"><div><h1>線(グループ)</h1><div class="sub">点をつなぐ概念 ${lines.length} 本（点の多い順）</div></div></div>
       <div class="lines-of-plane">${lines.map((l) => {
         const p = planeOf.get(l.id);
         return html`<a class="line-row" href="#/knowledge/line/${l.id}"><b>${l.name}</b><span>${l.summary}</span><em>点 ${l.highlightIds.length}${p ? ` ・ ${p.name}` : ''}</em></a>`;
@@ -45,7 +45,7 @@ export const planesView = {
     if (!a) return html`<a class="back" href="#/knowledge">‹ 知識</a>${notYet('面')}`;
     return html`<a class="back" href="#/knowledge">‹ 知識</a>
       ${layerNav(state, 'plane')}
-      <div class="page-head"><div><h1>面</h1><div class="sub">線を束ねたテーマ ${a.planes.length}（押すと全文と線が見られます）</div></div></div>
+      <div class="page-head"><div><h1>面</h1><div class="sub">線(グループ)を束ねたテーマ ${a.planes.length}（押すと全文と線が見られます）</div></div></div>
       <div class="plane-list">${a.planes.map((p) => html`<a class="plane-row" href="#/knowledge/plane/${p.id}">
         <b>${p.name}</b>
         <span>${truncate(p.summary, PLANE_SUMMARY_MAX)}</span>
@@ -67,7 +67,7 @@ export const solidView = {
         <p class="core">${a.solid.core}</p>
         ${a.solid.principles?.length ? html`<div><h3 class="small">行動の原則</h3><ul class="plain">${a.solid.principles.map((p) => html`<li>${p}</li>`)}</ul></div>` : ''}
       </section>
-      <div class="section"><h2>知識マップ</h2><span class="small muted">面と線をタップ</span></div>
+      <div class="section"><h2>知識マップ</h2><span class="small muted">面と線(グループ)をタップ</span></div>
       ${mapSvg(a)}`;
   },
 };
