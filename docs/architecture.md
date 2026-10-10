@@ -29,7 +29,8 @@ Library = { version, books: { [id]: Book }, highlights: { [id]: Highlight }, fee
 Book      = { id: 'b'+hash(書名の正規化), title, author, sources: ['kindle'|'playbooks'|'paper'|'memo'], asin?, volumeId?, cover?（アップロードした表紙の data URL）, technical?（技術書か。無ければ書名から推定）, updatedAt, deleted? }
 Highlight = { id: 'h'+hash(bookId+本文の正規化), bookId, source, kind: 'highlight'|'note',
               text, note, chapter, location, locationEnd, page, color, createdAt,
-              favorite, tags, userNote, importedAt, updatedAt, deleted?, supersededBy? }
+              favorite, tags, userNote, importedAt, updatedAt, deleted?, supersededBy?,
+              originalText?, textEditedAt? }        // 文を直した点だけ: 取り込んだときの文と、直した時刻
 Thought   = { id: 't'+時刻+乱数, text, status: 'inbox'|'done'|'discarded', answerTo?: { kind, id?, question },
               createdAt, updatedAt }                    // 消したものは { id, deleted: true, createdAt, updatedAt } だけ残す
 FarReaction = { id: 'f'+hash(2 点の ID), a, b, idea, explanation, status: 'interesting'|'wrong'|'', updatedAt }  // 遠いつながりへの反応
@@ -63,6 +64,10 @@ Outline   = { id: 'o'+時刻+乱数, title, sources: [{ kind: 'plane'|'line'|'no
 - 取り込み（`mergeParsed`）は空欄を補うだけで、ユーザーの編集（★・メモ・タグ・削除）は変えない
 - Kindle で伸ばしたハイライト（本文が包含関係・位置が重なる）は新しい方に置き換え、編集を引き継ぐ
 - 削除は墓標（`deleted: true`）で持つので、再取り込みでも同期でも復活しない
+- **点の文を直す**（`updateHighlight` の `text`）: ID は変えない（リンク・永久ノートの根拠・分析の結果が切れないように）。取り込んだときの文を `originalText` に 1 回だけ残し、直した時刻を `textEditedAt` に持つ。空の文は受け付けない
+  - 再取り込みの重複・読書メモの重複・伸ばしたハイライトの判定は取り込んだときの文で行う。伸ばしたハイライトに置き換わるときは直した文を引き継ぎ、伸ばした文を `originalText` にする
+  - 同期では、★・タグとは別に `textEditedAt` が新しい方の文を採る（別の端末でタグを後から直しても、文の編集が負けない）。外から来た直した文・取り込んだときの文・直した時刻が文字列でなければ採らない。別の端末で伸ばしたハイライトに置き換わった点の直した文は、置き換え先に引き継ぐ
+  - 分析は文のハッシュで埋め込み・線をキャッシュしているので、直した点は次の分析で埋め込み直し、その点を含む線を作り直す
 - 端末間の同期（`mergeLibraries`）は **欄ごと** に統合し、どちら向きに統合しても同じ結果になる
   - 取り込みで決まる欄（章・色・位置・メモなど）は `updatedAt` が新しい方を採り、空欄はもう一方で埋める
   - 利用者の欄（★・タグ・自分のメモ・削除。本では削除・表紙・技術書）は、利用者が編集した時刻 `userUpdatedAt` が新しい方をまとめて採る。取り込みで欄が埋まっても `userUpdatedAt` は変わらないので、未同期のスマホの編集が PC 側に上書きされない（古い版のデータは、編集の跡があれば `updatedAt` で代用）
@@ -107,7 +112,7 @@ Analysis = { version: 2, createdAt, model: { chat, embed }, incremental,
   - 線・面・立体の `sig`（指紋）が前回と同じなら AI を呼ばずに前回の結果を使う。線の指紋 = 点の顔ぶれと文・AI に見せた点・モデル・プロンプトの版。面の指紋 = 線の顔ぶれ（線の名前が少し変わっただけでは作り直さない）。立体の指紋 = 面の ID と名前。立体が同じならおすすめも前回のものを使う
   - 点を 1 件足した再分析で AI を呼ぶのは多くて 5 回（点の埋め込み・線・線の説明文の埋め込み・面・立体）。`stats.calls` に回数を残す
   - 前回と分析の版（`version`）か埋め込みの方法が違うとき・`full` を指定したときは最初から作り直す（`changes.rebuilt`）
-- **自動の分析**（`bh serve`。判断は `web/core/auto-analysis.js`）: 1 分ごとに確かめ、前回の分析のあとに点（思いつきを含む）が 10 件以上増えたか、24 時間以上たって 1 件以上増えたら、増分の分析を始める。手動の分析中・取り込みの最中（`/api/import` を受けている間・Google ドライブの確認中）は始めない。失敗しても `analysis.json` は書き換えず、`state.json` の `autoAnalysis` に理由と時刻を残し、30 分あけて試し直す。`bh config auto on|off` / `auto-points` / `auto-hours` で変えられる
+- **自動の分析**（`bh serve`。判断は `web/core/auto-analysis.js`）: 1 分ごとに確かめ、前回の分析のあとに点（思いつきを含む）が 10 件以上増えたか、24 時間以上たって 1 件以上増えたら、増分の分析を始める。手動の分析中・取り込みの最中（`/api/import` を受けている間・Google ドライブの確認中）は始めない。失敗しても `analysis.json` は書き換えず、`state.json` の `autoAnalysis` に理由と時刻・続けて失敗した回数（`failureCount`。成功で 0、中止は数えない）を残し、30 分あけて試し直す。最後の失敗が最後の成功より新しいあいだは、ホームの先頭の警告欄（自動取り込みの警告と同じ欄）にも出す。`bh config auto on|off` / `auto-points` / `auto-hours` で変えられる
 - **発見**（`web/core/analysis/discoveries.js`）: 前回を引き継いだ分析のたびに、前回との差から作る。cross = 既にある線に増えた点と、その線の別の本の点でいちばん近いもの / line = 新しい線（別の本の 2 点）/ isolated = 前回「まだつながらない点」だった点が線に入った。思いつきは 1 つずつ別の出どころとして数える。1 回の分析で最大 20 件、残すのは新しい順に 60 件（点が消えた発見は外す）。最初の分析・作り直しでは作らない（すべてが新しくなるため）。既読は `library.discoveryReads = { [ID]: 読んだ時刻 }` に持ち、同期ではどちらかで読んでいれば既読（時刻は早い方）
 - **遠いつながり**（`web/core/analysis/far.js`）: 立体のあと、分析のたびに作る
   - 代表の点 = 線ごとに中心にいちばん近い点 + まだつながらない点。別の本（思いつきは 1 つずつ別）・別の面（まだつながらない点はどの面とも別）の組だけを候補にし、組の近さ（内積）のうち下から 15%〜45% の帯から選ぶ（近すぎる組は線で足り、遠すぎる組はこじつけになる）
@@ -166,7 +171,7 @@ Analysis = { version: 2, createdAt, model: { chat, embed }, incremental,
 
 ## 知識マップ・PC の状態
 
-- 知識マップは立体のページ（`#/solid`）で、同梱の Cytoscape.js（`web/vendor/cytoscape.esm.min.js`、3.34.3）で描く。核は置かず、面を塊の中心にして面 → 線 → 点の 3 段で置き（Obsidian のグラフビューのような見え方）、塊の間に遠いつながり（「ちがう」は除く）・自分のリンク（両端が図にある点どうしだけ）・関わる点を引く。まだつながらない点は、いちばん外の輪に散らす（橋が無ければ辺を持たない）。点が 2,000 近くになるので、座標は力学的な並べ方を使わず `mapPositions` で計算する（線のまわりに点、面のまわりに線を詰め、塊どうしを重ならないように並べる。毎回同じ形・1,800 点で数十 ms）。面の名前と橋の太さは、縮めても読める・見える大きさに倍率に合わせて変える。面・線・点を押すと、その画面へ移る。図に置く要素・見た目・座標は `web/core/knowledge-map.js`、描画と操作は `web/js/knowledge-map-view.js`（このページを開いたときだけ読み込む）。更新するときは npm の `cytoscape` パッケージの `dist/cytoscape.esm.min.mjs` を `.js` に名前を変えて置き換え、`web/sw.js` の `CACHE` を上げる
+- 知識マップは立体のページ（`#/solid`）で、同梱の Cytoscape.js（`web/vendor/cytoscape.esm.min.js`、3.34.3）で描く。核は置かず、面を塊の中心にして面 → 線 → 点の 3 段で置き（Obsidian のグラフビューのような見え方）、塊の間に遠いつながり（「ちがう」は除く）・自分のリンク（両端が図にある点どうしだけ）・関わる点を引く。まだつながらない点は、いちばん外の輪に散らす（橋が無ければ辺を持たない）。点が 2,000 近くになるので、座標は力学的な並べ方を使わず `mapPositions` で計算する（線のまわりに点、面のまわりに線を詰め、塊どうしを重ならないように並べる。毎回同じ形・1,800 点で数十 ms）。面の名前と橋の太さは、縮めても読める・見える大きさに倍率に合わせて変える。★を付けた線は名前の前に ★ と枠を付ける。面・線・点を押すと、その画面へ移る。図に置く要素・見た目・座標は `web/core/knowledge-map.js`、描画と操作は `web/js/knowledge-map-view.js`（このページを開いたときだけ読み込む）。更新するときは npm の `cytoscape` パッケージの `dist/cytoscape.esm.min.mjs` を `.js` に名前を変えて置き換え、`web/sw.js` の `CACHE` を上げる
 - ブラウザ拡張は確認のたびに結果（成否・ログイン切れ・新しい線の件数・確認の間隔・エラー文）だけを `POST /api/kindle-status` に送り、コンパニオンサーバが `state.json` の `kindleSync` に残す（`/api/info` で Web アプリの取り込み画面に見せる）。トークン・URL・本の一覧は送らない
 
 ## パーサ（`web/core/parsers/`）

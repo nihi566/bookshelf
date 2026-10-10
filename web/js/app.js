@@ -2,8 +2,8 @@
 import { html } from './html.js';
 import { kv, requestPersistence } from './db.js';
 import { loadCache, loadState, save, saveCache, state } from './state.js';
-import { buildBookmarklet, companion, detectServedByCompanion, download, syncWithPc } from './services.js';
-import { kindleAlertBlock, openSheet, toast } from './ui.js';
+import { buildBookmarklet, companion, detectCompanion, download, syncWithPc } from './services.js';
+import { homeAlertBlock, openSheet, toast } from './ui.js';
 import { book, books, home, search } from './views/library.js';
 import { autoStatusBlock, historyView, isolatedView, knowledge, lineView, planeView } from './views/knowledge.js';
 import { linesView, planesView, solidView } from './views/layers.js';
@@ -421,7 +421,7 @@ const PC_INFO_PATHS = ['/settings', '/import', '/', '/knowledge'];
 // 描き直さず、欄だけ差し替える画面（描き直すと取り込み結果の表示・開いた説明・今日の点の「別の点」が消える）
 const PC_INFO_BOXES = {
   '/import': [['#kindle-sync', kindleSyncBlock], ['#playbooks-sync', playbooksSyncBlock]],
-  '/': [['#kindle-alert', kindleAlertBlock]],
+  '/': [['#home-alert', homeAlertBlock]],
   '/knowledge': [['#auto-status', autoStatusBlock]],
 };
 
@@ -465,17 +465,27 @@ const canAutoSync = () => state.settings.ai.mode === 'companion' && state.settin
 let pulling = false;
 
 async function pullIfNewer() {
-  if (pulling || document.visibilityState !== 'visible' || !canAutoSync()) return;
+  if (pulling || document.visibilityState !== 'visible') return;
   pulling = true;
+  // 入力中の画面を描き直すと書きかけ・キーボードが消えるので、そのときは同期だけして描き直しは次の画面遷移に任せる
+  const typing = () => document.activeElement?.matches?.('#view input:not([type="checkbox"]):not([type="radio"]), #view textarea, #view select, #view [contenteditable]');
   try {
+    // 起動したときに PC に届かなかった画面（Tailscale がまだつながっていなかった等）は、ここで PC を探し直す。
+    // 見つけたらその場で同期する（その間に端末へ書いたメモを PC へ送る）
+    if (await detectCompanion()) {
+      if (canAutoSync()) {
+        if (typing()) await syncWithPc();
+        else await sync({ quiet: true });
+      } else if (!typing() && !hasDraft()) render({ keepScroll: true });
+      return;
+    }
+    if (!canAutoSync()) return;
     const info = await companion.info();
     // 同期すると両者の更新日時がそろうので、「違う」だけで判定する（端末の時計のずれに左右されない）
     const stamp = (a) => [a?.createdAt || '', a?.recommendedAt || ''].sort().pop();
     const differs = (info.updatedAt || '') !== (state.library.updatedAt || '') || (info.analysis ? stamp(info.analysis) : '') > stamp(state.analysis);
     if (!differs) return;
-    // 入力中の画面を描き直すと書きかけが消えるので、そのときは同期だけして描き直しは次の画面遷移に任せる
-    const typing = document.activeElement?.matches?.('#view input:not([type="checkbox"]):not([type="radio"]), #view textarea, #view select, #view [contenteditable]');
-    if (typing) await syncWithPc();
+    if (typing()) await syncWithPc();
     else await sync({ quiet: true });
   } catch {
     // PC が止まっているときは黙って次の機会を待つ
@@ -650,8 +660,9 @@ const actions = {
   edit(el) {
     const h = state.library.highlights[el.dataset.id];
     openSheet(
-      html`<h2>メモ・タグ</h2>
-        <p class="quote">${h.text}</p>
+      html`<h2>点を編集</h2>
+        <label class="field"><span>線を引いた文</span><textarea name="text" rows="4">${h.text}</textarea></label>
+        ${h.originalText && h.originalText !== h.text ? html`<p class="help">取り込んだときの文: ${h.originalText}</p>` : ''}
         <label class="field"><span>自分のメモ</span><textarea name="userNote">${h.userNote || ''}</textarea></label>
         <label class="field"><span>タグ（空白かカンマ区切り）</span><input type="text" name="tags" value="${(h.tags || []).join(' ')}" placeholder="例: 習慣 仕事"></label>
         <p class="help">自分のメモ・タグ・★は、AI が点をつなぐときに「読者自身の言葉」として使います（次の分析から）。</p>
@@ -661,7 +672,8 @@ const actions = {
           updateHighlight(state.library, h.id, { deleted: true });
           toast('削除しました');
         } else {
-          updateHighlight(state.library, h.id, { userNote: String(data.get('userNote') || '').trim(), tags: String(data.get('tags') || '').split(/[\s,、]+/) });
+          // 文が空なら例外のままシートに出す（書いた内容はシートに残る）
+          updateHighlight(state.library, h.id, { text: String(data.get('text') || ''), userNote: String(data.get('userNote') || '').trim(), tags: String(data.get('tags') || '').split(/[\s,、]+/) });
         }
         await persistLibrary();
         render({ keepScroll: true });
@@ -949,7 +961,7 @@ document.addEventListener('visibilitychange', () => {
 
 async function start() {
   await loadState();
-  state.servedByCompanion = await detectServedByCompanion();
+  await detectCompanion();
   render();
   listenBookmarklet();
   requestPersistence();
@@ -957,6 +969,7 @@ async function start() {
   if (canAutoSync()) sync({ quiet: true });
   setInterval(pullIfNewer, PULL_INTERVAL_MS);
   document.addEventListener('visibilitychange', pullIfNewer);
+  window.addEventListener('online', pullIfNewer);
 }
 
 start().catch((e) => {

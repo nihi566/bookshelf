@@ -11,10 +11,11 @@ const pointNode = (id) => `pt:${id}`;
 
 /**
  * 図に置く要素（ノード）と辺。library を渡すと、自分のリンクと遠いつながりへの反応（「ちがう」は出さない）を使う
- * ノード: { id, kind: 'plane'|'line'|'point', label, ref, weight, isolated? }
+ * isStarred(線の ID) が true の線は starred を立て、名前の前に ★ を付ける（線の一覧と同じ印）
+ * ノード: { id, kind: 'plane'|'line'|'point', label, ref, weight, starred?（線だけ）, isolated? }
  * 辺: kind = plane（面 → 線）/ member（線 → 点）/ related（関わる点）/ far（遠いつながり）/ link（自分のリンク）/ relation（面どうしの関係）
  */
-export function mapElements(analysis, { library = null } = {}) {
+export function mapElements(analysis, { library = null, isStarred = () => false } = {}) {
   const planes = analysis?.planes || [];
   const lines = analysis?.lines || [];
   const lineById = new Map(lines.map((l) => [l.id, l]));
@@ -40,7 +41,8 @@ export function mapElements(analysis, { library = null } = {}) {
   const later = [];
   for (const id of ordered) {
     const l = lineById.get(id);
-    nodes.push({ id: `l:${l.id}`, kind: 'line', label: l.name || '', ref: l.id, weight: (l.highlightIds || []).length });
+    const starred = Boolean(isStarred(l.id));
+    nodes.push({ id: `l:${l.id}`, kind: 'line', label: starred ? `★ ${l.name || ''}` : l.name || '', ref: l.id, weight: (l.highlightIds || []).length, starred });
     if (planeOfLine.has(l.id)) edge('plane', `p:${planeOfLine.get(l.id)}`, `l:${l.id}`);
     for (const h of l.highlightIds || []) {
       // 2 つの線に入った点は先の線にぶら下げ、後の線からは関わる点として橋を引く
@@ -204,6 +206,7 @@ export function mapStyle(colors) {
       style: { 'background-color': colors.plane, width: 'mapData(weight, 0, 40, 30, 60)', height: 'mapData(weight, 0, 40, 30, 60)', 'font-size': 16, 'font-weight': 'bold', 'text-max-width': 160, 'z-index': 3 },
     },
     { selector: 'node[kind = "line"]', style: { 'background-color': colors.line, width: 'mapData(weight, 0, 20, 10, 22)', height: 'mapData(weight, 0, 20, 10, 22)', 'z-index': 2 } },
+    { selector: 'node[kind = "line"][?starred]', style: { 'border-width': 3, 'border-color': colors.solid, 'font-weight': 'bold' } },
     { selector: 'node[kind = "point"]', style: { 'background-color': colors.line, 'background-opacity': 0.55, width: 5, height: 5, 'z-index': 1 } },
     { selector: 'node[?isolated]', style: { 'background-color': colors.point, 'background-opacity': 0.8, width: 6, height: 6 } },
     { selector: 'edge', style: { width: 0.6, 'line-color': colors.line, opacity: 0.35, 'curve-style': 'straight' } },

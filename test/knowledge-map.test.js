@@ -71,6 +71,25 @@ test('mapElements: まだつながらない点は、橋が無ければ辺を 1 �
   assert.deepEqual(touching('pt:hx').map((e) => e.kind), ['far'], '遠いつながりがある浮いた点は、その橋だけ');
 });
 
+test('mapElements: ★の線は starred が載り、名前の前に ★ が付く。★の無い線は今のまま（NIH-58 を塊の図に引き継ぐ）', () => {
+  const lines = (opts) => mapElements(analysis(), opts).nodes.filter((n) => n.kind === 'line');
+  assert.deepEqual(lines({ isStarred: (id) => id === 'l2' }).map((n) => [n.ref, n.starred, n.label]), [['l1', false, '線1'], ['l2', true, '★ 線2'], ['l3', false, '線3'], ['l4', false, '面の無い線']]);
+  assert.ok(lines({}).every((n) => n.starred === false && !n.label.startsWith('★')), '判定を渡さなければ★は無し');
+  assert.ok(mapElements(analysis(), { isStarred: () => true }).nodes.filter((n) => n.kind !== 'line').every((n) => n.starred === undefined), '面・点には載せない');
+});
+
+test('mapStyle: ★の線だけに枠線を付ける（★の無い線の見た目は変えない）', () => {
+  const colors = { solid: '#7a4bb0', plane: '#b0781a', line: '#1f6f5c', ink: '#23211d', point: '#8b877d', surface: '#fffdf8', font: 'sans-serif' };
+  const { nodes } = mapElements(analysis(), { isStarred: (id) => id === 'l2' });
+  const cy = cytoscape({ headless: true, styleEnabled: true, elements: nodes.map((data) => ({ group: 'nodes', data })), style: mapStyle(colors) });
+  try {
+    assert.equal(cy.$id('l:l1').numericStyle('border-width'), 0);
+    assert.ok(cy.$id('l:l2').numericStyle('border-width') > 0);
+  } finally {
+    cy.destroy();
+  }
+});
+
 test('mapElements: 分析が空でも壊れず、渡した分析・ライブラリを書き換えない', () => {
   assert.deepEqual(mapElements({}), { nodes: [], edges: [] });
   assert.deepEqual(mapElements(null), { nodes: [], edges: [] });

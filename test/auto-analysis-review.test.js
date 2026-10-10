@@ -118,6 +118,7 @@ test('分析の最中（自動の分析を含む）に頼まれた分析は 409 
         assert.equal(job.stage, 'error');
         const info = await (await fetch(`${base}/api/info`)).json();
         assert.equal(info.autoAnalysis.lastError, '', '中止は失敗として出さない');
+        assert.equal(info.autoAnalysis.failureCount, 0, '中止は続けて失敗した回数に数えない');
         assert.ok(info.autoAnalysis.lastCancelledAt);
         assert.equal((await server.checkAutoAnalyze()).started, false, '止めた直後は始め直さない');
         assert.equal((await server.checkAutoAnalyze(new Date(Date.now() + AUTO_RETRY_MS + 60_000))).started, true, '時間がたてば始める');

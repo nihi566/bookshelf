@@ -6,7 +6,7 @@ import { THOUGHT_LABEL, liveThoughts } from '../../core/thoughts.js';
 import { normalizeText } from '../../core/text.js';
 import { browserStore, formatPrice, loadMarks, searchWishlist, wishlistSummary } from '../../core/wishlist.js';
 import { loadWishlist } from '../wishlist-data.js';
-import { bookRow, bookSpine, emptyBooksBlock, highlightCard, kindleAlertBlock, lineIndex, pointCard, sourceBadge } from '../ui.js';
+import { bookRow, bookSpine, emptyBooksBlock, highlightCard, homeAlertBlock, lineIndex, pointCard, sourceBadge } from '../ui.js';
 import { inboxBlock } from './thoughts.js';
 import { discoveriesBlock, partnerBlock } from './discoveries.js';
 import { noteRow } from './notes.js';
@@ -29,8 +29,8 @@ export const home = {
     const lib = state.library;
     const s = libraryStats(lib);
     const a = state.analysis;
-    // 自動取り込みの異常はスマホで最初に開くホームで気づけるようにする（中身は PC の情報を取り直したときに差し替える）
-    const alert = html`<div id="kindle-alert">${kindleAlertBlock(state)}</div>`;
+    // 自動取り込み・分析の異常はスマホで最初に開くホームで気づけるようにする（中身は PC の情報を取り直したときに差し替える）
+    const alert = html`<div id="home-alert">${homeAlertBlock(state)}</div>`;
     if (!s.highlights && !s.technical && !liveThoughts(lib).length) {
       return html`${alert}<section class="card hero">
           <h1>本に引いた線を、<br>知識の立体へ。</h1>

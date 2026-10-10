@@ -1,5 +1,6 @@
 // 立体のページの知識マップを描く（Cytoscape.js は大きいので、このページを開いたときだけ読み込む）
 import { mapElements, mapPositions, mapStyle } from '../core/knowledge-map.js';
+import { isLineStarred } from '../core/line-stars.js';
 
 // 全体を枠に収めると点が 2,000 近くあって小さくなるので、ここまで縮められるようにする
 const MIN_ZOOM = 0.03;
@@ -48,7 +49,7 @@ function draw(cytoscape, wrap, analysis, library) {
   if (!canvas.isConnected) return;
   cy?.destroy();
   const colors = { solid: css('--layer-solid'), plane: css('--layer-plane'), line: css('--layer-line'), point: css('--layer-point'), ink: css('--ink'), surface: css('--surface'), font: css('--font') };
-  const els = mapElements(analysis, { library });
+  const els = mapElements(analysis, { library, isStarred: (id) => isLineStarred(library, id) });
   const pos = mapPositions(els);
   const inst = cytoscape({
     container: canvas,

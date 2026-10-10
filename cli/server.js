@@ -321,15 +321,19 @@ export function createCompanionServer({ store, log = console.log, catalogFetch, 
 
   /** state.json の autoAnalysis のうち、画面に出すもの */
   function publicAutoState(a = {}) {
-    return { lastRunAt: a.lastRunAt || null, lastSuccessAt: a.lastSuccessAt || null, lastError: a.lastError || '', lastErrorAt: a.lastErrorAt || null, lastCancelledAt: a.lastCancelledAt || null, lastTrigger: a.lastTrigger || '' };
+    return { lastRunAt: a.lastRunAt || null, lastSuccessAt: a.lastSuccessAt || null, lastError: a.lastError || '', lastErrorAt: a.lastErrorAt || null, failureCount: Number(a.failureCount) || 0, lastCancelledAt: a.lastCancelledAt || null, lastTrigger: a.lastTrigger || '' };
   }
 
-  /** 分析の結果（成功・失敗・中止）を state.json に残す（失敗しても前回の分析結果は残っている）。書けなくても分析の結果は変えない */
+  /**
+   * 分析の結果（成功・失敗・中止）を state.json に残す（失敗しても前回の分析結果は残っている）。書けなくても分析の結果は変えない。
+   * patch は前回の記録を受け取って差分を返す関数でもよい（続けて失敗した回数を数えるため）
+   */
   async function recordRun(patch) {
     try {
       await store.lock(async () => {
         const st = await store.state();
-        await store.saveState({ ...st, autoAnalysis: { ...(st.autoAnalysis || {}), ...patch } });
+        const prev = st.autoAnalysis || {};
+        await store.saveState({ ...st, autoAnalysis: { ...prev, ...(typeof patch === 'function' ? patch(prev) : patch) } });
       });
     } catch (e) {
       log(`[analyze] 分析の記録を state.json に書けませんでした: ${e.message}`);
@@ -378,7 +382,7 @@ export function createCompanionServer({ store, log = console.log, catalogFetch, 
       job.message = '完了しました';
       lastStop.failure = null;
       lastStop.cancel = null;
-      await recordRun({ lastRunAt: startedAt, lastSuccessAt: new Date().toISOString(), lastError: '', lastErrorAt: null, lastCancelledAt: null, lastTrigger: trigger });
+      await recordRun({ lastRunAt: startedAt, lastSuccessAt: new Date().toISOString(), lastError: '', lastErrorAt: null, failureCount: 0, lastCancelledAt: null, lastTrigger: trigger });
     } catch (e) {
       const now = new Date().toISOString();
       job.error = maskSecrets(e.message);
@@ -390,7 +394,8 @@ export function createCompanionServer({ store, log = console.log, catalogFetch, 
       } else {
         log(`[analyze${trigger === 'auto' ? '・自動' : ''}] ${job.error}`);
         lastStop.failure = now;
-        await recordRun({ lastRunAt: startedAt, lastError: job.error, lastErrorAt: now, lastTrigger: trigger });
+        // 続けて失敗した回数はホームの警告に出す（成功で 0 に戻す。中止は数えない）
+        await recordRun((prev) => ({ lastRunAt: startedAt, lastError: job.error, lastErrorAt: now, failureCount: (Number(prev.failureCount) || 0) + 1, lastTrigger: trigger }));
       }
     } finally {
       job.running = false;
