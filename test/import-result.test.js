@@ -5,7 +5,7 @@ import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { emptyLibrary } from '../web/core/model.js';
-import { importOutcome, importResultBlock, importView } from '../web/js/views/settings.js';
+import { importHelpTargets, importOutcome, importResultBlock, importView } from '../web/js/views/settings.js';
 
 const WEB = join(dirname(fileURLToPath(import.meta.url)), '..', 'web');
 
@@ -69,4 +69,42 @@ test('app.js: 取り込み結果を覚えてから同期し、別の画面に移
   assert.doesNotMatch(fn, /toast\(`取り込みました/, '失敗があっても必ず「取り込みました」と出す通知を残さない');
   const render = app.match(/function render\(\{ keepScroll = false \} = \{\}\) \{([\s\S]*?)\n\}/)[1];
   assert.match(render, /if \(!ctx\.refresh\) state\.lastImport = null;[\s\S]*?match\.view\.render\(ctx\)/, '画面を離れたら（別の画面から来たら）結果を消す');
+});
+
+// NIH-98 読めなかったファイルの行に、取り込み方の説明（同じ画面の details）を開く案内を出す
+test('読めなかったファイルの行には取り出し方の案内が出て、読めたファイルの行には出ない', () => {
+  const box = String(importResultBlock({ results: [OK, { name: 'notes.txt', error: 'My Clippings.txt の形式ではありません' }], stats: STATS }));
+  const [okRow, badRow] = box.match(/<li>[\s\S]*?<\/li>/g);
+  assert.doesNotMatch(okRow, /open-import-help/, '読めたファイルの行には出ない');
+  assert.match(badRow, /取り出し方: <button[^>]*data-action="open-import-help" data-target="help-kindle-device"[^>]*>Kindle 端末<\/button>/);
+});
+
+test('案内の宛先はファイルの拡張子で決まり、分からない形式は主な取り出し方を並べる', () => {
+  const ids = (name) => importHelpTargets(name).map((t) => t.id);
+  assert.deepEqual(ids('My Clippings.TXT'), ['help-kindle-device']);
+  assert.deepEqual(ids('a.html'), ['help-kindle-export', 'help-playbooks']);
+  assert.deepEqual(ids('a.htm'), ['help-kindle-export', 'help-playbooks']);
+  assert.deepEqual(ids('a.docx'), ['help-playbooks']);
+  assert.deepEqual(ids('a.zip'), ['help-playbooks']);
+  assert.deepEqual(ids('kindle.json'), ['help-kindle-bookmarklet']);
+  assert.deepEqual(ids('memo.md'), ['help-reading-notes']);
+  assert.deepEqual(ids('photo.png'), ['help-kindle-device', 'help-kindle-export', 'help-playbooks']);
+  assert.deepEqual(ids('拡張子なし'), ['help-kindle-device', 'help-kindle-export', 'help-playbooks']);
+});
+
+test('案内の宛先はすべて取り込み画面に実在し、ファイル名に入った記号で壊れない', () => {
+  const page = String(importView.render(ctx(null, true)));
+  for (const name of ['a.txt', 'a.html', 'a.docx', 'a.json', 'a.md', 'a.png']) {
+    for (const t of importHelpTargets(name)) assert.match(page, new RegExp(`id="${t.id}"`), `${t.id} が画面にある`);
+  }
+  const box = String(importResultBlock({ results: [{ name: '"><img src=x>.txt', error: '対応していない形式です' }], stats: NONE }));
+  assert.doesNotMatch(box, /<img src=x>/);
+});
+
+test('app.js: 案内を押すとその説明を開いて見える位置まで動かす', () => {
+  const app = readFileSync(join(WEB, 'js/app.js'), 'utf8');
+  const fn = app.match(/'open-import-help'\(el\) \{([\s\S]*?)\n  \},/)[1];
+  assert.match(fn, /document\.getElementById\(el\.dataset\.target\)/);
+  assert.match(fn, /\.open = true/);
+  assert.match(fn, /scrollIntoView/);
 });
