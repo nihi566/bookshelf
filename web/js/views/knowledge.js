@@ -8,6 +8,7 @@ import { hasChanges } from '../../core/analysis/changes.js';
 import { RELATED_MAX } from '../../core/analysis/neighbors.js';
 import { pendingPoints } from '../../core/auto-analysis.js';
 import { analysisPointById, analysisPoints, isThought } from '../../core/points.js';
+import { assignedThoughtIds } from '../../core/line-assignments.js';
 import { lineIndex, pointCard } from '../ui.js';
 import { amazonKindleUrl, findWishlistBook, formatPrice } from '../../core/wishlist.js';
 import { loadWishlist } from '../wishlist-data.js';
@@ -302,8 +303,10 @@ export const lineView = {
     const l = a?.lines.find((x) => x.id === params.id);
     if (!l) return html`<p class="empty">線(グループ)が見つかりません（分析し直して無くなった可能性があります）。<a href="#/lines">線(グループ)の一覧へ</a></p>`;
     const plane = a.planes.find((p) => p.lineIds.includes(l.id));
-    // 線の点（本に引いた線と思いつき）
-    const hs = l.highlightIds.map((id) => analysisPointById(state.library, id)).filter(Boolean);
+    // 線の点（本に引いた線と思いつき）と、自分で入れた思いつき（AI の線にすでに入っているものは重ねない）
+    const aiIds = new Set(l.highlightIds);
+    const manual = assignedThoughtIds(state.library, l.id).filter((id) => !aiIds.has(id));
+    const hs = [...l.highlightIds, ...manual].map((id) => analysisPointById(state.library, id)).filter(Boolean);
     // 2 番目に近い線がこの線で、十分近い点（G4-3。ほかの端末から届いた分析でも、重ねず上限まで）
     const related = [...new Set(l.relatedIds || [])].slice(0, RELATED_MAX).map((id) => analysisPointById(state.library, id)).filter(Boolean);
     const idx = lineIndex(a);
@@ -321,7 +324,7 @@ export const lineView = {
       </section>
       ${citingNotesBlock(state.library, new Set(l.highlightIds), 'この線の点を根拠にしている永久ノート')}
       <div class="section"><h2>つながっている点</h2><span class="small muted">${hs.length}</span></div>
-      ${hs.map((h) => pointCard(h, { library: state.library, lines: (idx.get(h.id) || []).filter((x) => x.id !== l.id) }))}
+      ${hs.map((h) => pointCard(h, { library: state.library, lines: (idx.get(h.id) || []).filter((x) => x.id !== l.id), assigned: manual.includes(h.id) ? { id: l.id, name: l.name, missing: false } : null }))}
       ${related.length
         ? html`<div class="section"><h2>関わる点（ほかの線(グループ)から）</h2><span class="small muted">${related.length}</span></div>
           <p class="help">ほかの線(グループ)に入っている点のうち、この線の点と同じくらい、この線の中心に近い点です。</p>

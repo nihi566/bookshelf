@@ -23,7 +23,8 @@ import { FAR_REACTIONS, farConnectionById, reactFar } from '../core/far-reaction
 import { importView, kindleSyncBlock, playbooksSyncBlock, settingsView } from './views/settings.js';
 import { wishlist } from './views/wishlist.js';
 import { records } from './views/records.js';
-import { editThoughtSheet, newThoughtSheet, thoughtsView } from './views/thoughts.js';
+import { editThoughtSheet, lineSheet, newThoughtSheet, thoughtsView } from './views/thoughts.js';
+import { assignThoughtToLine, lineAssignmentOf, unassignThought } from '../core/line-assignments.js';
 import { FEEDBACK_LABELS, addHighlight, deleteBook, emptyLibrary, guessTechnical, listBooks, mergeParsed, registerBook, setFeedback, updateBook, updateHighlight } from '../core/model.js';
 import { THOUGHT_STATUS, addThought, deleteThought, thoughtsOf, updateThought } from '../core/thoughts.js';
 import { isThought, pointById } from '../core/points.js';
@@ -708,6 +709,33 @@ const actions = {
     const t = updateThought(state.library, el.dataset.id, { status: el.dataset.status });
     await persistLibrary();
     toast(`「${THOUGHT_STATUS[t.status]}」にしました`);
+    render({ keepScroll: true });
+    autoSyncAfterChange();
+  },
+  // 思いつきを、自分で選んだ線(グループ)に入れる（分析を待たずに整理する。分析し直しても外れない）
+  'thought-to-line'(el) {
+    if (!state.loaded) return toast('まだ端末のデータを読み込んでいます。少し待ってから押してください');
+    const t = thoughtsOf(state.library)[el.dataset.id];
+    if (!t || t.deleted) return;
+    const lines = state.analysis?.lines || [];
+    if (!lines.length) return toast('線(グループ)がまだありません。知識の画面で分析すると選べます', 4000);
+    openSheet(lineSheet(t, lines), async (data) => {
+      // シートを開いている間に分析が差し替わっていたら、今の分析から引き直す（無い線(グループ)には入れない）
+      const line = (state.analysis?.lines || []).find((l) => l.id === data.get('line'));
+      if (!line) throw new Error('選んだ線(グループ)が、分析し直して無くなりました。もう一度選んでください');
+      assignThoughtToLine(state.library, t.id, line);
+      await persistLibrary();
+      toast(`線(グループ)「${line.name}」に入れました`);
+      render({ keepScroll: true });
+      autoSyncAfterChange();
+    });
+  },
+  async 'thought-unline'(el) {
+    // ほかの端末の同期で先に外れていたら、何もしない
+    if (!lineAssignmentOf(state.library, el.dataset.id)) return render({ keepScroll: true });
+    unassignThought(state.library, el.dataset.id);
+    await persistLibrary();
+    toast('線(グループ)から外しました');
     render({ keepScroll: true });
     autoSyncAfterChange();
   },

@@ -16,6 +16,7 @@ import { mergeFarReactions } from './far-reactions.js';
 import { normalizeNote } from './notes.js';
 import { mergeLinks } from './links.js';
 import { normalizeOutline } from './outlines.js';
+import { mergeLineAssignments } from './line-assignments.js';
 
 export const SOURCES = {
   kindle: 'Kindle',
@@ -409,6 +410,8 @@ export function mergeLibraries(base, incoming) {
   out.links = mergeLinks(base.links, incoming.links, now);
   // 文章の骨組みは直した時刻が新しい方。消したものはどちらから来ても消えたまま
   out.outlines = mergeCollections(base.outlines, incoming.outlines, { stickyDelete: true, normalize: (o) => normalizeOutline(o, now) });
+  // 思いつきを自分で入れた線(グループ)は、入れた・外した時刻が新しい方
+  out.lineAssignments = mergeLineAssignments(base.lineAssignments, incoming.lineAssignments, now);
   out.updatedAt = later(base.updatedAt, incoming.updatedAt);
   return out;
 }
