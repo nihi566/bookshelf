@@ -155,6 +155,7 @@ test('#71: 取り込み画面の Play ブックス欄に、自動取り込みの
   // 取り込み画面に欄があり、PC の情報を取り直したら差し替わる
   const { importView } = await import('../web/js/views/settings.js');
   assert.match(String(importView.render({ state: state({ active: true, problems: [] }) })), /<div id="playbooks-sync">/);
-  const { readFileSync: read } = await import('node:fs');
-  assert.match(read(path.join(ROOT, 'web/js/app.js'), 'utf8'), /'\/import': \[\['#kindle-sync', kindleSyncBlock\], \['#playbooks-sync', playbooksSyncBlock\]\]/);
+  const { kindleSyncBlock } = await import('../web/js/views/settings.js');
+  const { PC_INFO_BOXES } = await import('../web/js/routes.js');
+  assert.deepEqual(PC_INFO_BOXES['/import'], [['#kindle-sync', kindleSyncBlock], ['#playbooks-sync', playbooksSyncBlock]]);
 });

@@ -1,7 +1,6 @@
 // NIH-109 本の中で、2 つに分かれてしまった前後の点をくっつける
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
 import {
   bookHighlights,
   bookIdFor,
@@ -235,11 +234,27 @@ test('画面: 編集シートに前・次の点とくっつけるボタンと相
   assert.match(String(highlightEditSheet(lib.highlights[a], { prev: { text: 'あ'.repeat(5000) + '終わり' }, next: null })), /前の点: …あ+終わり</, '前の点は終わりの方を見せる');
 });
 
-test('画面: くっつけるときは書きかけの編集を先に保存し、通知の「元に戻す」で戻せる', () => {
-  const app = readFileSync(new URL('../web/js/app.js', import.meta.url), 'utf8');
-  const edit = app.slice(app.indexOf('  edit(el) {'), app.indexOf("  'restore-original-text'"));
-  assert.match(edit, /highlightNeighbors\(state\.library, h\.id\)/);
-  assert.match(edit, /joinHighlights\(/);
-  assert.ok(edit.indexOf('updateHighlight(state.library, h.id, { text:') < edit.indexOf('joinHighlights('), '書きかけの編集を先に保存する');
-  assert.match(edit, /toast\('くっつけました', 6000, \{ label: '元に戻す', run: \(\) => undoJoinHighlights\(/);
+test('画面: くっつけるときは書きかけの編集を先に保存してつなぎ、保存してから通知の「元に戻す」で戻せる', async () => {
+  const { fakeApp, formData, button } = await import('./helpers/app-actions.js');
+  const { lib, a, b } = threeHighlights();
+  const app = fakeApp({ library: lib, analysis: null, loaded: true });
+  app.actions.edit(button({ id: b }));
+  assert.match(app.sheets[0].content, /join-prev/);
+  app.log.length = 0;
+  await app.sheets[0].onSubmit(formData({ text: '書きかけの後ろの文', userNote: '', tags: '' }), 'join-prev');
+  assert.equal(lib.highlights[a].text, FIRST + '書きかけの後ろの文', '書きかけの編集を先に保存してからつなぐ');
+  assert.equal(lib.highlights[b].supersededBy, a);
+  assert.deepEqual(app.log, ['persist', 'toast', 'render', 'sync'], '端末に保存してから知らせて同期する');
+  const toast = app.toasts.at(-1);
+  assert.equal(toast.message, 'くっつけました');
+  assert.equal(toast.action.label, '元に戻す');
+  await toast.action.run();
+  assert.equal(lib.highlights[a].text, FIRST);
+  assert.equal(lib.highlights[b].text, '書きかけの後ろの文');
+  assert.equal(lib.highlights[b].deleted, undefined);
+  assert.equal(app.toasts.at(-1).message, '元に戻しました');
+  // 保存だけなら、くっつけない
+  app.actions.edit(button({ id: a }));
+  await app.sheets[1].onSubmit(formData({ text: FIRST, userNote: '', tags: '' }), 'save');
+  assert.equal(liveHighlights(lib).length, 3);
 });

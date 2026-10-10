@@ -204,7 +204,22 @@ test('NIH-7: 過去の分析の画面に「この分析に戻す」があり、�
   const out = String(knowledge.render({ state: st(restoreAnalysis(a, NOW)) }));
   assert.match(out, /<h2>前回からの変化<\/h2>[\s\S]*?10\/4 .* の分析に戻しました/);
   // 押したときの処理（PC に送り、手元の分析を差し替えて知識の画面へ）
-  const app = readFileSync(path.join(ROOT, 'web/js/app.js'), 'utf8');
-  assert.match(app, /'restore-analysis'/);
+  const { fakeApp, button } = await import('./helpers/app-actions.js');
+  const restored = { createdAt: '2026-10-04T10:00:00.000Z' };
+  const asked = [];
+  const appState = { library: emptyLibrary(), analysis: a, loaded: true, job: null };
+  const app = fakeApp(appState, { restoreHistory: async (id) => (asked.push(id), restored) });
+  const btn = button({ id: '20261004T100000000Z' });
+  await app.actions['restore-analysis'](btn);
+  assert.deepEqual(asked, ['20261004T100000000Z']);
+  assert.equal(appState.analysis, restored);
+  assert.equal(btn.disabled, false);
+  assert.deepEqual(app.log, ['saveAnalysis', 'toast', 'go #/knowledge']);
+  // 分析の最中・確かめて「やめる」を選んだときは PC に送らない
+  const busy = fakeApp({ ...appState, job: { running: true } }, { restoreHistory: async () => assert.fail('送らない') });
+  await busy.actions['restore-analysis'](btn);
+  const no = fakeApp(appState, { confirm: () => false, restoreHistory: async () => assert.fail('送らない') });
+  await no.actions['restore-analysis'](btn);
+  assert.deepEqual([busy.log, no.log], [['toast'], []]);
   assert.match(readFileSync(path.join(ROOT, 'web/js/services.js'), 'utf8'), /restoreHistory: \(id\) => call\(`\/api\/history\/\$\{encodeURIComponent\(id\)\}\/restore`, \{ method: 'POST' \}\)/);
 });

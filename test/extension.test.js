@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { chunk, importBody, isReachableCompanionUrl, pickBooksToFetch, statusReport } from '../extension/sync-core.js';
+import { chunk, importBody, isReachableCompanionUrl, pickBooksToFetch, statusReport, syncOutcome } from '../extension/sync-core.js';
 import { parseFiles } from '../web/core/parsers/index.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -85,4 +85,29 @@ test('拡張: PC への確認結果の報告には必要な項目だけを入れ
   assert.equal(ng.needLogin, true);
   assert.equal(ng.error.length, 300);
   assert.equal(JSON.stringify(ng).includes('secret'), false);
+});
+
+test('拡張: 読み直した本がすべてハイライト 0 件なら、画面の形が変わった可能性として異常にする', () => {
+  const allEmpty = syncOutcome({ failed: [], fetched: 3, withHighlights: 0 });
+  assert.equal(allEmpty.ok, false);
+  assert.match(allEmpty.error, /3 冊のハイライトがすべて 0 件/);
+  assert.match(allEmpty.error, /画面の形が変わった可能性/);
+  // 異常の間に読んだ本は既読になるので、直した後に取り込み直す手順を添える
+  assert.match(allEmpty.error, /全ての本を取り込み直す/);
+  // 1 冊でも読めれば今までどおり成功
+  assert.deepEqual(syncOutcome({ failed: [], fetched: 3, withHighlights: 1 }), { ok: true, error: '' });
+  // 読み直した本が無ければ成功（変化なし）
+  assert.deepEqual(syncOutcome({ failed: [], fetched: 0, withHighlights: 0 }), { ok: true, error: '' });
+});
+
+test('拡張: 読めなかった本があるときは、その旨を理由にする（0 件の判定と重ねて出す）', () => {
+  const some = syncOutcome({ failed: ['A', 'B', 'C', 'D'], fetched: 2, withHighlights: 1 });
+  assert.equal(some.ok, false);
+  assert.equal(some.error, '4 冊を読み取れませんでした（A、B、C ほか）。次回もう一度読みます。');
+  const both = syncOutcome({ failed: ['A'], fetched: 2, withHighlights: 0 });
+  assert.equal(both.ok, false);
+  assert.match(both.error, /1 冊を読み取れませんでした/);
+  assert.match(both.error, /画面の形が変わった可能性/);
+  // 全部読めなかった（読み直せた本が 0 冊）なら 0 件の判定は出さない
+  assert.doesNotMatch(syncOutcome({ failed: ['A'], fetched: 0, withHighlights: 0 }).error, /0 件/);
 });

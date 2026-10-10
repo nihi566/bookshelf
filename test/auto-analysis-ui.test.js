@@ -45,7 +45,7 @@ test('G5-3: 知識の画面に、自動の分析の失敗の理由と最後に�
   const lib = sample();
   const pcInfo = { autoAnalysis: { enabled: true, minPoints: 10, maxHours: 24, pending: 12, lastSuccessAt: '2026-10-04T01:02:00.000Z', lastError: 'LLM サーバに接続できません <script>', lastErrorAt: '2026-10-04T03:04:00.000Z', lastTrigger: 'auto' } };
   const out = String(autoStatusBlock(st(lib, null, { pcInfo })));
-  assert.match(out, /自動の分析: <b>オン<\/b> — 前回の分析のあとに点が 10 件増えるか、24 時間たって点が 1 件以上増えるか永久ノートを書いた・直したとき、PC が分析し直します/);
+  assert.match(out, /自動の分析: <b>オン<\/b> — 前回の分析のあとに点が 10 件増える・減るか、24 時間たって点が 1 件以上増える・減るか永久ノートを書いた・直したとき、PC が分析し直します/);
   assert.match(out, /最後に成功: 10\/4 /);
   // 永久ノートだけを直したときは、次の分析で面・立体に入ると伝える（NIH-83）
   assert.doesNotMatch(out, /書いた・直した永久ノートがあります/);
@@ -56,7 +56,8 @@ test('G5-3: 知識の画面に、自動の分析の失敗の理由と最後に�
   assert.match(off, /<b>オフ<\/b>/);
   assert.match(String(autoStatusBlock(st(lib, null, { mode: 'direct' }))), /PC のコンパニオン（bh serve）を使うときに動きます/);
   // PC の情報を取り直したら、この欄だけ差し替える
-  assert.match(readFileSync(join(WEB, 'js/app.js'), 'utf8'), /'\/knowledge': \[\['#auto-status', autoStatusBlock\]\]/);
+  const { PC_INFO_BOXES } = await import('../web/js/routes.js');
+  assert.deepEqual(PC_INFO_BOXES['/knowledge'], [['#auto-status', autoStatusBlock]]);
 });
 
 test('G5-4: 知識の画面で「前回から増えた線・大きくなった線・消えた線・新しくつながった点」が見られ、過去の分析を開ける', async () => {
@@ -76,7 +77,9 @@ test('G5-4: 知識の画面で「前回から増えた線・大きくなった�
   assert.match(rebuilt, /今回は最初から作り直しました/);
   // 過去の分析を開く画面（PC から 1 回分を取りに行く）
   assert.match(String(historyView.render({ params: { id: '20261004T100000000Z' } })), /<h1>過去の分析<\/h1>/);
-  assert.match(readFileSync(join(WEB, 'js/app.js'), 'utf8'), /\[\/\^\\\/knowledge\\\/history\\\/\(\?<id>\[0-9TZ\]\+\)\$\/, historyView, 'knowledge'\]/);
+  const { matchRoute } = await import('../web/js/routes.js');
+  const route = matchRoute('/knowledge/history/20261004T100000000Z');
+  assert.deepEqual([route.view, route.tab, route.params.id], [historyView, 'knowledge', '20261004T100000000Z']);
 });
 
 test('#67: 立体の「これからの問い」・線の問い・「答えを書く」は出さない。これまでに書いた答えは消えず、点のまま残る', async () => {
@@ -90,8 +93,11 @@ test('#67: 立体の「これからの問い」・線の問い・「答えを書
   assert.doesNotMatch(line, /問い: |どう続けるか|答えを書く|data-action="answer"/);
   assert.ok(historyView, '過去の分析の画面は残る');
   // 答えを書く処理と、それ専用の部品・文言・CSS は残さない
-  const app = readFileSync(join(WEB, 'js/app.js'), 'utf8');
-  assert.doesNotMatch(app, /\n  answer\(el\)|newThoughtSheet\(\{ question/);
+  // 操作を作るどの部品にも「答えを書く」は無い
+  const { fakeApp } = await import('./helpers/app-actions.js');
+  const deps = { state: st(lib, a), openSheet() {}, toast() {}, persist: async () => {}, sync() {}, render() {}, go() {}, confirm: () => true };
+  const factories = await Promise.all(['note', 'link', 'ask', 'outline'].map((k) => import(`../web/js/${k}-actions.js`).then((m) => m[`${k}Actions`](deps))));
+  for (const ops of [fakeApp(st(lib, a)).actions, ...factories]) assert.ok(!Object.hasOwn(ops, 'answer'));
   const thoughtsJs = readFileSync(join(WEB, 'js/views/thoughts.js'), 'utf8');
   assert.doesNotMatch(thoughtsJs, /answerBlock|answersTo|問いに答える/);
   assert.doesNotMatch(readFileSync(join(WEB, 'css/app.css'), 'utf8'), /\.answers|\.answer-list|ul\.questions/);

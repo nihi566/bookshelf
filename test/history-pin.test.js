@@ -149,7 +149,17 @@ test('NIH-102: 過去の分析の画面に「この回を残す」の付け外�
   assert.equal((list.match(/class="pin-mark"/g) || []).length, 1);
   assert.match(list, /20261004T100000000Z">[^<]*<\/a> <span class="pin-mark">残す<\/span>/);
 
-  const app = readFileSync(path.join(ROOT, 'web/js/app.js'), 'utf8');
-  assert.match(app, /'pin-history'/);
+  // 押したときの処理（PC に印を送り、描き直す。失敗したら理由を出してボタンを戻す）
+  const { fakeApp, button } = await import('./helpers/app-actions.js');
+  const sent = [];
+  const app = fakeApp({ library: {}, analysis: a, loaded: true }, { pinHistory: async (id, pinned) => sent.push([id, pinned]) });
+  await app.actions['pin-history'](button({ id: '20261004T100000000Z', pinned: 'false' }));
+  await app.actions['pin-history'](button({ id: '20261004T100000000Z', pinned: 'true' }));
+  assert.deepEqual(sent, [['20261004T100000000Z', true], ['20261004T100000000Z', false]]);
+  assert.deepEqual(app.log, ['toast', 'render', 'toast', 'render']);
+  const failing = fakeApp({ library: {}, analysis: a, loaded: true }, { pinHistory: async () => { throw new Error('印は 20 回までです'); } });
+  const btn = button({ id: '20261004T100000000Z', pinned: 'false' });
+  await failing.actions['pin-history'](btn);
+  assert.deepEqual([failing.toasts[0].message, btn.disabled, failing.log], ['印は 20 回までです', false, ['toast']]);
   assert.match(readFileSync(path.join(ROOT, 'web/js/services.js'), 'utf8'), /pinHistory: \(id, pinned\) => call\(`\/api\/history\/\$\{encodeURIComponent\(id\)\}\/pin`, \{ method: 'POST', body: \{ pinned \} \}\)/);
 });

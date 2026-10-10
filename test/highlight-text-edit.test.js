@@ -1,6 +1,5 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
 import { bookHighlights, bookIdFor, emptyLibrary, highlightIdFor, isTextEdited, mergeLibraries, mergeParsed, searchHighlights, updateHighlight } from '../web/core/model.js';
 
 const T1 = '2025-01-01T00:00:00.000Z';
@@ -176,13 +175,22 @@ test('NIH-66: 編集シートの「取り込んだときの文」の横に、保
   assert.match(sheet, /<textarea name="text" rows="4">直した&lt;b&gt;文&lt;\/b&gt;<\/textarea>/);
 });
 
-test('NIH-66: 「この文に戻す」は文の欄に取り込んだときの文を入れるだけで、保存しない', () => {
-  const app = readFileSync(new URL('../web/js/app.js', import.meta.url), 'utf8');
-  const action = app.match(/'restore-original-text'\(el\) \{([\s\S]*?)\n  \},/)[1];
-  assert.match(action, /\.originalText/);
-  assert.match(action, /elements\.text/);
-  assert.doesNotMatch(action, /updateHighlight|persistLibrary|autoSyncAfterChange/);
-  assert.match(app, /openSheet\(\s*highlightEditSheet\(h[,)]/);
+test('NIH-66: 「この文に戻す」は文の欄に取り込んだときの文を入れるだけで、保存しない', async () => {
+  const { fakeApp, button } = await import('./helpers/app-actions.js');
+  const { highlightEditSheet } = await import('../web/js/ui.js');
+  const { lib, id } = oneHighlight();
+  updateHighlight(lib, id, { text: '直した文' }, T2);
+  const app = fakeApp({ library: lib, analysis: null, loaded: true });
+  // 点の「編集」は、この欄のある編集シートを開く
+  app.actions.edit(button({ id }));
+  assert.equal(app.sheets[0].content, String(highlightEditSheet(lib.highlights[id])));
+  app.log.length = 0;
+  const field = { value: '直した文', focused: false, focus() { this.focused = true; } };
+  app.actions['restore-original-text']({ ...button({ id }), closest: () => ({ elements: { text: field } }) });
+  assert.equal(field.value, '取り込んだ文');
+  assert.ok(field.focused);
+  assert.equal(lib.highlights[id].text, '直した文', '保存は利用者が「保存」を押したときだけ');
+  assert.deepEqual(app.log, []);
 });
 
 // NIH-69: 検索で「文を直した点」だけに絞る

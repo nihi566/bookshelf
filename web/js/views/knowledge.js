@@ -66,7 +66,7 @@ export function autoStatusBlock(state) {
   if (state.settings.ai.mode !== 'companion') return html`<p class="small muted">自動の分析は、PC のコンパニオン（bh serve）を使うときに動きます。</p>`;
   const au = state.pcInfo?.autoAnalysis;
   if (!au) return '';
-  const rule = `前回の分析のあとに点が ${au.minPoints} 件増えるか、${au.maxHours} 時間たって点が 1 件以上増えるか永久ノートを書いた・直したとき、PC が分析し直します`;
+  const rule = `前回の分析のあとに点が ${au.minPoints} 件増える・減るか、${au.maxHours} 時間たって点が 1 件以上増える・減るか永久ノートを書いた・直したとき、PC が分析し直します`;
   // bh analyze で分析したときは PC の記録が無いので、手元の分析結果の時刻（最後に成功した分析）で補う
   const okAt = au.lastSuccessAt || state.analysis?.createdAt;
   const cancelled = au.lastCancelledAt && (!au.lastSuccessAt || au.lastCancelledAt > au.lastSuccessAt);
@@ -85,7 +85,7 @@ const REBUILT = {
 };
 
 /**
- * 前回からの変化（増えた線・大きくなった線・消えた線・新しくつながった点）。
+ * 前回からの変化（増えた線・大きくなった線・消えた線・新しくつながった点。伸ばしただけの点は件数だけ）。
  * links: 線の画面へのリンクを張るか（過去の分析では、今の分析に無い線を指すことがあるので張らない）
  */
 function changesBlock(a, { links = true } = {}) {
@@ -94,7 +94,9 @@ function changesBlock(a, { links = true } = {}) {
   if (!c) return '';
   const head = html`<div class="section"><h2>前回からの変化</h2><span class="small muted">${isoDate(c.previousAt)} から</span></div>`;
   if (c.rebuilt) return html`${head}<p class="card small">${REBUILT[c.reason] || REBUILT.format}（線 ${a.lines.length} 本・面 ${a.planes.length}）。次からは、変わったところだけを作り直します。</p>`;
-  if (!hasChanges(c)) return html`${head}<p class="card small muted">線(グループ)の顔ぶれは変わりませんでした。</p>`;
+  // Kindle で伸ばしただけの点は変化に数えないが、取り込みが届いたことは件数で分かるようにする（NIH-94。過去の分析には無い）
+  const extended = c.extendedPoints > 0 ? `Kindle で伸ばした点 ${c.extendedPoints}（変化には数えていません）` : '';
+  if (!hasChanges(c)) return html`${head}<p class="card small muted">線(グループ)の顔ぶれは変わりませんでした。${extended ? html`<br>${extended}` : ''}</p>`;
   const lineName = (id, fallback) => a.lines.find((l) => l.id === id)?.name || fallback;
   const chip = (id, label) => (links ? html`<a class="line-chip" href="#/knowledge/line/${id}">${label}</a>` : html`<span class="line-chip">${label}</span>`);
   const connected = new Map();
@@ -105,6 +107,7 @@ function changesBlock(a, { links = true } = {}) {
       ${c.grownLines.length ? html`<div><h3 class="small">大きくなった線(グループ) ${c.grownLines.length}</h3><div class="hl-lines">${c.grownLines.map((l) => chip(l.id, html`${lineName(l.id, l.name)} <span class="nowrap">＋${l.added}</span>`))}</div></div>` : ''}
       ${c.removedLines.length ? html`<div><h3 class="small">消えた線(グループ) ${c.removedLines.length}</h3><p class="small muted">${c.removedLines.map((l) => l.name).join('、')}</p></div>` : ''}
       ${c.connectedPoints.length ? html`<div><h3 class="small">新しくつながった点 ${c.connectedPoints.length}</h3><div class="hl-lines">${[...connected].map(([id, n]) => chip(id, html`${lineName(id, '線')}に <span class="nowrap">${n} 点</span>`))}</div></div>` : ''}
+      ${extended ? html`<p class="small muted">${extended}</p>` : ''}
     </section>`;
 }
 
@@ -353,7 +356,7 @@ export const lineView = {
         <div class="row"><button type="button" class="btn small primary" data-action="line-to-note" data-id="${l.id}">この線を永久ノートにする</button><span class="small muted">AI の線を下書きにして、自分の言葉に直せます</span></div>
         <div class="row"><a class="btn small" href="#/outline/new?line=${l.id}">文章の骨組みを作る</a></div>
       </section>
-      ${citingNotesBlock(state.library, new Set(l.highlightIds), 'この線の点を根拠にしている永久ノート')}
+      ${citingNotesBlock(state.library, new Set([...l.highlightIds, ...manual]), 'この線の点を根拠にしている永久ノート')}
       <div class="section"><h2>つながっている点</h2><span class="small muted">${hs.length}</span></div>
       ${hs.map((h) => pointCard(h, { library: state.library, lines: (idx.get(h.id) || []).filter((x) => x.id !== l.id), assigned: manual.includes(h.id) ? { id: l.id, name: l.name, missing: false } : null }))}
       ${related.length
