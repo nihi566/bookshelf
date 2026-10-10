@@ -650,8 +650,9 @@ const actions = {
   edit(el) {
     const h = state.library.highlights[el.dataset.id];
     openSheet(
-      html`<h2>メモ・タグ</h2>
-        <p class="quote">${h.text}</p>
+      html`<h2>点を編集</h2>
+        <label class="field"><span>線を引いた文</span><textarea name="text" rows="4">${h.text}</textarea></label>
+        ${h.originalText && h.originalText !== h.text ? html`<p class="help">取り込んだときの文: ${h.originalText}</p>` : ''}
         <label class="field"><span>自分のメモ</span><textarea name="userNote">${h.userNote || ''}</textarea></label>
         <label class="field"><span>タグ（空白かカンマ区切り）</span><input type="text" name="tags" value="${(h.tags || []).join(' ')}" placeholder="例: 習慣 仕事"></label>
         <p class="help">自分のメモ・タグ・★は、AI が点をつなぐときに「読者自身の言葉」として使います（次の分析から）。</p>
@@ -661,7 +662,8 @@ const actions = {
           updateHighlight(state.library, h.id, { deleted: true });
           toast('削除しました');
         } else {
-          updateHighlight(state.library, h.id, { userNote: String(data.get('userNote') || '').trim(), tags: String(data.get('tags') || '').split(/[\s,、]+/) });
+          // 文が空なら例外のままシートに出す（書いた内容はシートに残る）
+          updateHighlight(state.library, h.id, { text: String(data.get('text') || ''), userNote: String(data.get('userNote') || '').trim(), tags: String(data.get('tags') || '').split(/[\s,、]+/) });
         }
         await persistLibrary();
         render({ keepScroll: true });

@@ -227,8 +227,10 @@ const MEMO_CONTAINED_MIN = 12;
 
 /** 取り込んだときの文（利用者が直した点は直す前の文）。再取り込みの重複・伸ばしたハイライトの判定に使う */
 function importedText(h) {
-  return h.originalText ?? h.text;
+  return validText(h.originalText) ? h.originalText : h.text;
 }
+
+const validText = (t) => typeof t === 'string' && Boolean(cleanText(t));
 
 /** 空白・改行の違いを無視して比べるための形 */
 function compact(text) {
@@ -346,7 +348,7 @@ function mergeItem(a, b, userFields) {
   return out;
 }
 
-const editedText = (h) => (h.textEditedAt && typeof h.text === 'string' && cleanText(h.text) ? h.textEditedAt : '');
+const editedText = (h) => (typeof h.textEditedAt === 'string' && h.textEditedAt && validText(h.text) ? h.textEditedAt : '');
 
 function mergeHighlight(a, b) {
   const out = mergeItem(a, b, USER_FIELDS);
@@ -355,13 +357,17 @@ function mergeHighlight(a, b) {
   const ta = editedText(a);
   const tb = editedText(b);
   if (ta || tb) {
-    const [, winner] = order(a, b, ta, tb);
+    const [loser, winner] = order(a, b, ta, tb);
     out.text = winner.text;
     out.textEditedAt = winner.textEditedAt;
-    out.originalText = a.originalText ?? b.originalText ?? (ta ? b.text : a.text);
+    // 取り込んだときの文も勝った方から採る（統合の向きで結果を変えない）。古い版のデータで無ければ、もう一方の文
+    // 外から来た文字列でない値は採らない
+    const original = [winner.originalText, loser.originalText, loser.text].find(validText);
+    if (original) out.originalText = original;
+    else delete out.originalText;
   } else {
     for (const k of ['textEditedAt', 'originalText']) delete out[k];
-    if (typeof out.text !== 'string' || !cleanText(out.text)) out.text = [a.text, b.text].find((t) => typeof t === 'string' && cleanText(t)) ?? out.text;
+    if (!validText(out.text)) out.text = [a.text, b.text].find(validText) ?? out.text;
   }
   // 伸ばしたハイライトに置き換わった古い点は、どちらの端末から来ても消えたまま
   const supersededBy = [a.supersededBy, b.supersededBy].filter(Boolean).sort()[0];
@@ -409,6 +415,14 @@ export function mergeLibraries(base, incoming) {
       for (const k of ['favorite', 'tags', 'userNote']) target[k] = structuredClone(h[k]);
       target.userUpdatedAt = hs;
       target.updatedAt = later(target.updatedAt, hs);
+    }
+    // 直した文も、置き換え先より新しければ引き継ぐ（伸ばした文は取り込んだときの文として残す）
+    const ts = editedText(h);
+    if (ts && ts > editedText(target)) {
+      target.originalText = importedText(target);
+      target.text = h.text;
+      target.textEditedAt = ts;
+      target.updatedAt = later(target.updatedAt, ts);
     }
   }
   // おすすめへの反応は、付けた時刻が新しい方
@@ -506,7 +520,7 @@ export function updateHighlight(library, id, patch, now = new Date().toISOString
   const h = library.highlights[id];
   if (!h) return null;
   const allowed = ['favorite', 'tags', 'userNote', 'deleted'];
-  if ('text' in patch) {
+  if (patch.text !== undefined) {
     const text = cleanText(patch.text);
     if (!text) throw new Error('点の文を入力してください');
     if (text !== h.text) {

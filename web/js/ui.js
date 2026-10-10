@@ -66,7 +66,7 @@ export function highlightCard(h, { library, lines = [], query = '', showBook = t
       </div>
       <div class="hl-actions">
         <button class="icon-btn ${h.favorite ? 'on' : ''}" data-action="fav" data-id="${h.id}" aria-pressed="${String(Boolean(h.favorite))}" aria-label="お気に入り">${h.favorite ? '★' : '☆'}</button>
-        <button class="icon-btn" data-action="edit" data-id="${h.id}" aria-label="メモ・タグを編集">✎</button>
+        <button class="icon-btn" data-action="edit" data-id="${h.id}" aria-label="点を編集">✎</button>
         <button class="icon-btn" data-action="copy" data-id="${h.id}" aria-label="引用をコピー">⧉</button>
         <a class="icon-btn" href="#/point/${h.id}" aria-label="点のページを開く（永久ノート）">↗</a>
       </div>

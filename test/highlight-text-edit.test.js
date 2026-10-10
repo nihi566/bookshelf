@@ -83,6 +83,57 @@ test('同期: 文は直した時刻が新しい方を採る。別の端末でタ
   }
 });
 
+test('同期: 両方の端末で直した文は、統合の向きに依らず同じ結果になる', () => {
+  const { lib: pc, id } = oneHighlight();
+  const phone = structuredClone(pc);
+  updateHighlight(pc, id, { text: 'PC で直した文' }, T2);
+  updateHighlight(phone, id, { text: 'スマホで直した文' }, T2);
+  // 片方は伸ばしたハイライトから引き継いだ、別の取り込んだときの文を持つ
+  phone.highlights[id].originalText = '別の取り込んだ文';
+  assert.deepEqual(mergeLibraries(pc, phone).highlights[id], mergeLibraries(phone, pc).highlights[id]);
+  const merged = mergeLibraries(pc, phone);
+  assert.equal(mergeLibraries(merged, merged).highlights[id].text, merged.highlights[id].text);
+});
+
+test('同期: 別の端末で伸ばしたハイライトに置き換わっても、直した文は置き換え先に引き継ぐ', () => {
+  const { lib: pc, id } = oneHighlight('短い文');
+  const phone = structuredClone(pc);
+  updateHighlight(pc, id, { text: '短い文（PC で直した）' }, T2);
+  mergeParsed(phone, [{ title: '本', source: 'kindle', highlights: [{ text: '短い文を伸ばした', location: 100, locationEnd: 104 }] }], { now: T3 });
+  const longId = phone.highlights[id].supersededBy;
+  for (const merged of [mergeLibraries(pc, phone), mergeLibraries(phone, pc)]) {
+    assert.equal(merged.highlights[id].deleted, true);
+    const h = merged.highlights[longId];
+    assert.equal(h.text, '短い文（PC で直した）');
+    assert.equal(h.originalText, '短い文を伸ばした');
+    assert.equal(h.textEditedAt, T2);
+  }
+});
+
+test('同期: 外から来た取り込んだときの文・直した時刻が文字列でなければ採らない', () => {
+  const { lib: pc, id } = oneHighlight();
+  const broken = structuredClone(pc);
+  Object.assign(broken.highlights[id], { text: '直した文', textEditedAt: 123 });
+  for (const m of [mergeLibraries(pc, broken), mergeLibraries(broken, pc)]) {
+    assert.equal('textEditedAt' in m.highlights[id], false);
+    assert.equal('originalText' in m.highlights[id], false);
+  }
+  Object.assign(broken.highlights[id], { textEditedAt: T2, originalText: { x: 1 } });
+  const merged = mergeLibraries(pc, broken);
+  assert.equal(merged.highlights[id].text, '直した文');
+  assert.equal(merged.highlights[id].originalText, '取り込んだ文');
+  // 壊れた取り込んだときの文を持っていても、再取り込みは落ちない
+  broken.highlights[id].originalText = { x: 1 };
+  assert.doesNotThrow(() => mergeParsed(broken, [{ title: '本', source: 'kindle', highlights: [{ text: '取り込んだ文を伸ばした', location: 100, locationEnd: 104 }] }], { now: T3 }));
+});
+
+test('updateHighlight: text を渡さなければ文に触れない', () => {
+  const { lib, id } = oneHighlight();
+  updateHighlight(lib, id, { text: undefined, favorite: true }, T2);
+  assert.equal(lib.highlights[id].text, '取り込んだ文');
+  assert.equal(lib.highlights[id].favorite, true);
+});
+
 test('同期: 外から来た直した文が空・文字列でなければ採らない', () => {
   const { lib: pc, id } = oneHighlight();
   const broken = structuredClone(pc);
