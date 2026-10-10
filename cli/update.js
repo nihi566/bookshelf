@@ -10,6 +10,9 @@ import { execFile, spawn } from 'node:child_process';
 import { copyFile, readFile } from 'node:fs/promises';
 import { closeSync, openSync } from 'node:fs';
 import path from 'node:path';
+import { swVersion } from '../web/core/serve-version.js';
+
+export { swVersion };
 
 // この PC の常駐（タスク スケジューラ）。docs/setup.md の「常駐させる」
 export const SERVE_TASK = 'book-highlights bh serve';
@@ -43,11 +46,6 @@ export async function backupData(dataDir, stamp) {
 /** プロセスのコマンドラインが bh serve か（bh update 自身やほかの node は止めない） */
 export function isServeCommand(cmdline) {
   return /(^|[\\/\s"'])bh\.js["']?\s+serve(\s|$)/.test(String(cmdline || ''));
-}
-
-/** sw.js の版（const CACHE = 'bh-vNN'） */
-export function swVersion(text) {
-  return String(text).match(/const CACHE = '([^']+)'/)?.[1] || '';
 }
 
 /** main で git pull --ff-only origin main し、前後のコミットと取り込んだコミットの一覧を返す */
