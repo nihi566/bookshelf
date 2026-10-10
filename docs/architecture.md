@@ -29,7 +29,8 @@ Library = { version, books: { [id]: Book }, highlights: { [id]: Highlight }, fee
 Book      = { id: 'b'+hash(書名の正規化), title, author, sources: ['kindle'|'playbooks'|'paper'|'memo'], asin?, volumeId?, cover?（アップロードした表紙の data URL）, technical?（技術書か。無ければ書名から推定）, updatedAt, deleted? }
 Highlight = { id: 'h'+hash(bookId+本文の正規化), bookId, source, kind: 'highlight'|'note',
               text, note, chapter, location, locationEnd, page, color, createdAt,
-              favorite, tags, userNote, importedAt, updatedAt, deleted?, supersededBy? }
+              favorite, tags, userNote, importedAt, updatedAt, deleted?, supersededBy?,
+              originalText?, textEditedAt? }        // 文を直した点だけ: 取り込んだときの文と、直した時刻
 Thought   = { id: 't'+時刻+乱数, text, status: 'inbox'|'done'|'discarded', answerTo?: { kind, id?, question },
               createdAt, updatedAt }                    // 消したものは { id, deleted: true, createdAt, updatedAt } だけ残す
 FarReaction = { id: 'f'+hash(2 点の ID), a, b, idea, explanation, status: 'interesting'|'wrong'|'', updatedAt }  // 遠いつながりへの反応
@@ -63,6 +64,10 @@ Outline   = { id: 'o'+時刻+乱数, title, sources: [{ kind: 'plane'|'line'|'no
 - 取り込み（`mergeParsed`）は空欄を補うだけで、ユーザーの編集（★・メモ・タグ・削除）は変えない
 - Kindle で伸ばしたハイライト（本文が包含関係・位置が重なる）は新しい方に置き換え、編集を引き継ぐ
 - 削除は墓標（`deleted: true`）で持つので、再取り込みでも同期でも復活しない
+- **点の文を直す**（`updateHighlight` の `text`）: ID は変えない（リンク・永久ノートの根拠・分析の結果が切れないように）。取り込んだときの文を `originalText` に 1 回だけ残し、直した時刻を `textEditedAt` に持つ。空の文は受け付けない
+  - 再取り込みの重複・読書メモの重複・伸ばしたハイライトの判定は取り込んだときの文で行う。伸ばしたハイライトに置き換わるときは直した文を引き継ぎ、伸ばした文を `originalText` にする
+  - 同期では、★・タグとは別に `textEditedAt` が新しい方の文を採る（別の端末でタグを後から直しても、文の編集が負けない）。外から来た直した文・取り込んだときの文・直した時刻が文字列でなければ採らない。別の端末で伸ばしたハイライトに置き換わった点の直した文は、置き換え先に引き継ぐ
+  - 分析は文のハッシュで埋め込み・線をキャッシュしているので、直した点は次の分析で埋め込み直し、その点を含む線を作り直す
 - 端末間の同期（`mergeLibraries`）は **欄ごと** に統合し、どちら向きに統合しても同じ結果になる
   - 取り込みで決まる欄（章・色・位置・メモなど）は `updatedAt` が新しい方を採り、空欄はもう一方で埋める
   - 利用者の欄（★・タグ・自分のメモ・削除。本では削除・表紙・技術書）は、利用者が編集した時刻 `userUpdatedAt` が新しい方をまとめて採る。取り込みで欄が埋まっても `userUpdatedAt` は変わらないので、未同期のスマホの編集が PC 側に上書きされない（古い版のデータは、編集の跡があれば `updatedAt` で代用）
