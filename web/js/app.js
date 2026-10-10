@@ -22,7 +22,7 @@ import { outlineNewView, outlineStatusBlock, outlineView, outlinesView } from '.
 import { outlineActions } from './outline-actions.js';
 import { markDiscoveryRead } from '../core/discovery-reads.js';
 import { FAR_REACTIONS, farConnectionById, reactFar } from '../core/far-reactions.js';
-import { importView, kindleSyncBlock, playbooksSyncBlock, settingsView } from './views/settings.js';
+import { importOutcome, importResultBlock, importView, kindleSyncBlock, playbooksSyncBlock, settingsView } from './views/settings.js';
 import { wishlist } from './views/wishlist.js';
 import { records } from './views/records.js';
 import { editThoughtSheet, lineSheet, newThoughtSheet, thoughtsView } from './views/thoughts.js';
@@ -110,6 +110,8 @@ function render({ keepScroll = false } = {}) {
   // refresh: 同じ画面の描き直し（同期・編集のあと）。別の画面から来たとき・リンクを押したときは false
   const ctx = { state, params: match.params, query, shuffle, refresh: location.hash === currentHash, markDiscoveryRead: readDiscovery };
   currentHash = location.hash;
+  // 取り込みの結果は、画面を離れたら（別の画面から来たら）忘れる
+  if (!ctx.refresh) state.lastImport = null;
   const y = window.scrollY;
   view.innerHTML = String(match.view.render(ctx));
   match.view.mount?.(view, ctx);
@@ -195,8 +197,13 @@ function refreshThoughtViews() {
 
 async function importFiles(files) {
   if (!files.length) return;
-  const out = view.querySelector('#import-result');
-  if (out) out.innerHTML = '<p class="loading">読み込み中…</p>';
+  state.lastImport = null;
+  // 読み込み中に自動同期で描き直されると最初の欄は画面から外れるので、書くたびに取り直す
+  const showResult = (content) => {
+    const out = view.querySelector('#import-result');
+    if (out) out.innerHTML = content;
+  };
+  showResult('<p class="loading">読み込み中…</p>');
   try {
     const inputs = await Promise.all(files.map(async (f) => ({ name: f.name, bytes: new Uint8Array(await f.arrayBuffer()) })));
     const parsed = await parseFiles(inputs);
@@ -209,19 +216,15 @@ async function importFiles(files) {
       state.analysis = r.analysis;
       await save.analysis();
     }
-    const summary = `新しい点 ${stats.added} 件${stats.updated ? `・更新 ${stats.updated} 件` : ''}${stats.unchanged ? `・既存 ${stats.unchanged} 件` : ''}`;
-    toast(`取り込みました: ${summary}`);
-    if (out) {
-      out.innerHTML = String(html`<div class="card" style="margin-top:12px">
-        <p class="notice ${stats.added || stats.backups ? 'ok' : ''}">${summary}${r.analysisChanged ? '（バックアップの新しい分析結果も反映）' : ''}</p>
-        <ul class="result-list">${results.map((r) => html`<li>${r.error ? '✗' : '✓'} <b>${r.name}</b><br><span class="small muted">${r.error || `${r.formatLabel} — 本 ${r.books} 冊 / 点 ${r.highlights} 件${r.images ? `（画像 ${r.images} 枚は取り込めません）` : ''}`}</span></li>`)}</ul>
-        ${stats.memoTitles?.length ? html`<p class="small muted">既にある本にまとめた読書メモ: ${stats.memoTitles.map((m) => `「${m.from}」→『${m.to}』`).join('、')}</p>` : ''}
-        <div class="row" style="margin-top:8px"><a class="btn small" href="#/books">本を見る</a></div>
-      </div>`);
-    }
+    // 自動同期で画面を描き直しても結果欄を出し直せるよう、画面を離れるか次に取り込むまで覚えておく
+    state.lastImport = { results, stats, analysisChanged: r.analysisChanged };
+    const outcome = importOutcome(results, stats);
+    toast(outcome.message, outcome.failed ? 5000 : undefined);
+    showResult(String(importResultBlock(state.lastImport)));
     autoSyncAfterChange();
   } catch (e) {
-    if (out) out.innerHTML = String(html`<p class="notice err">${e.message}</p>`);
+    state.lastImport = { error: e.message };
+    showResult(String(importResultBlock(state.lastImport)));
   }
 }
 
