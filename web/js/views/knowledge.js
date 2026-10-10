@@ -85,7 +85,7 @@ const REBUILT = {
 };
 
 /**
- * 前回からの変化（増えた線・大きくなった線・消えた線・新しくつながった点）。
+ * 前回からの変化（増えた線・大きくなった線・消えた線・新しくつながった点。伸ばしただけの点は件数だけ）。
  * links: 線の画面へのリンクを張るか（過去の分析では、今の分析に無い線を指すことがあるので張らない）
  */
 function changesBlock(a, { links = true } = {}) {
@@ -94,7 +94,9 @@ function changesBlock(a, { links = true } = {}) {
   if (!c) return '';
   const head = html`<div class="section"><h2>前回からの変化</h2><span class="small muted">${isoDate(c.previousAt)} から</span></div>`;
   if (c.rebuilt) return html`${head}<p class="card small">${REBUILT[c.reason] || REBUILT.format}（線 ${a.lines.length} 本・面 ${a.planes.length}）。次からは、変わったところだけを作り直します。</p>`;
-  if (!hasChanges(c)) return html`${head}<p class="card small muted">線(グループ)の顔ぶれは変わりませんでした。</p>`;
+  // Kindle で伸ばしただけの点は変化に数えないが、取り込みが届いたことは件数で分かるようにする（NIH-94。過去の分析には無い）
+  const extended = c.extendedPoints > 0 ? `Kindle で伸ばした点 ${c.extendedPoints}（変化には数えていません）` : '';
+  if (!hasChanges(c)) return html`${head}<p class="card small muted">線(グループ)の顔ぶれは変わりませんでした。${extended ? html`<br>${extended}` : ''}</p>`;
   const lineName = (id, fallback) => a.lines.find((l) => l.id === id)?.name || fallback;
   const chip = (id, label) => (links ? html`<a class="line-chip" href="#/knowledge/line/${id}">${label}</a>` : html`<span class="line-chip">${label}</span>`);
   const connected = new Map();
@@ -105,6 +107,7 @@ function changesBlock(a, { links = true } = {}) {
       ${c.grownLines.length ? html`<div><h3 class="small">大きくなった線(グループ) ${c.grownLines.length}</h3><div class="hl-lines">${c.grownLines.map((l) => chip(l.id, html`${lineName(l.id, l.name)} <span class="nowrap">＋${l.added}</span>`))}</div></div>` : ''}
       ${c.removedLines.length ? html`<div><h3 class="small">消えた線(グループ) ${c.removedLines.length}</h3><p class="small muted">${c.removedLines.map((l) => l.name).join('、')}</p></div>` : ''}
       ${c.connectedPoints.length ? html`<div><h3 class="small">新しくつながった点 ${c.connectedPoints.length}</h3><div class="hl-lines">${[...connected].map(([id, n]) => chip(id, html`${lineName(id, '線')}に <span class="nowrap">${n} 点</span>`))}</div></div>` : ''}
+      ${extended ? html`<p class="small muted">${extended}</p>` : ''}
     </section>`;
 }
 

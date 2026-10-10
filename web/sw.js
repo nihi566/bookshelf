@@ -8,6 +8,8 @@ const SHELL = [
   'manifest.webmanifest',
   'icons/icon.svg',
   'js/app.js',
+  'js/routes.js',
+  'js/app-actions.js',
   'js/db.js',
   'js/html.js',
   'js/services.js',
