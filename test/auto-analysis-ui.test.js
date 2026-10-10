@@ -56,7 +56,8 @@ test('G5-3: 知識の画面に、自動の分析の失敗の理由と最後に�
   assert.match(off, /<b>オフ<\/b>/);
   assert.match(String(autoStatusBlock(st(lib, null, { mode: 'direct' }))), /PC のコンパニオン（bh serve）を使うときに動きます/);
   // PC の情報を取り直したら、この欄だけ差し替える
-  assert.match(readFileSync(join(WEB, 'js/app.js'), 'utf8'), /'\/knowledge': \[\['#auto-status', autoStatusBlock\]\]/);
+  const { PC_INFO_BOXES } = await import('../web/js/routes.js');
+  assert.deepEqual(PC_INFO_BOXES['/knowledge'], [['#auto-status', autoStatusBlock]]);
 });
 
 test('G5-4: 知識の画面で「前回から増えた線・大きくなった線・消えた線・新しくつながった点」が見られ、過去の分析を開ける', async () => {
@@ -76,7 +77,9 @@ test('G5-4: 知識の画面で「前回から増えた線・大きくなった�
   assert.match(rebuilt, /今回は最初から作り直しました/);
   // 過去の分析を開く画面（PC から 1 回分を取りに行く）
   assert.match(String(historyView.render({ params: { id: '20261004T100000000Z' } })), /<h1>過去の分析<\/h1>/);
-  assert.match(readFileSync(join(WEB, 'js/app.js'), 'utf8'), /\[\/\^\\\/knowledge\\\/history\\\/\(\?<id>\[0-9TZ\]\+\)\$\/, historyView, 'knowledge'\]/);
+  const { matchRoute } = await import('../web/js/routes.js');
+  const route = matchRoute('/knowledge/history/20261004T100000000Z');
+  assert.deepEqual([route.view, route.tab, route.params.id], [historyView, 'knowledge', '20261004T100000000Z']);
 });
 
 test('#67: 立体の「これからの問い」・線の問い・「答えを書く」は出さない。これまでに書いた答えは消えず、点のまま残る', async () => {
@@ -90,8 +93,11 @@ test('#67: 立体の「これからの問い」・線の問い・「答えを書
   assert.doesNotMatch(line, /問い: |どう続けるか|答えを書く|data-action="answer"/);
   assert.ok(historyView, '過去の分析の画面は残る');
   // 答えを書く処理と、それ専用の部品・文言・CSS は残さない
-  const app = readFileSync(join(WEB, 'js/app.js'), 'utf8');
-  assert.doesNotMatch(app, /\n  answer\(el\)|newThoughtSheet\(\{ question/);
+  // 操作を作るどの部品にも「答えを書く」は無い
+  const { fakeApp } = await import('./helpers/app-actions.js');
+  const deps = { state: st(lib, a), openSheet() {}, toast() {}, persist: async () => {}, sync() {}, render() {}, go() {}, confirm: () => true };
+  const factories = await Promise.all(['note', 'link', 'ask', 'outline'].map((k) => import(`../web/js/${k}-actions.js`).then((m) => m[`${k}Actions`](deps))));
+  for (const ops of [fakeApp(st(lib, a)).actions, ...factories]) assert.ok(!Object.hasOwn(ops, 'answer'));
   const thoughtsJs = readFileSync(join(WEB, 'js/views/thoughts.js'), 'utf8');
   assert.doesNotMatch(thoughtsJs, /answerBlock|answersTo|問いに答える/);
   assert.doesNotMatch(readFileSync(join(WEB, 'css/app.css'), 'utf8'), /\.answers|\.answer-list|ul\.questions/);
