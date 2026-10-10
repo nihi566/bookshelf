@@ -721,20 +721,6 @@ const actions = {
   'run-analysis': () => runAnalysis('analyze'),
   'run-analysis-full': () => runAnalysis('full'),
   'rerun-recommend': () => runAnalysis('recommend'),
-  // 立体・線の問いに答える（答えは思いつきとして受け箱に入り、次の分析で点になる）
-  answer(el) {
-    if (!state.loaded) return toast('まだ端末のデータを読み込んでいます。少し待ってから押してください');
-    const question = el.dataset.question;
-    const answerTo = { kind: el.dataset.kind, question, ...(el.dataset.ref ? { id: el.dataset.ref } : {}) };
-    const id = randomId('t');
-    openSheet(newThoughtSheet({ question }), async (data) => {
-      addThought(state.library, { text: data.get('text'), answerTo }, undefined, id);
-      await persistLibrary();
-      toast('答えを受け箱に入れました。次の分析から点になります');
-      render({ keepScroll: true });
-      autoSyncAfterChange();
-    });
-  },
   'cancel-analysis': cancelAnalysis,
   'check-pc-job': () => checkPcJob(),
   async 'rec-feedback'(el) {

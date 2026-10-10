@@ -6,33 +6,12 @@ import { lineIndex, thoughtCard } from '../ui.js';
 // ホームの受け箱に並べる件数（残りはメモの一覧で見る）
 const INBOX_ON_HOME = 3;
 
-/**
- * 思いつきを書くシートの中身（どの画面からも上のバーの「メモ」で開く）。
- * question を渡すと、立体・線の問いへの答えとして書く（答えも思いつきとして次の分析の点になる）
- */
-export function newThoughtSheet({ question = '' } = {}) {
-  return html`<h2>${question ? '問いに答える' : '思いつきをメモ'}</h2>
-    ${question ? html`<p class="quote">${question}</p>` : ''}
-    <label class="field"><span>${question ? '答え（考えたこと・やってみたこと）' : 'メモ（本に関係なくてよい）'}</span><textarea name="text" rows="5" maxlength="${THOUGHT_MAX_LENGTH}" autofocus placeholder="${question ? '答えが出ていなくても、いま考えていることでよい' : '思いついたこと・気づいたことを 1 つ'}"></textarea></label>
+/** 思いつきを書くシートの中身（どの画面からも上のバーの「メモ」で開く） */
+export function newThoughtSheet() {
+  return html`<h2>思いつきをメモ</h2>
+    <label class="field"><span>メモ（本に関係なくてよい）</span><textarea name="text" rows="5" maxlength="${THOUGHT_MAX_LENGTH}" autofocus placeholder="思いついたこと・気づいたことを 1 つ"></textarea></label>
     <p class="help">受け箱に入り、次の分析から点になります。整理はあとで。</p>
     <div class="row spread"><span></span><span class="row"><button class="btn" value="cancel">やめる</button><button class="btn primary" value="save">保存</button></span></div>`;
-}
-
-/**
- * その問いへの答え（捨てたもの・消したものは除く）。新しい順。
- * 線の問いは線の ID でも結びつける（線が育つと AI が問いの文を書き直すため、文だけでは答えが見えなくなる）
- */
-export function answersTo(library, question, { kind = '', ref = '' } = {}) {
-  return searchThoughts(library, '').filter((t) => t.answerTo?.question === question || (kind === 'line' && ref && t.answerTo?.kind === 'line' && t.answerTo.id === ref));
-}
-
-/** 問いの下に出す「答えを書く」ボタンと、書いた答え（kind: solid / line、ref: 線の ID） */
-export function answerBlock(library, { question, kind, ref = '' }) {
-  const answers = answersTo(library, question, { kind, ref });
-  return html`<div class="answers">
-    <button type="button" class="btn small" data-action="answer" data-kind="${kind}" data-ref="${ref}" data-question="${question}">答えを書く</button>
-    ${answers.length ? html`<ul class="plain answer-list">${answers.slice(0, 3).map((t) => html`<li>${t.text}</li>`)}</ul>${answers.length > 3 ? html`<p class="small muted">ほか ${answers.length - 3} 件（メモの一覧にあります）</p>` : ''}` : ''}
-  </div>`;
 }
 
 /** 思いつきを直すシートの中身 */
