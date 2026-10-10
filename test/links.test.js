@@ -628,3 +628,64 @@ test('G4: 利用者の文（ノートの題・理由）はリンクの画面で�
   const odd = String(pointView.render({ state: { library: lib, analysis: { ...base, neighbors: {} }, loaded: true }, params: { id: 'constructor' } }));
   assert.match(odd, /この点には、まだ意味の近い点がありません/);
 });
+
+test('NIH-15: リンクの行（点どうし・点とメモ）の「ノートにする」で、両端の点を根拠に、理由を題の下書きにした書くシートが開く（ノートに張ったリンクは対象外）', async () => {
+  const { linksBlock } = await import('../web/js/views/links.js');
+  const { noteActions } = await import('../web/js/note-actions.js');
+  const { liveNotes } = await import('../web/core/notes.js');
+  const lib = sampleLibrary();
+  const [h1, h2] = pointsFromBooks(lib, 2);
+  const t = addThought(lib, { text: '集中は環境で決まる' }, T, 'tnih15');
+  addNote(lib, { title: '注意は資源', body: '' }, T, 'n1abc');
+  const pp = addLink(lib, h1.id, h2.id, '集中を守る仕組み', T);
+  const pt = addLink(lib, h1.id, t.id, '', T2);
+  const pn = addLink(lib, h1.id, 'n1abc', 'ノートへ', T3);
+  const state = { library: lib, analysis: null, loaded: true };
+  // 出る行・出ない行
+  const block = String(linksBlock(state, h1.id));
+  assert.equal(count(block, /data-action="link-to-note"/g), 2, '点どうし・点とメモの 2 行だけ');
+  assert.match(block, new RegExp(`data-action="link-to-note" data-id="${pp.id}"`));
+  assert.match(block, new RegExp(`data-action="link-to-note" data-id="${pt.id}"`));
+  assert.doesNotMatch(block, new RegExp(`data-action="link-to-note" data-id="${pn.id}"`), 'ノートに張ったリンクには出さない');
+  assert.doesNotMatch(String(linksBlock(state, 'n1abc')), /data-action="link-to-note"/, 'ノートの画面のリンクにも出さない');
+  // 押すと、両端の点を根拠に、理由を題の下書きにした書くシートが開く
+  const log = { sheets: [], toasts: [], went: [], persisted: 0, synced: 0 };
+  const deps = {
+    state,
+    openSheet: (content, onSubmit) => log.sheets.push({ html: String(content), submit: onSubmit }),
+    toast: (m) => log.toasts.push(m),
+    persist: async () => log.persisted++,
+    sync: () => log.synced++,
+    render: () => {},
+    go: (h) => log.went.push(h),
+    confirm: () => true,
+  };
+  const actions = noteActions(deps);
+  actions['link-to-note']({ dataset: { id: pp.id } });
+  const sheet = log.sheets[0].html;
+  assert.match(sheet, /<h2>永久ノートを書く<\/h2>/);
+  assert.match(sheet, /name="title" maxlength="\d+" value="集中を守る仕組み"/);
+  assert.match(sheet, new RegExp(`name="point" value="${h1.id}" checked`));
+  assert.match(sheet, new RegExp(`name="point" value="${h2.id}" checked`));
+  const fields = { title: '集中を守る仕組み', body: '自分の言葉', point: [h1.id, h2.id] };
+  await log.sheets[0].submit({ get: (k) => [].concat(fields[k] ?? [])[0] ?? null, getAll: (k) => [].concat(fields[k] ?? []) }, 'save');
+  const [n] = liveNotes(lib).filter((x) => x.id !== 'n1abc');
+  assert.deepEqual([n.title, n.pointIds], ['集中を守る仕組み', [h1.id, h2.id]]);
+  assert.deepEqual([log.persisted, log.synced, log.went], [1, 1, [`#/note/${n.id}`]]);
+  // 理由が無ければ題は空。メモも根拠になる
+  actions['link-to-note']({ dataset: { id: pt.id } });
+  assert.match(log.sheets[1].html, /name="title" maxlength="\d+" value=""/);
+  assert.match(log.sheets[1].html, new RegExp(`name="point" value="${t.id}" checked`));
+  // 長い理由は題の長さで切る
+  const long = addLink(lib, h2.id, t.id, 'あ'.repeat(LINK_REASON_MAX), T4);
+  actions['link-to-note']({ dataset: { id: long.id } });
+  assert.match(log.sheets[2].html, /value="あ{100}"/);
+  // ノートに張ったリンク・外したリンクでは開かない。読み込む前も開かない
+  actions['link-to-note']({ dataset: { id: pn.id } });
+  removeLink(lib, pp.id);
+  actions['link-to-note']({ dataset: { id: pp.id } });
+  assert.equal(log.sheets.length, 3);
+  noteActions({ ...deps, state: { ...state, loaded: false } })['link-to-note']({ dataset: { id: pt.id } });
+  assert.equal(log.sheets.length, 3);
+  assert.match(log.toasts.at(-1), /読み込んで/);
+});

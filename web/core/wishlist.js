@@ -297,6 +297,20 @@ export function priceTotal(items) {
   return { total: priced.reduce((sum, { book }) => sum + book.price, 0), priced: priced.length, unpriced: items.length - priced.length };
 }
 
+// 価格チェックの一覧で一度に描く件数（773 冊を毎回全部描かない。続きは「さらに表示」で足す）
+export const WISHLIST_PAGE_SIZE = 100;
+
+/**
+ * 絞り込み結果のうち、先頭から shown 件だけを描く分として切り出す。不正な shown は 1 ページ分として扱う
+ * @returns {{ visible: any[], rest: number, next: number }} rest はまだ描いていない件数、next は「さらに表示」で足す件数
+ */
+export function pageWishlist(items, shown) {
+  const n = Number.isInteger(shown) && shown > 0 ? shown : WISHLIST_PAGE_SIZE;
+  const visible = items.slice(0, n);
+  const rest = items.length - visible.length;
+  return { visible, rest, next: Math.min(rest, WISHLIST_PAGE_SIZE) };
+}
+
 /** 前回の価格からの差（diff。負なら値下がり）と、記録上の最安値か。一度も変わっていなければ null */
 export function priceChange(book) {
   const t = book.trend;

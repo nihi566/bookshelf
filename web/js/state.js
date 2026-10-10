@@ -29,6 +29,8 @@ export const state = {
   pcSyncFailed: false,
   // PC のコンパニオンサーバの状態（拡張の確認結果など）
   pcInfo: null,
+  // 取り込み画面の最後の取り込み結果（保存しない。自動同期の描き直しのあとも結果欄を出し直すため。画面を離れたら消す）
+  lastImport: null,
   // 端末に保存したデータを読み終えたか。読み終える前に保存すると、空のライブラリで上書きしてしまう
   loaded: false,
 };
