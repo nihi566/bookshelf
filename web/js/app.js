@@ -3,7 +3,7 @@ import { html } from './html.js';
 import { kv, requestPersistence } from './db.js';
 import { loadCache, loadState, save, saveCache, state } from './state.js';
 import { buildBookmarklet, companion, detectServedByCompanion, download, syncWithPc } from './services.js';
-import { kindleAlertBlock, openSheet, toast } from './ui.js';
+import { homeAlertBlock, openSheet, toast } from './ui.js';
 import { book, books, home, search } from './views/library.js';
 import { autoStatusBlock, historyView, isolatedView, knowledge, lineView, planeView } from './views/knowledge.js';
 import { linesView, planesView, solidView } from './views/layers.js';
@@ -421,7 +421,7 @@ const PC_INFO_PATHS = ['/settings', '/import', '/', '/knowledge'];
 // 描き直さず、欄だけ差し替える画面（描き直すと取り込み結果の表示・開いた説明・今日の点の「別の点」が消える）
 const PC_INFO_BOXES = {
   '/import': [['#kindle-sync', kindleSyncBlock], ['#playbooks-sync', playbooksSyncBlock]],
-  '/': [['#kindle-alert', kindleAlertBlock]],
+  '/': [['#home-alert', homeAlertBlock]],
   '/knowledge': [['#auto-status', autoStatusBlock]],
 };
 
