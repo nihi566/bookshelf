@@ -157,14 +157,20 @@ test('G5-3: 自動の分析が失敗しても前回の結果は残り、失敗�
     assert.ok(info.autoAnalysis.lastErrorAt);
     assert.equal(info.autoAnalysis.lastSuccessAt, okAt);
     assert.equal(info.autoAnalysis.pending, 10);
-    // すぐには試し直さないが、時間がたてば試し直す（LLM が戻っていれば成功する）
+    assert.equal(info.autoAnalysis.failureCount, 1, '続けて失敗した回数（NIH-53: ホームの警告に出す）');
+    // すぐには試し直さないが、時間がたてば試し直す（LLM が戻っていなければ、続けて失敗した回数が増える）
     assert.equal((await server.checkAutoAnalyze()).started, false);
-    await store.saveConfig(cfg);
     const later = new Date(Date.now() + AUTO_RETRY_MS + 60_000);
     assert.equal((await server.checkAutoAnalyze(later)).started, true);
+    assert.equal((await waitJob(base)).stage, 'error');
+    assert.equal((await (await fetch(`${base}/api/info`)).json()).autoAnalysis.failureCount, 2);
+    // LLM が戻っていれば成功し、回数は 0 に戻る
+    await store.saveConfig(cfg);
+    assert.equal((await server.checkAutoAnalyze(new Date(later.getTime() + AUTO_RETRY_MS + 60_000))).started, true);
     assert.equal((await waitJob(base)).stage, 'done');
     const after = await (await fetch(`${base}/api/info`)).json();
     assert.equal(after.autoAnalysis.lastError, '');
+    assert.equal(after.autoAnalysis.failureCount, 0);
     assert.equal(after.autoAnalysis.pending, 0);
   });
 });

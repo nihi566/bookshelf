@@ -271,8 +271,34 @@ export function kindleSyncAlert(ks, now = new Date().toISOString()) {
   return ALERT_STATES.includes(kindleSyncState(ks, now)) ? kindleSyncLines(ks, now)[0] : '';
 }
 
-/** ホームの警告欄の中身。PC モードで PC の情報を取れているときだけ出す。押すと取り込み画面で詳しく見られる */
+const ALERT_STYLE = 'display:block;margin-bottom:12px;text-decoration:none';
+
+/** ホームに出す自動取り込みの警告。PC モードで PC の情報を取れているときだけ出す。押すと取り込み画面で詳しく見られる */
 export function kindleAlertBlock(state) {
   const text = state.settings.ai.mode === 'companion' && state.pcInfo ? kindleSyncAlert(state.pcInfo.kindleSync) : '';
-  return text ? html`<a class="notice err" href="#/import" style="display:block;margin-bottom:12px;text-decoration:none">${text}（詳しく）</a>` : '';
+  return text ? html`<a class="notice err" href="#/import" style="${ALERT_STYLE}">${text}（詳しく）</a>` : '';
+}
+
+// ホームの 1 行に収めるため、失敗の理由はここまでで切る
+const ANALYSIS_ALERT_REASON_MAX = 80;
+
+/**
+ * ホームに出す分析の失敗の警告（1 行）。自動の分析がオフのとき・失敗していないとき・最後の失敗より新しい成功があるときは空文字
+ * @param {{ enabled?: boolean, lastError?: string, lastErrorAt?: string|null, lastSuccessAt?: string|null, failureCount?: number } | null | undefined} au /api/info の autoAnalysis
+ * @returns {string}
+ */
+export function autoAnalysisAlert(au) {
+  if (!au?.enabled || !au.lastError) return '';
+  if (au.lastSuccessAt && au.lastErrorAt && au.lastSuccessAt >= au.lastErrorAt) return '';
+  const error = String(au.lastError);
+  const reason = error.length > ANALYSIS_ALERT_REASON_MAX ? `${error.slice(0, ANALYSIS_ALERT_REASON_MAX)}…` : error;
+  const count = Number(au.failureCount) || 0;
+  return count >= 2 ? `PC の分析が ${count} 回続けて失敗しています（${reason}）` : `PC の分析に失敗しています（${reason}）`;
+}
+
+/** ホームの先頭の警告欄（自動取り込み・分析の失敗）。PC モードで PC の情報を取れているときだけ出す。分析の警告は押すと知識の画面へ */
+export function homeAlertBlock(state) {
+  if (state.settings.ai.mode !== 'companion' || !state.pcInfo) return '';
+  const text = autoAnalysisAlert(state.pcInfo.autoAnalysis);
+  return html`${kindleAlertBlock(state)}${text ? html`<a class="notice err" href="#/knowledge" style="${ALERT_STYLE}">${text}（詳しく）</a>` : ''}`;
 }

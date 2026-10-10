@@ -152,7 +152,7 @@ async function main() {
         await store.saveAnalysis(analysis);
         // 知識の画面の「最後に成功」と失敗の表示を、bh analyze で分析したときも合わせる
         const st = await store.state();
-        await store.saveState({ ...st, autoAnalysis: { ...(st.autoAnalysis || {}), lastRunAt: analysis.createdAt, lastSuccessAt: new Date().toISOString(), lastError: '', lastErrorAt: null, lastTrigger: 'manual' } });
+        await store.saveState({ ...st, autoAnalysis: { ...(st.autoAnalysis || {}), lastRunAt: analysis.createdAt, lastSuccessAt: new Date().toISOString(), lastError: '', lastErrorAt: null, failureCount: 0, lastTrigger: 'manual' } });
         process.stdout.write('\n');
         const { chat, embed } = analysis.stats.calls;
         console.log(`${analysis.incremental ? '前回の線・面を引き継ぎました' : '最初から作り直しました'}（AI を呼んだ回数: チャット ${chat}・埋め込み ${embed}。おすすめの本と遠い組み合わせの判定は除く）`);
