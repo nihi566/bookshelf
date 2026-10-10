@@ -236,7 +236,12 @@ export function openSheet(content, onSubmit) {
     e.preventDefault();
     tryClose();
   };
+  // 開いただけで書く欄に入らない（スマホではキーボードが開き、閉じないと下のボタンが押せない。NIH-90）。
+  // dialog に autofocus が無いと、showModal() は中の最初の欄に入る。開いてすぐ書くシートは、その欄に autofocus を付けてある
+  const typeFirst = Boolean(form.querySelector('[autofocus]'));
+  dialog.toggleAttribute('autofocus', !typeFirst);
   dialog.showModal();
+  if (!typeFirst) dialog.focus({ preventScroll: true });
 }
 
 /** 時刻を短く（例: 9/27 18:05） */
