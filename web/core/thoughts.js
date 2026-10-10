@@ -128,6 +128,11 @@ export function liveThoughts(library) {
   return Object.values(thoughtsOf(library)).filter((t) => !t.deleted);
 }
 
+/** PC にまだ届いていないメモの数（消したメモは数えない。整理済み・捨てたへの変更も届いていなければ数える） */
+export function countUnsyncedThoughts(library, lastSync) {
+  return liveThoughts(library).filter((t) => isThoughtUnsynced(t, lastSync)).length;
+}
+
 /** 分析・今日の点・検索に使う思いつき（捨てたものを除く） */
 export function pointThoughts(library) {
   return liveThoughts(library).filter((t) => t.status !== 'discarded');
