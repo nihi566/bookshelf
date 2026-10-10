@@ -2,7 +2,7 @@
 //
 // library.lineAssignments = { [思いつきの ID]: { id, lineId, lineName, updatedAt } }
 // - lineId が '' のものは「外した」記録（外したことも同期で届くよう、消さずに残す）
-// - AI の分析（analysis.lines）とは別に持つので、分析し直しても消えない。
+// - AI の分析（analysis.lines）とは別に持つので、分析し直しても消えない。分析し直すと、入れた線(グループ)の点として AI に見せる（pipeline.js の placeAssigned）。
 //   最初から作り直して線(グループ)の ID が変わったら、lineName で「無くなった」と出す
 
 import { mergeCollections } from './collections.js';
