@@ -21,6 +21,8 @@ export const state = {
   analysis: null,
   settings: structuredClone(DEFAULT_SETTINGS),
   servedByCompanion: false,
+  // PC が配信している画面かを確かめ終えたか（届かなかった間は false のまま、あとで確かめ直す）
+  companionOriginChecked: false,
   job: null,
   lastSync: null,
   // 最後の PC との同期が失敗したか（保存しない。開き直すたびに同期し直す）

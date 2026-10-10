@@ -8,6 +8,8 @@ import { analysisStamp } from '../core/importing.js';
 // 意味で探す・問いかける・骨組みを作るを待つ長さ（問いかけ・骨組みは PC の AI が文を書くので長め。切れると PC 側の処理も止まる）
 const SEARCH_TIMEOUT_MS = 30 * 1000;
 const ASK_TIMEOUT_MS = 3 * 60 * 1000;
+// PC が配信している画面かを確かめるのを待つ長さ（つながりかけの Tailscale で返事が来ないまま、探し直しが止まらないように）
+const PROBE_TIMEOUT_MS = 5 * 1000;
 
 export function companionBase() {
   const url = state.settings.ai.companionUrl.trim().replace(/\/+$/, '');
@@ -67,16 +69,47 @@ export const companion = {
   historyEntry: (id) => call(`/api/history/${encodeURIComponent(id)}`),
 };
 
-/** 同一オリジンでコンパニオンサーバが動いているか（http://localhost:8787 で開いた場合など） */
-export async function detectServedByCompanion() {
+/**
+ * 同一オリジンでコンパニオンサーバが動いているか（http://localhost:8787 や Tailscale の URL で開いた場合など）。
+ * 通信できない・返事が無い・5xx（PC の bh serve が再起動中で Tailscale が 502 を返す等）なら null（まだ分からない。
+ * Tailscale がつながっていない間も、画面はサービスワーカーのキャッシュから開ける）
+ */
+export async function probeCompanionOrigin(st = state, timeoutMs = PROBE_TIMEOUT_MS) {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+  let res;
   try {
-    const res = await fetch('api/info', { headers: state.settings.ai.token ? { 'X-BH-Token': state.settings.ai.token } : {} });
-    if (!res.ok && res.status !== 401) return false;
-    if (res.status === 401) return true;
+    res = await fetch('api/info', { headers: st.settings.ai.token ? { 'X-BH-Token': st.settings.ai.token } : {}, signal: ctrl.signal });
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
+  if (res.status === 401) return true;
+  if (res.status >= 500) return null;
+  if (!res.ok) return false;
+  try {
     return (await res.json())?.app === 'book-highlights';
   } catch {
     return false;
   }
+}
+
+/**
+ * PC が配信している画面かを確かめ、st.servedByCompanion に入れる。
+ * 届かなかったときは確かめ直せるように残す（起動したときに 1 回だけ確かめると、そのとき PC に届かなかった画面は
+ * 開き直すまで同期しなくなり、スマホで書いたメモが PC に届かない。NIH-57）。
+ * 届いて PC ではないと分かった（GitHub Pages など）とき・PC の URL を設定しているときは問い合わせない。
+ * @returns {Promise<boolean>} 今回はじめて PC だと分かったか
+ */
+export async function detectCompanion(st = state, probe = probeCompanionOrigin) {
+  if (st.settings.ai.mode !== 'companion' || st.settings.ai.companionUrl.trim()) return false;
+  if (st.servedByCompanion || st.companionOriginChecked) return false;
+  const found = await probe(st);
+  if (found === null) return false;
+  st.companionOriginChecked = true;
+  st.servedByCompanion = found;
+  return found;
 }
 
 /** PC と同期: ライブラリは双方向に統合、分析結果は新しい方を採用 */
