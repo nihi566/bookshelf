@@ -5,7 +5,36 @@
 - **静的サイト + PC のコンパニオン**：画面は GitHub Pages に置ける静的ファイルだけで作り、AI（ローカル LLM）は PC 側が受け持つ。ハイライトと分析結果はこのシステムだけで管理する（Obsidian などへの書き出しはしない）
 - **同じコードをブラウザと PC で使う**：`web/core/` はブラウザと Node の両方で動く純粋な ES モジュール（DOM や `fs` に依存しない）。パーサ・モデル・分析パイプラインは 1 か所にしかない
 - **依存ライブラリは 1 つだけ**：zip の読み書き、docx の解析、HTML の分解、k-means まで自前。例外は知識マップの図（重ならない並べ方・拡大縮小・指での移動）を描く Cytoscape.js（MIT）で、ビルド済みの 1 ファイルを `web/vendor/` に同梱している（npm では入れない）。ビルド不要で `web/` をそのまま公開できる
-- **データは手元だけ**：ハイライトは端末の IndexedDB と PC の `data/*.json` にだけ置く。外に出るのは、ローカル LLM への依頼と、おすすめの本を探す検索語・書名（Google Books / 国立国会図書館サーチ）のみ。ハイライトの本文は外部に送らない
+- **データは手元だけ**：ハイライトは端末の IndexedDB と PC の `data/*.json` にだけ置く。ハイライトの本文を外に出すのは、自分の PC のローカル LLM・コンパニオンへの依頼だけ。外部のサービスに送るのは、おすすめの本を探す検索語・書名と、読書記録（書名・著者・読了日など）だけで、ハイライトの本文は送らない。通信先の一覧は §外部との通信先
+
+## 外部との通信先
+
+ソース（`web`〔`web/vendor`・`web/wishlist-site` を除く〕・`cli`・`extension`）に `http(s)://` で書いたホストは、すべてこの表に載せる。
+表とソースのホストが食い違うと `test/egress-hosts.test.js` が落ちる（表に無いホストを足したとき・使わなくなったホストを表に残したとき）。
+新しい通信先を足すときは、何を送るか（ハイライトの本文を含まないか）を確かめて行を足す。
+
+| ホスト | 何をやりとりするか | 送るもの |
+| --- | --- | --- |
+| `localhost`・`127.0.0.1` | 自分の PC のコンパニオン（`bh serve`）・ローカル LLM（Ollama など）。Google ログインの戻り先（`cli/google.js`） | ハイライトの本文を含む（手元の PC の中だけ） |
+| `www.googleapis.com` | Google Books で本を探す（`recommend.js`）。PC が Google ドライブから Play ブックスのメモを読む（`cli/google.js`。読み取り専用） | 検索語・書名。ドライブには読み取りの依頼だけ |
+| `accounts.google.com`・`oauth2.googleapis.com` | Google ドライブを読むためのログイン・トークンの更新と取り消し（`cli/google.js`） | ログインの情報だけ |
+| `ci.nii.ac.jp` | CiNii Books で本を探す（`recommend.js`） | 検索語 |
+| `ndlsearch.ndl.go.jp` | 国立国会図書館サーチで本を探す・実在を確かめる（`recommend.js`） | 検索語・書名・著者 |
+| `books.google.com` | 表紙の画像（Play ブックスの書籍 ID）と、おすすめの本のページへのリンク | 書籍 ID |
+| `images-na.ssl-images-amazon.com` | 表紙の画像（ASIN） | ASIN |
+| `api.github.com` | 読書記録 `records.json` を読み書きする（`records-github.js`） | 読書記録（書名・著者・ASIN・読了日・ページ数）と、利用者が保存した GitHub のトークン |
+| `nihi566.github.io` | 欲しい本の一覧 `wishlist.json` を読む（`wishlist-data.js`。フィードの URL の案内にも使う）。コンパニオンが受け付けるオリジンの既定値（`cli/store.js`） | 何も送らない（読むだけ） |
+| `read.amazon.co.jp`・`read.amazon.com` | Kindle のノートブックからハイライトを読む（ブラウザ拡張・ブックマークレット）。ノートブックを開くリンク | 何も送らない（ログイン済みのページを読むだけ。読んだハイライトは自分の PC かアプリに渡す） |
+| `www.amazon.co.jp` | 本の商品ページ・Kindle ストアの検索を開くリンク（利用者が押したとき） | ASIN か書名 |
+| `bookmeter.com` | 読書メーターの本のページを開くリンク | 本 ID |
+| `github.com` | リポジトリ・`records.json` を開くリンク | 何も送らない |
+
+本を探す検索語は、ローカル LLM が立体のテーマから作る短い語（1〜3 語・40 文字まで）で、ハイライトの文をそのまま渡すことはしていない。ただし AI の出力なので、本文の一部と同じ語にならないことまでは保証していない。
+
+表に載らない通信先（文字のホストが無いので、テストでは見張れない）:
+
+- 利用者が設定する URL: ローカル LLM・コンパニオンの URL（`https://<PC名>.<tailnet>.ts.net` など自分の PC）。ブックマークレットがハイライトを渡すアプリの URL（配布するときに埋め込む）
+- 組み立てるホスト: ブラウザ拡張が読む Kindle のノートブック（`read.amazon.co.jp` / `read.amazon.com` から利用者が選ぶ）、Google Books が返す表紙・本のページの URL
 
 ## ブラウザからローカル LLM に届かせる方法の比較
 
