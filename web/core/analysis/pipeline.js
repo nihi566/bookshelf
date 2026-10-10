@@ -567,9 +567,11 @@ async function findFarConnections({ library, analysis, previous, points, vectors
   const sig = (a, b) => 'far:' + hash([PROMPT_VERSION, llm.chatModel, ...[a, b].sort().map((id) => `${id}:${textKeyById.get(id)}`)].join('|'));
   const current = (k, v) => typeof v?.a === 'string' && typeof v?.b === 'string' && indexOf.has(v.a) && indexOf.has(v.b) && sig(v.a, v.b) === k;
   const known = new Set([...Object.keys(farReactionsOf(library)), ...(previous?.farConnections || []).map((f) => f.id)]);
-  // 前の分析で「ある」と判定したのに、その分析が保存されなかった組（判定のあとで中止・失敗した）。判定し直さず、今回の結果に入れる
+  // 前の分析で「ある」と判定したのに、その分析が保存されなかった組（判定のあとで中止・失敗した）。判定し直さず、今回の結果に入れる。
+  // 前の分析が履歴から戻した回なら、元の回より後に判定した組も拾う（戻した回には入っていないが、判定済みなので二度と判定しない。NIH-7）
+  const since = previous?.restoredFrom || previous?.createdAt;
   const recovered = Object.entries(judged)
-    .filter(([k, v]) => v?.shared === true && current(k, v) && typeof v.at === 'string' && (!previous || v.at > previous.createdAt) && !known.has(farId(v.a, v.b)))
+    .filter(([k, v]) => v?.shared === true && current(k, v) && typeof v.at === 'string' && (!since || v.at > since) && !known.has(farId(v.a, v.b)))
     .map(([, v]) => ({ id: farId(v.a, v.b), a: v.a, b: v.b, idea: v.idea, explanation: v.explanation, foundAt: v.at }));
   for (const f of recovered) known.add(f.id);
   const planeOfLine = new Map(analysis.planes.flatMap((p) => p.lineIds.map((id) => [id, p.id])));
