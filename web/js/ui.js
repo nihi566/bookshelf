@@ -168,12 +168,38 @@ export function emptyBooksBlock(state) {
 }
 
 let toastTimer;
-export function toast(message, ms = 2600) {
+/**
+ * 画面の下に短い通知を出す。action を渡すと通知の中にボタンを 1 つ出す（「元に戻す」など）。
+ * ボタンは 1 回押すか、通知が消えたら無くなる（見えない通知のボタンを押せるままにしない）
+ * @param {string} message
+ * @param {number} [ms]
+ * @param {{ label: string, run: () => unknown }} [action]
+ */
+export function toast(message, ms = 2600, action) {
   const el = document.getElementById('toast');
+  const hide = () => {
+    el.classList.remove('show');
+    el.querySelector('.toast-action')?.remove();
+  };
   el.textContent = message;
+  el.classList.toggle('has-action', Boolean(action));
+  if (action) {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'toast-action';
+    btn.textContent = action.label;
+    btn.addEventListener('click', () => {
+      clearTimeout(toastTimer);
+      hide();
+      Promise.resolve()
+        .then(action.run)
+        .catch((e) => toast(e?.message || `${action.label}ことができませんでした`, 5000));
+    });
+    el.append(' ', btn);
+  }
   el.classList.add('show');
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => el.classList.remove('show'), ms);
+  toastTimer = setTimeout(hide, ms);
 }
 
 /** シートの入力が開いたときから変わったか。entries は [...new FormData(form)] の形 */
