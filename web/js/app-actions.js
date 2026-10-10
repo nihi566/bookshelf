@@ -7,7 +7,7 @@ import { toggleLineStar } from '../core/line-stars.js';
 import { markDiscoveryRead } from '../core/discovery-reads.js';
 import { FAR_REACTIONS, farConnectionById, reactFar } from '../core/far-reactions.js';
 import { assignThoughtToLine, lineAssignmentOf, unassignThought } from '../core/line-assignments.js';
-import { FEEDBACK_LABELS, deleteBook, mergeParsed, registerBook, setFeedback, updateBook, updateHighlight } from '../core/model.js';
+import { FEEDBACK_LABELS, deleteBook, highlightNeighbors, joinHighlights, mergeParsed, registerBook, setFeedback, unjoinHighlights, updateBook, updateHighlight } from '../core/model.js';
 import { THOUGHT_STATUS, addThought, deleteThought, thoughtsOf, updateThought } from '../core/thoughts.js';
 import { isThought, pointById } from '../core/points.js';
 import { randomId } from '../core/text.js';
@@ -42,6 +42,15 @@ export function appActions({ state, openSheet, toast, persist, saveAnalysis, syn
   /** 削除した点を戻す（削除は印を付けるだけなので、印を外せばメモ・タグ・★ごと戻る） */
   async function undoDeleteHighlight(id) {
     if (!updateHighlight(state.library, id, { deleted: false })) throw new Error('この点はもう見つかりません（同期で消えた可能性があります）');
+    await persist();
+    render({ keepScroll: true });
+    sync();
+    toast('元に戻しました');
+  }
+
+  /** くっつけた 2 つの点を、くっつける前に戻す */
+  async function undoJoinHighlights(undo) {
+    unjoinHighlights(state.library, undo);
     await persist();
     render({ keepScroll: true });
     sync();
@@ -102,16 +111,22 @@ export function appActions({ state, openSheet, toast, persist, saveAnalysis, syn
     },
     edit(el) {
       const h = state.library.highlights[el.dataset.id];
-      openSheet(highlightEditSheet(h), async (data, action) => {
+      const neighbors = highlightNeighbors(state.library, h.id);
+      openSheet(highlightEditSheet(h, neighbors), async (data, action) => {
+        let joined = null;
         if (action === 'delete') {
           updateHighlight(state.library, h.id, { deleted: true });
         } else {
           // 文が空なら例外のままシートに出す（書いた内容はシートに残る）
+          // くっつけるときも書きかけの編集を先に保存し、直した文どうしをつなぐ
           updateHighlight(state.library, h.id, { text: String(data.get('text') || ''), userNote: String(data.get('userNote') || '').trim(), tags: String(data.get('tags') || '').split(/[\s,、]+/) });
+          const other = { 'join-prev': neighbors.prev, 'join-next': neighbors.next }[action];
+          if (other) joined = joinHighlights(state.library, h.id, other.id);
         }
         await persist();
         // 保存できてから知らせる。確認なしの 1 押しで消えるので、押し間違えてもすぐ戻せるようにする
         if (action === 'delete') toast('削除しました', 6000, { label: '元に戻す', run: () => undoDeleteHighlight(h.id) });
+        if (joined) toast('くっつけました', 6000, { label: '元に戻す', run: () => undoJoinHighlights(joined.undo) });
         render({ keepScroll: true });
         sync();
       });
