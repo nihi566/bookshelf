@@ -5,7 +5,7 @@
  * 線は ID で比べる（増分の分析では、続いている線の ID は変わらない）
  * @param {(id: string) => string[]} [formerIdsOf]  その点に置き換わる前の点の ID（Kindle で伸ばしたハイライト）。
  *   伸ばしただけの点を「大きくなった線」「新しくつながった点」と数えないため
- * @returns {{ previousAt: string, addedLines: {id,name,size}[], grownLines: {id,name,added}[], removedLines: {id,name,size}[], connectedPoints: {pointId,lineId}[] } | null}
+ * @returns {{ previousAt: string, addedLines: {id,name,size}[], grownLines: {id,name,added}[], removedLines: {id,name,size}[], connectedPoints: {pointId,lineId}[], extendedPoints: number } | null}
  */
 export function diffAnalyses(prev, next, formerIdsOf = () => []) {
   if (!prev?.lines) return null;
@@ -17,6 +17,7 @@ export function diffAnalyses(prev, next, formerIdsOf = () => []) {
   const addedLines = [];
   const grownLines = [];
   const connectedPoints = [];
+  const extended = new Set(); // 伸ばしただけで変化に数えなかった点（件数だけ画面に添える。NIH-94）
   for (const l of next.lines || []) {
     const before = prevLines.get(l.id);
     if (!before) addedLines.push({ id: l.id, name: l.name, size: l.highlightIds.length });
@@ -26,10 +27,13 @@ export function diffAnalyses(prev, next, formerIdsOf = () => []) {
       if (added > 0) grownLines.push({ id: l.id, name: l.name, added });
     }
     // 前回はどの線にも入っていなかった点（まだつながらない点だった・まだ無かった）が、今回は線に入った
-    for (const id of l.highlightIds) if (!wasIn(prevMember, id)) connectedPoints.push({ pointId: id, lineId: l.id });
+    for (const id of l.highlightIds) {
+      if (!wasIn(prevMember, id)) connectedPoints.push({ pointId: id, lineId: l.id });
+      else if (!prevMember.has(id)) extended.add(id);
+    }
   }
   const removedLines = prev.lines.filter((l) => !nextIds.has(l.id)).map((l) => ({ id: l.id, name: l.name, size: (l.highlightIds || []).length }));
-  return { previousAt: prev.createdAt || '', addedLines, grownLines, removedLines, connectedPoints };
+  return { previousAt: prev.createdAt || '', addedLines, grownLines, removedLines, connectedPoints, extendedPoints: extended.size };
 }
 
 /** 変化があったか（画面に「前回から」を出すか） */

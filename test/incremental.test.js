@@ -256,14 +256,36 @@ test('G5-4: Kindle で伸ばしただけの点は「大きくなった線」「�
   assert.deepEqual(d.grownLines, []);
   assert.deepEqual(d.connectedPoints, []);
   assert.equal(hasChanges(d), false);
+  assert.equal(d.extendedPoints, 1, '伸ばした点は件数だけ残す（NIH-94）');
   // 2 回伸ばした点も、本当に増えた点はこれまでどおり数える
   const grown = { lines: [{ id: 'L', name: 'L', highlightIds: ['h1y', 'h2', 'h3', 'h6'] }, prev.lines[1]] };
   const g = diffAnalyses(prev, grown, formerIdsOf);
   assert.deepEqual(g.grownLines, [{ id: 'L', name: 'L', added: 1 }]);
   assert.deepEqual(g.connectedPoints, [{ pointId: 'h6', lineId: 'L' }]);
+  assert.equal(g.extendedPoints, 1, '2 回伸ばした点も 1 件');
   // 伸ばした点が別の線へ移ったときは、その線が大きくなった（前回どこかの線にいたので、新しくつながった点ではない）
   const moved = { lines: [{ id: 'L', name: 'L', highlightIds: ['h2', 'h3'] }, { id: 'M', name: 'M', highlightIds: ['h4', 'h5', 'h1x'] }] };
   const m = diffAnalyses(prev, moved, formerIdsOf);
   assert.deepEqual(m.grownLines, [{ id: 'M', name: 'M', added: 1 }]);
   assert.deepEqual(m.connectedPoints, []);
+  assert.equal(m.extendedPoints, 1);
+  assert.equal(diffAnalyses(prev, prev, formerIdsOf).extendedPoints, 0, '伸ばした点が無ければ 0');
+});
+
+test('NIH-94: 知識の画面の「前回からの変化」に、伸ばした点の件数を 1 行添える（無ければ出さない）', async () => {
+  const { knowledge } = await import('../web/js/views/knowledge.js');
+  const base = { createdAt: '2026-10-05T00:00:00.000Z', stats: { points: 3 }, model: { chat: 'm' }, lines: [{ id: 'L', name: 'L', highlightIds: ['h1x', 'h2', 'h3'] }], planes: [], isolated: [], solid: { title: 't', core: 'c' } };
+  const st = (analysis) => ({ library: { highlights: {}, books: {}, thoughts: {} }, analysis, settings: { ai: { mode: 'companion', companionUrl: '' } }, servedByCompanion: true, job: null, pcInfo: null });
+  const empty = { previousAt: '2026-10-04T00:00:00.000Z', addedLines: [], grownLines: [], removedLines: [], connectedPoints: [] };
+  const NOTE = 'Kindle で伸ばした点 1（変化には数えていません）';
+  // 伸ばしただけ: 顔ぶれは変わらないが、取り込みが届いたことは分かる
+  const only = String(knowledge.render({ state: st({ ...base, changes: { ...empty, extendedPoints: 1 } }) }));
+  assert.ok(only.includes('線(グループ)の顔ぶれは変わりませんでした。'));
+  assert.ok(only.includes(NOTE));
+  // ほかの変化と一緒でも出る
+  const withGrown = String(knowledge.render({ state: st({ ...base, changes: { ...empty, grownLines: [{ id: 'L', name: 'L', added: 1 }], extendedPoints: 1 } }) }));
+  assert.ok(withGrown.includes('大きくなった線(グループ) 1'));
+  assert.ok(withGrown.includes(NOTE));
+  // 伸ばした点が無い・保存済みの過去の分析（extendedPoints が無い）では出さない
+  for (const changes of [{ ...empty, extendedPoints: 0 }, empty]) assert.ok(!String(knowledge.render({ state: st({ ...base, changes }) })).includes('Kindle で伸ばした点'));
 });
