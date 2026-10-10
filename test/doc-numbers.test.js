@@ -24,6 +24,7 @@ const HISTORY_PIN_MAX = { file: 'cli/store.js', name: 'HISTORY_PIN_MAX' };
 const AUTO_MIN_POINTS = { file: 'web/core/auto-analysis.js', name: 'minPoints' };
 const AUTO_MAX_HOURS = { file: 'web/core/auto-analysis.js', name: 'maxHours' };
 const PICKS_MAX = { file: 'web/core/outline-draft.js', name: 'PICKS_MAX' };
+const RECENT_PICK_DAYS = { file: 'web/core/model.js', name: 'RECENT_PICK_DAYS' };
 
 const CONCEPT = 'docs/concept.md';
 const README = 'README.md';
@@ -47,10 +48,12 @@ const CHECKS = [
   { doc: README, re: /印は (\d+) 回まで/g, constant: HISTORY_PIN_MAX },
   { doc: CONCEPT, re: /前回の分析のあとに点が (\d+) 件増える/g, constant: AUTO_MIN_POINTS },
   { doc: README, re: /前回の分析のあとに点（思いつきを含む）が (\d+) 件増える/g, constant: AUTO_MIN_POINTS },
-  { doc: CONCEPT, re: /件増えるか、(\d+) 時間たって/g, constant: AUTO_MAX_HOURS },
-  { doc: README, re: /件増えるか、(\d+) 時間たって/g, constant: AUTO_MAX_HOURS },
+  { doc: CONCEPT, re: /件増える・減るか、(\d+) 時間たって/g, constant: AUTO_MAX_HOURS },
+  { doc: README, re: /件増える・減るか、(\d+) 時間たって/g, constant: AUTO_MAX_HOURS },
   { doc: CONCEPT, re: /面・線・永久ノートを選ぶと（(\d+) つまで）/g, constant: PICKS_MAX },
   { doc: README, re: /材料を選ぶと（(\d+) つまで）/g, constant: PICKS_MAX },
+  { doc: CONCEPT, re: /前の (\d+) 日間にその端末で見せた点/g, constant: RECENT_PICK_DAYS },
+  { doc: README, re: /前の (\d+) 日間にこの端末で見せた点/g, constant: RECENT_PICK_DAYS },
 ];
 
 const cache = new Map();

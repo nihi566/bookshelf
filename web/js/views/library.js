@@ -26,7 +26,7 @@ const flow = html`<div class="flow" aria-label="点から立体へ">
 const HOME_PICKS = 2;
 
 export const home = {
-  render({ state, shuffle = 0 }) {
+  render({ state, shuffle = 0, recentPicks, markPicksSeen }) {
     const lib = state.library;
     const s = libraryStats(lib);
     const a = state.analysis;
@@ -48,7 +48,8 @@ export const home = {
           <li><b>AI で立体にする</b> — PC のローカル LLM（Ollama など）が点を線(グループ)・面・立体に組み立て、おすすめの本を選びます。</li>
         </ol>`;
     }
-    const picks = dailyPicks(lib, HOME_PICKS, new Date(), shuffle);
+    const picks = dailyPicks(lib, HOME_PICKS, new Date(), shuffle, recentPicks);
+    markPicksSeen?.(picks.map((p) => p.id));
     const idx = lineIndex(a);
     const recent = searchHighlights(lib, '').slice(0, 5);
     const bySource = [...Object.entries(s.bySource).map(([k, v]) => `${SOURCES[k] || k} ${v}`), ...(s.thoughts ? [`${THOUGHT_LABEL} ${s.thoughts}`] : [])];

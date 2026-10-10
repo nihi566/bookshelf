@@ -1,6 +1,6 @@
 // 思いつき（フリートノート）の画面: 受け箱（ホーム）・メモの一覧・書くシート
 import { html } from '../html.js';
-import { THOUGHT_MAX_LENGTH, THOUGHT_STATUS, inboxThoughts, searchThoughts, thoughtCounts } from '../../core/thoughts.js';
+import { THOUGHT_MAX_LENGTH, THOUGHT_STATUS, countUnsyncedThoughts, inboxThoughts, searchThoughts, thoughtCounts } from '../../core/thoughts.js';
 import { lineIndex, pcSyncOf, thoughtCard } from '../ui.js';
 import { lineAssignmentOf } from '../../core/line-assignments.js';
 
@@ -45,6 +45,17 @@ export function editThoughtSheet(t) {
     <div class="row spread"><button class="btn danger" value="delete">このメモを削除</button><span class="row"><button class="btn" value="cancel">やめる</button><button class="btn primary" value="save">保存</button></span></div>`;
 }
 
+/**
+ * 受け箱の「PC に未同期 N 件」と「同期する」（受け箱に並ばない 4 件目以降・整理済みのメモも数える）。
+ * PC を使わない画面・すべて届いているときは出さない。失敗の理由は同期の処理がトーストで出す
+ */
+function unsyncedRow(state) {
+  const pcSync = pcSyncOf(state);
+  const n = pcSync ? countUnsyncedThoughts(state.library, pcSync.lastSync) : 0;
+  if (!n) return '';
+  return html`<div class="unsynced-row"><span class="badge unsynced">PC に未同期 ${n} 件</span><button type="button" class="btn small" data-action="sync">同期する</button></div>`;
+}
+
 /** ホームの受け箱（未整理の思いつき）。無ければ何も出さない */
 export function inboxBlock(state) {
   const inbox = inboxThoughts(state.library);
@@ -53,6 +64,7 @@ export function inboxBlock(state) {
   return html`<section class="inbox" aria-labelledby="inbox-title">
     <div class="section"><h2 id="inbox-title">受け箱 <span class="count">${inbox.length}</span></h2><a class="small" href="#/thoughts">メモをすべて見る</a></div>
     <p class="help">まだ整理していない思いつき ${inbox.length} 件。整理しなくても分析の点になります。</p>
+    ${unsyncedRow(state)}
     ${inbox.slice(0, INBOX_ON_HOME).map((t) => thoughtCard(t, { lines: idx.get(t.id), moves: true, assigned: assignedOf(state, t), pcSync: pcSyncOf(state) }))}
     ${inbox.length > INBOX_ON_HOME ? html`<p class="small"><a href="#/thoughts">ほか ${inbox.length - INBOX_ON_HOME} 件を見る</a></p>` : ''}
   </section>`;

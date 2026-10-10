@@ -10,7 +10,7 @@ import { promisify } from 'node:util';
 import { fileURLToPath } from 'node:url';
 import { createStore, HISTORY_KEEP } from '../cli/store.js';
 import { createCompanionServer } from '../cli/server.js';
-import { AUTO_RETRY_MS, autoAnalyzeDue, pendingPoints } from '../web/core/auto-analysis.js';
+import { AUTO_RETRY_MS, autoAnalyzeDue, pendingPoints, removedPoints } from '../web/core/auto-analysis.js';
 import { startFakeLlm } from './helpers/fake-llm.js';
 
 const run = promisify(execFile);
@@ -37,6 +37,31 @@ test('G5-1: 前回の分析のあとに点が 10 件以上増えたとき、ま�
   // 失敗したあとは少し待ってから試し直す
   assert.equal(autoAnalyzeDue({ points: pts(3 + 10), analysis, now: NOW, lastFailureAt: new Date(NOW - AUTO_RETRY_MS / 2).toISOString() }).due, false);
   assert.equal(autoAnalyzeDue({ points: pts(3 + 10), analysis, now: NOW, lastFailureAt: new Date(NOW - AUTO_RETRY_MS - 1000).toISOString() }).due, true);
+});
+
+test('NIH-107: 前回の分析に入っていた点が消えたときも、増えた点と同じ条件で始める', () => {
+  const analysis = { createdAt: hoursAgo(1), lines: [{ highlightIds: pts(12).map((p) => p.id) }], isolated: ['h12', 'h13'] };
+  assert.equal(removedPoints(pts(14), analysis), 0);
+  assert.equal(removedPoints(pts(5), analysis), 9, '線の点もまだつながらない点も数える');
+  assert.equal(removedPoints(pts(5), null), 0, '前回が無ければ消えた点も無い');
+  // 増えた点が無くても、消えた点だけで条件を満たす（件数・時間の考え方は増えた点と同じ）
+  const fewGone = autoAnalyzeDue({ points: pts(14).slice(1), analysis, now: NOW });
+  assert.deepEqual([fewGone.due, fewGone.pending, fewGone.removed], [false, 0, 1], '1 件消えただけ・1 時間前');
+  const manyGone = autoAnalyzeDue({ points: pts(4), analysis, now: NOW });
+  assert.equal(manyGone.due, true, '10 件消えた');
+  assert.equal(manyGone.removed, 10);
+  assert.match(manyGone.reason, /10 件減りました/);
+  const old = { ...analysis, createdAt: hoursAgo(25) };
+  const oneGone = autoAnalyzeDue({ points: pts(14).slice(1), analysis: old, now: NOW });
+  assert.equal(oneGone.due, true, '24 時間以上たって 1 件消えた');
+  assert.match(oneGone.reason, /1 件減りました/);
+  assert.equal(autoAnalyzeDue({ points: pts(14), analysis: old, now: NOW }).due, false, '増えも減りもしなければ始めない');
+  // 増えた点と消えた点を合わせて数える（入れ替わりも変化）
+  const swapped = [...pts(14).slice(5), ...pts(5, 'n')];
+  const r = autoAnalyzeDue({ points: swapped, analysis, now: NOW });
+  assert.deepEqual([r.due, r.pending, r.removed], [true, 5, 5]);
+  assert.equal(autoAnalyzeDue({ points: pts(14).slice(1), analysis, now: NOW, config: { minPoints: 1 } }).due, true, 'bh config の件数にも従う');
+  assert.equal(autoAnalyzeDue({ points: pts(4), analysis, now: NOW, lastFailureAt: new Date(NOW - AUTO_RETRY_MS / 2).toISOString() }).due, false, '失敗の直後は待つ');
 });
 
 async function withServer(fn, { llmUrl, drive = null } = {}) {
@@ -121,6 +146,32 @@ test('G5-1: bh serve は取り込みのあと、人の操作なしに分析を�
     },
     { drive: { status: { checking: true } } },
   );
+});
+
+test('NIH-107: 本を技術書にして点が減ると、bh serve は自動で分析し直し、消えた点を線から外す（分析のあとは始め直さない）', async () => {
+  await withServer(async ({ base, server, store }) => {
+    await importFiles(base, [{ name: 'My Clippings.txt', base64: await b64(fixture('My Clippings.txt')) }, { name: 'playbooks-ja.html', base64: await b64(fixture('playbooks-ja.html')) }, notebook(Array.from({ length: 6 }, (_, i) => `技術書にする本の線 その${i}`), '技術書にする本')]);
+    assert.equal((await server.checkAutoAnalyze()).started, true);
+    await waitJob(base);
+    const lib = await store.library();
+    const book = Object.values(lib.books).find((b) => b.title === '技術書にする本');
+    const goneIds = Object.values(lib.highlights).filter((h) => h.bookId === book.id).map((h) => h.id);
+    const before = await (await fetch(`${base}/api/analysis`)).json();
+    const inBefore = new Set([...before.lines.flatMap((l) => l.highlightIds), ...before.isolated]);
+    assert.ok(goneIds.every((id) => inBefore.has(id)), '前回の分析に入っている');
+
+    await store.saveConfig({ ...(await store.config()), autoAnalyze: { minPoints: goneIds.length } });
+    await store.saveLibrary({ ...lib, books: { ...lib.books, [book.id]: { ...book, technical: true } } });
+    const r = await server.checkAutoAnalyze();
+    assert.equal(r.started, true, r.reason);
+    assert.equal(r.removed, goneIds.length);
+    assert.equal(r.pending, 0);
+    assert.equal((await waitJob(base)).stage, 'done');
+    const after = await (await fetch(`${base}/api/analysis`)).json();
+    const inAfter = new Set([...after.lines.flatMap((l) => l.highlightIds), ...after.isolated]);
+    assert.ok(goneIds.every((id) => !inAfter.has(id)), '消えた点は線からも、まだつながらない点からも外れる');
+    assert.equal((await server.checkAutoAnalyze()).started, false, '分析し直したあとは始め直さない');
+  });
 });
 
 test('G5-1: bh config で自動の分析の入切・件数・時間を変えられる', async () => {

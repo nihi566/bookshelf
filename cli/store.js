@@ -22,7 +22,7 @@ export const DEFAULT_CONFIG = {
   token: '',
   // Play ブックスのメモ（Google ドライブ）の自動取り込み。clientId が空なら使わない
   google: { clientId: '', clientSecret: '', folderId: '', intervalSec: 60 },
-  // bh serve が人の操作なしに分析し直す条件（前回のあとに点が minPoints 件増えた / maxHours 時間たって 1 件以上増えた）
+  // bh serve が人の操作なしに分析し直す条件（前回のあとに点が minPoints 件増えた・減った / maxHours 時間たって 1 件以上増えた・減った）
   autoAnalyze: { ...AUTO_DEFAULTS },
 };
 
