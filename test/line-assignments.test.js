@@ -1,16 +1,12 @@
 // #66 受け箱の思いつきを、自分で選んだ線(グループ)に入れる（外せる・同期される・分析し直しても消えない）
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { emptyLibrary, mergeLibraries, mergeParsed } from '../web/core/model.js';
 import { addThought, deleteThought, updateThought } from '../web/core/thoughts.js';
 import { SAMPLE_BOOKS } from '../web/core/sample.js';
 import { analyzeLibrary } from '../web/core/analysis/pipeline.js';
 import { assignThoughtToLine, assignedThoughtIds, lineAssignmentOf, unassignThought } from '../web/core/line-assignments.js';
 
-const WEB = join(dirname(fileURLToPath(import.meta.url)), '..', 'web');
 const T1 = '2026-10-01T00:00:00.000Z';
 const T2 = '2026-10-02T00:00:00.000Z';
 const T3 = '2026-10-03T00:00:00.000Z';
@@ -150,17 +146,100 @@ test('#66: 入れた思いつきは、その線(グループ)の画面の点の�
   assert.match(card, /data-action="thought-unline"/);
 });
 
-test('#66: 操作（app.js）: 線(グループ)を選ぶシートで入れ、外す。保存してから同期する', async () => {
-  const app = readFileSync(join(WEB, 'js/app.js'), 'utf8');
-  const pick = app.match(/'thought-to-line'\(el\) \{([\s\S]*?)\n  \},/)[1];
-  assert.match(pick, /openSheet\(lineSheet\(/);
-  assert.match(pick, /assignThoughtToLine\(state\.library, t\.id, line\)[\s\S]*?await persistLibrary\(\);[\s\S]*?autoSyncAfterChange\(\);/);
-  const unline = app.match(/async 'thought-unline'\(el\) \{([\s\S]*?)\n  \},/)[1];
-  assert.match(unline, /unassignThought\(state\.library, el\.dataset\.id\);[\s\S]*?await persistLibrary\(\);[\s\S]*?autoSyncAfterChange\(\);/);
+test('#66: 操作: 線(グループ)を選ぶシートで入れ、外す。保存してから同期する', async () => {
+  const { fakeApp, formData, button } = await import('./helpers/app-actions.js');
   const { lineSheet } = await import('../web/js/views/thoughts.js');
   const lib = sample();
+  const t = addThought(lib, { text: 'メモ' }, T1);
+  const st = { library: lib, analysis: analysisOf(lib), loaded: true };
+  const app = fakeApp(st);
+  app.actions['thought-to-line'](button({ id: t.id }));
+  assert.equal(app.sheets[0].content, String(lineSheet(t, st.analysis.lines)));
+  await app.sheets[0].onSubmit(formData({ line: 'l2' }));
+  assert.equal(lineAssignmentOf(lib, t.id).lineId, 'l2');
+  assert.deepEqual(app.log, ['openSheet', 'persist', 'toast', 'render', 'sync']);
+  // シートを開いている間に分析し直して、選んだ線(グループ)が無くなったら入れない（シートに理由を出す）
+  st.analysis = analysisOf(lib, [{ id: 'l1', name: '仕組みの線' }]);
+  await assert.rejects(app.sheets[0].onSubmit(formData({ line: 'l2' })), /分析し直して無くなりました/);
+  // 外す
+  app.log.length = 0;
+  await app.actions['thought-unline'](button({ id: t.id }));
+  assert.equal(lineAssignmentOf(lib, t.id), null);
+  assert.deepEqual(app.log, ['persist', 'toast', 'render', 'sync']);
+  // ほかの端末の同期で先に外れていたら、描き直すだけ（保存・同期しない）
+  app.log.length = 0;
+  await app.actions['thought-unline'](button({ id: t.id }));
+  assert.deepEqual(app.log, ['render']);
+  // 線(グループ)がまだ無ければ、シートを開かずに知らせる
+  const none = fakeApp({ library: lib, analysis: null, loaded: true });
+  none.actions['thought-to-line'](button({ id: t.id }));
+  assert.deepEqual(none.log, ['toast']);
   const sheet = String(lineSheet({ text: '<メモ>' }, analysisOf(lib).lines));
   assert.match(sheet, /<select name="line"[^>]*>/);
   assert.match(sheet, /<option value="l1">仕組みの線<\/option>/);
   assert.match(sheet, /&lt;メモ&gt;/);
+});
+
+// NIH-84 自分で入れた思いつきは表示だけでなく、線を作る AI の入力・指紋と、線のページの永久ノート欄にも入る
+const stubLlm = (prompts = []) => ({
+  chatModel: 'stub',
+  embed: null,
+  chatJson: async (p) => (p.name === 'line' ? (prompts.push(p.user), { name: `線${prompts.length}`, summary: '', insight: '', keywords: [] }) : p.name === 'plane' ? { name: '面', summary: '' } : { title: '核', core: '', relations: [], principles: [], questions: [] }),
+});
+
+test('NIH-84: 分析し直すと、自分で入れた思いつきの文がその線(グループ)の AI 入力に入り、ほかの線(グループ)には入らない', async () => {
+  const lib = sample();
+  const text = 'まったく関係のない思いつきNIH84';
+  const t = addThought(lib, { text }, T1);
+  const prompts = [];
+  const llm = stubLlm(prompts);
+  const first = (await analyzeLibrary({ library: lib, llm, options: { recommend: false } })).analysis;
+  // AI が T を入れなかった線(グループ)を選んで、そこへ自分で入れる
+  const target = first.lines.find((l) => !l.highlightIds.includes(t.id));
+  assignThoughtToLine(lib, t.id, target, T2);
+  prompts.length = 0;
+  const second = (await analyzeLibrary({ library: lib, llm, previous: first, options: { recommend: false } })).analysis;
+  const line = second.lines.find((l) => l.id === target.id);
+  assert.ok(line, '入れた線(グループ)は引き継がれる');
+  assert.ok(line.highlightIds.includes(t.id), '線(グループ)の点に入る');
+  assert.notEqual(line.sig, target.sig, '指紋が変わり、線(グループ)を作り直す');
+  assert.deepEqual(second.lines.filter((l) => l.highlightIds.includes(t.id)).map((l) => l.id), [target.id], 'ほかの線(グループ)には入らない');
+  assert.equal(second.isolated.includes(t.id), false);
+  assert.equal(prompts.filter((p) => p.includes(text)).length, 1, 'その線(グループ)を作る AI にだけ見せる');
+});
+
+test('NIH-84: 線(グループ)から外した思いつきは、次の分析で入れた線(グループ)に残り続けず、近い線(グループ)を選び直す', async () => {
+  const lib = sample();
+  const t = addThought(lib, { text: 'まったく関係のない思いつきNIH84外す' }, T1);
+  const llm = stubLlm();
+  const first = (await analyzeLibrary({ library: lib, llm, options: { recommend: false } })).analysis;
+  const target = first.lines.find((l) => !l.highlightIds.includes(t.id));
+  assignThoughtToLine(lib, t.id, target, T2);
+  const second = (await analyzeLibrary({ library: lib, llm, previous: first, options: { recommend: false } })).analysis;
+  assert.ok(second.lines.find((l) => l.id === target.id).highlightIds.includes(t.id));
+  unassignThought(lib, t.id, T3);
+  const third = (await analyzeLibrary({ library: lib, llm, previous: second, options: { recommend: false } })).analysis;
+  // 文がどの点とも似ていないので、選び直すとどの線(グループ)にも入らない
+  assert.equal(third.lines.find((l) => l.id === target.id)?.highlightIds.includes(t.id) ?? false, false, '外した線(グループ)に残らない');
+});
+
+test('NIH-84: 入れた線(グループ)が今回の分析に無ければ、無理に入れない（分析は失敗しない）', async () => {
+  const lib = sample();
+  const t = addThought(lib, { text: '思いつき' }, T1);
+  assignThoughtToLine(lib, t.id, { id: 'lgone', name: '消えた線' }, T2);
+  const a = (await analyzeLibrary({ library: lib, llm: stubLlm(), options: { recommend: false } })).analysis;
+  assert.equal(a.lines.some((l) => l.id === 'lgone'), false);
+  assert.ok(a.lines.length > 0);
+});
+
+test('NIH-84: 自分で入れた思いつきを根拠にした永久ノートは、その線(グループ)のページの永久ノート欄に出る', async () => {
+  const { lineView } = await import('../web/js/views/knowledge.js');
+  const { addNote } = await import('../web/core/notes.js');
+  const lib = sample();
+  const t = addThought(lib, { text: '自分で入れたメモ' }, T1);
+  assignThoughtToLine(lib, t.id, LINE, T2);
+  addNote(lib, { title: 'メモから書いたノートNIH84', body: '本文', pointIds: [t.id] }, T2);
+  const page = String(lineView.render({ state: st(lib, analysisOf(lib)), params: { id: 'l1' } }));
+  assert.match(page, /メモから書いたノートNIH84/);
+  assert.doesNotMatch(String(lineView.render({ state: st(lib, analysisOf(lib)), params: { id: 'l2' } })), /メモから書いたノートNIH84/);
 });

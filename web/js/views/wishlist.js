@@ -116,7 +116,7 @@ function mountList(root, body, items, store, lastScraped) {
     <p class="notice err wl-price-error" id="wl-price-error" role="alert" hidden>価格の下限が上限より大きいため、価格の条件は使っていません。</p>
     <div class="row spread wl-count-row"><p class="small muted" id="wl-count" aria-live="polite"></p><button type="button" class="btn small" id="wl-reset" hidden>条件をクリア</button></div>
     <ul class="wl-list" id="wl-list"></ul>
-    <div class="row" style="margin-top:12px"><button type="button" class="btn" id="wl-more" hidden></button></div>
+    <div class="row" style="margin-top:12px"><button type="button" class="btn" id="wl-more" hidden></button><button type="button" class="btn" id="wl-more-all" hidden></button></div>
     <p class="empty" id="wl-empty" hidden>条件に一致する本がありません。検索語・種別・タグ・出版社・価格の条件を見直してください。</p>
     <div class="card wl-export">
       <p class="small" id="wl-marks-summary"></p>
@@ -132,12 +132,15 @@ function mountList(root, body, items, store, lastScraped) {
   let current = []; // いまの条件で絞り込んだ全件（「さらに表示」で続きを足すときに使う）
   let shelfTotal = 0; // いまの分類（すべて/Kindle/…）の冊数
 
-  // 件数・合計は絞り込んだ全件で出し、描いていない分があれば表示中の件数と「さらに表示」を添える
+  // 件数・合計は絞り込んだ全件で出し、描いていない分があれば表示中の件数と「さらに表示」「残りをすべて表示」を添える
+  //（残りをすべて描けば、ブラウザのページ内検索で全件を探せる）
   const showPaging = (inCurrentShelf) => {
     const p = pageWishlist(current, shown);
     $('wl-count').textContent = `${current.length}件 / 全${inCurrentShelf}件${p.rest ? `（先頭 ${p.visible.length}件を表示中）` : 'を表示'}${totalText(current)}`;
     $('wl-more').hidden = p.rest === 0;
     $('wl-more').textContent = `さらに表示（次の ${p.next}件・残り ${p.rest}件）`;
+    $('wl-more-all').hidden = p.rest === 0;
+    $('wl-more-all').textContent = `残りをすべて表示（${p.rest}件）`;
     return p;
   };
 
@@ -171,10 +174,10 @@ function mountList(root, body, items, store, lastScraped) {
     renderItems();
   };
 
-  // 次のページの行だけを末尾に足す（描いた行は描き直さない）。足した最初の本へフォーカスを移す（キーボード操作で続きから読めるように）
-  const showMore = () => {
+  // count 件の行だけを末尾に足す（描いた行は描き直さない）。足した最初の本へフォーカスを移す（キーボード操作で続きから読めるように）
+  const showMore = (count) => {
     const from = list.children.length;
-    shown = from + WISHLIST_PAGE_SIZE;
+    shown = from + count;
     const added = showPaging(shelfTotal).visible.slice(from);
     list.insertAdjacentHTML('beforeend', String(html`${added.map(itemRow)}`));
     list.children[from]?.querySelector('a, button')?.focus();
@@ -216,7 +219,8 @@ function mountList(root, body, items, store, lastScraped) {
       setPressed('data-wl-kind-filter', 'all');
       return refilter();
     }
-    if (btn.id === 'wl-more') return showMore();
+    if (btn.id === 'wl-more') return showMore(WISHLIST_PAGE_SIZE);
+    if (btn.id === 'wl-more-all') return showMore(current.length);
     if (btn.id === 'wl-export') return exportMarks();
     if (btn.id === 'wl-import') return $('wl-import-file').click();
     const li = btn.closest('li[data-asin]');

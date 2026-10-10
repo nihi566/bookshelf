@@ -1,7 +1,6 @@
 // NIH-103: 「前回の分析のあとに増えた点 N 件」を押すと、その N 件の点が点のカードで並ぶ
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
 import { emptyLibrary, mergeParsed } from '../web/core/model.js';
 import { addThought } from '../web/core/thoughts.js';
 import { analysisPoints } from '../web/core/points.js';
@@ -72,7 +71,8 @@ test('NIH-103: 一覧の画面に、増えた N 件の点が点のカードで�
   assert.match(String(pendingView.render({ state: st(lib, null) })), /まだ分析していません/);
 });
 
-test('NIH-103: 一覧の画面のルートがある', () => {
-  const src = readFileSync(new URL('../web/js/app.js', import.meta.url), 'utf8');
-  assert.match(src, /\\\/knowledge\\\/pending\$\/, pendingView/);
+test('NIH-103: 一覧の画面のルートがある', async () => {
+  const { matchRoute } = await import('../web/js/routes.js');
+  const { pendingView } = await import('../web/js/views/knowledge.js');
+  assert.deepEqual([matchRoute('/knowledge/pending').view, matchRoute('/knowledge/pending').tab], [pendingView, 'knowledge']);
 });

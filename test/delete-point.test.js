@@ -1,6 +1,5 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
 import { bookIdFor, emptyLibrary, highlightIdFor, mergeParsed } from '../web/core/model.js';
 import { highlightCard } from '../web/js/ui.js';
 
@@ -18,12 +17,20 @@ test('NIH-91: 点のカードに、編集を開かずに押せる「点を削除
   assert.match(card, new RegExp(`<button class="icon-btn" data-action="delete" data-id="${id}" aria-label="点を削除"[^>]*>`));
 });
 
-test('NIH-91: カードの削除ボタンは、編集シートの削除と同じく点に deleted の印を付けて保存する', () => {
-  const src = readFileSync(new URL('../web/js/app.js', import.meta.url), 'utf8');
-  const body = src.match(/\n {2}async delete\(el\) \{\r?\n([\s\S]*?)\r?\n {2}\},/)?.[1] || '';
-  assert.match(body, /updateHighlight\(state\.library, id, \{ deleted: true \}\)/);
-  assert.match(body, /await persistLibrary\(\)/);
+test('NIH-91: カードの削除ボタンは、編集シートの削除と同じく点に deleted の印を付けて保存する', async () => {
+  const { fakeApp, button } = await import('./helpers/app-actions.js');
+  const { lib, id } = oneHighlight();
+  const app = fakeApp({ library: lib, analysis: null, loaded: true });
+  await app.actions.delete(button({ id }));
+  assert.equal(lib.highlights[id].deleted, true);
+  assert.deepEqual(app.log, ['persist', 'toast', 'render', 'sync']);
   // 確認なしの 1 押しなので、編集シートの削除と同じく通知から元に戻せる（NIH-22）
-  assert.match(body, /toast\('削除しました', 6000, \{ label: '元に戻す', run: \(\) => undoDeleteHighlight\(id\) \}\)/);
-  assert.match(body, /autoSyncAfterChange\(\)/);
+  const [deleted] = app.toasts;
+  assert.deepEqual([deleted.message, deleted.ms, deleted.action.label], ['削除しました', 6000, '元に戻す']);
+  await deleted.action.run();
+  assert.ok(!lib.highlights[id].deleted);
+  // 無い点には何もしない
+  app.log.length = 0;
+  await app.actions.delete(button({ id: 'nothing' }));
+  assert.deepEqual(app.log, []);
 });

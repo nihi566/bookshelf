@@ -25,12 +25,23 @@ test('G1-1: 上のバー（どの画面にも出る）に「メモ」の入口�
   assert.match(sheet, /<textarea name="text"[^>]* autofocus/, '開いたらすぐ書ける');
   assert.equal((sheet.match(/value="save"/g) || []).length, 1, '保存は 1 回押すだけ');
   assert.doesNotMatch(sheet, /<select|type="radio"|type="checkbox"/, '書く前に選ばせる欄が無い');
-  // ボタンの動き（app.js の actions['new-thought']）がつながっている: シートを開き、書いたメモを端末に保存してから同期する
-  const app = readFileSync(join(WEB, 'js/app.js'), 'utf8');
-  const action = app.match(/'new-thought'\(\) \{([\s\S]*?)\n  \},/)[1];
-  assert.match(action, /openSheet\(newThoughtSheet\(\)/);
-  assert.match(action, /addThought\(state\.library, \{ text: data\.get\('text'\) \}[^)]*\);[\s\S]*?await persistLibrary\(\);[\s\S]*?autoSyncAfterChange\(\);/);
-  assert.match(action, /const id = randomId\('t'\);[\s\S]*?openSheet/, 'ID はシートを開くときに 1 回だけ作る（押し直しで 2 件にしない）');
+  // ボタンの動き（actions['new-thought']）: シートを開き、書いたメモを端末に保存してから同期する
+  const { fakeApp, formData } = await import('./helpers/app-actions.js');
+  const st = { ...state(), loaded: true };
+  const app = fakeApp(st);
+  app.actions['new-thought']();
+  assert.equal(app.sheets[0].content, sheet);
+  await app.sheets[0].onSubmit(formData({ text: '思いついたこと' }));
+  const [t] = Object.values(st.library.thoughts);
+  assert.equal(t.text, '思いついたこと');
+  assert.deepEqual(app.log, ['openSheet', 'persist', 'toast', 'refreshThoughts', 'sync']);
+  // 保存に失敗して押し直しても、同じメモが 2 件にならない（ID はシートを開くときに 1 回だけ作る）
+  await app.sheets[0].onSubmit(formData({ text: '思いついたこと' }));
+  assert.equal(Object.keys(st.library.thoughts).length, 1);
+  // 端末のデータを読み終える前は、シートを開かない
+  const early = fakeApp(state());
+  early.actions['new-thought']();
+  assert.deepEqual(early.log, ['toast']);
 });
 
 test('読み込みが終わる前は、端末のライブラリを保存しない（空のライブラリで上書きしない）', async () => {
@@ -39,11 +50,32 @@ test('読み込みが終わる前は、端末のライブラリを保存しな�
   await assert.rejects(save.library(), /まだ端末のデータを読み込んでいます/);
 });
 
-test('NIH-82: メモの削除は確かめてから消す。断ったらシートを開いたまま何も消さない（永久ノート・リンク・骨組みの削除とそろえる）', () => {
-  const app = readFileSync(join(WEB, 'js/app.js'), 'utf8');
-  const action = app.match(/'edit-thought'\(el\) \{([\s\S]*?)\n  \},/)[1];
+test('NIH-82: メモの削除は確かめてから消す。断ったらシートを開いたまま何も消さない（永久ノート・リンク・骨組みの削除とそろえる）', async () => {
+  const { fakeApp, formData, button } = await import('./helpers/app-actions.js');
+  const st = { ...state(), loaded: true };
+  const t = addThought(st.library, { text: '書いた思いつき' }, T1);
   // 墓標は同期で生き返らない（stickyDelete）ので「元に戻す」ではなく、消す前に確かめる
-  assert.match(action, /if \(action === 'delete'\) \{\s*if \(!confirm\('このメモを削除しますか？[^']*'\)\) return true;\s*deleteThought\(state\.library, t\.id\);/);
+  const asked = [];
+  let answer = false;
+  const app = fakeApp(st, { confirm: (m) => (asked.push(m), answer) });
+  app.actions['edit-thought'](button({ id: t.id }));
+  // 断ったら: 何も消さず・保存も同期もせず、シートを開いたままにする（true を返すと openSheet は閉じない）
+  assert.equal(await app.sheets[0].onSubmit(formData({ text: '書いた思いつき' }), 'delete'), true);
+  assert.match(asked[0], /このメモを削除しますか？/);
+  assert.equal(st.library.thoughts[t.id].text, '書いた思いつき');
+  assert.deepEqual(app.log, ['openSheet']);
+  // 確かめて OK なら消す
+  answer = true;
+  await app.sheets[0].onSubmit(formData({ text: '書いた思いつき' }), 'delete');
+  assert.equal(st.library.thoughts[t.id].deleted, true);
+  assert.deepEqual(app.log, ['openSheet', 'persist', 'toast', 'render', 'sync']);
+  // 「保存」では確かめない
+  const t2 = addThought(st.library, { text: '別の思いつき' }, T1);
+  asked.length = 0;
+  app.actions['edit-thought'](button({ id: t2.id }));
+  await app.sheets[1].onSubmit(formData({ text: '直した思いつき' }), 'save');
+  assert.deepEqual(asked, []);
+  assert.equal(st.library.thoughts[t2.id].text, '直した思いつき');
 });
 
 test('G1-3: ホームの受け箱に未整理のメモが件数付きで出て、「整理済みにする」「捨てる」を押せる', async () => {
