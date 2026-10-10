@@ -294,7 +294,8 @@ export async function analyzeLibrary({ library, llm: rawLlm, cache = emptyCache(
     recommendations: [],
   };
   // 前回から何が変わったか（最初から作り直したときは、線の ID が変わるので一覧ではなく「作り直した」と出す）
-  const changes = diffAnalyses(previous, analysis);
+  const formerIdsOf = formerIdsIn(library);
+  const changes = diffAnalyses(previous, analysis, formerIdsOf);
   // rebuilt の理由: full（作り直しを指定）/ grew（点が大きく増えた）/ format（前回と分析の版・埋め込みの方法が違う）
   if (changes) analysis.changes = base ? changes : { previousAt: changes.previousAt, rebuilt: true, reason: full ? 'full' : grew ? 'grew' : 'format', addedLines: [], grownLines: [], removedLines: [], connectedPoints: [] };
   const indexOf = new Map(points.map((p, i) => [p.id, i]));
@@ -327,7 +328,7 @@ export async function analyzeLibrary({ library, llm: rawLlm, cache = emptyCache(
   // 発見（前回の分析との差から。前回を引き継いだときだけ作り、それまでの発見は点が残っていれば持ち越す）。
   // 新しい遠いつながりは線の ID に依らないので、作り直した分析でも発見にする（最初の分析では作らない）
   const foundNow = base
-    ? findDiscoveries({ previous: base, lines: analysis.lines, sourceOf, vectorOf: (id) => vectors[indexOf.get(id)], formerIdsOf: formerIdsIn(library), now: analysis.createdAt })
+    ? findDiscoveries({ previous: base, lines: analysis.lines, sourceOf, vectorOf: (id) => vectors[indexOf.get(id)], formerIdsOf, now: analysis.createdAt })
     : [];
   analysis.discoveries = mergeDiscoveries([...(previous ? far.found.map(farDiscovery) : []), ...foundNow], previous?.discoveries, alive);
 
@@ -612,7 +613,7 @@ const FAR_CACHE_KEEP = 5000;
 
 /**
  * Kindle で伸ばしたハイライトの、置き換わる前の点の ID（伸ばした回数ぶんたどる）。
- * 伸ばしただけの点を、発見で「新しくつながった点」と数えないため
+ * 伸ばしただけの点を、発見・前回からの変化で「新しくつながった点」と数えないため
  */
 function formerIdsIn(library) {
   const direct = new Map();
