@@ -21,6 +21,9 @@ const flow = html`<div class="flow" aria-label="点から立体へ">
   <div class="f-solid"><b>立体</b>知識の全体像</div>
 </div>`;
 
+// ホームの今日の点の件数
+const HOME_PICKS = 2;
+
 export const home = {
   render({ state, shuffle = 0 }) {
     const lib = state.library;
@@ -44,7 +47,7 @@ export const home = {
           <li><b>AI で立体にする</b> — PC のローカル LLM（Ollama など）が点を線・面・立体に組み立て、おすすめの本を選びます。</li>
         </ol>`;
     }
-    const picks = dailyPicks(lib, 3, new Date(), shuffle);
+    const picks = dailyPicks(lib, HOME_PICKS, new Date(), shuffle);
     const idx = lineIndex(a);
     const recent = searchHighlights(lib, '').slice(0, 5);
     const bySource = [...Object.entries(s.bySource).map(([k, v]) => `${SOURCES[k] || k} ${v}`), ...(s.thoughts ? [`${THOUGHT_LABEL} ${s.thoughts}`] : [])];
@@ -59,10 +62,12 @@ export const home = {
 
       ${discoveriesBlock(state)}
 
-      ${inboxBlock(state)}
+      <section class="today" aria-labelledby="today-title">
+        <div class="section"><h2 id="today-title">今日の点</h2><button class="btn small" data-action="shuffle">別の点</button></div>
+        ${picks.map((p) => html`${pointCard(p, { library: lib, lines: idx.get(p.id) })}${partnerBlock(state, p, idx)}`)}
+      </section>
 
-      <div class="section"><h2>今日の点</h2><button class="btn small" data-action="shuffle">別の点</button></div>
-      ${picks.map((p) => html`${pointCard(p, { library: lib, lines: idx.get(p.id) })}${partnerBlock(state, p, idx)}`)}
+      ${inboxBlock(state)}
 
       ${a
         ? html`<div class="section"><h2>立体</h2><a class="small" href="#/knowledge">知識マップへ</a></div>
