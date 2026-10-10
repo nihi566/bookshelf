@@ -14,7 +14,7 @@ const pointNode = (id) => `pt:${id}`;
  * 図に置く要素（ノード）と辺。library を渡すと、自分のリンクと遠いつながりへの反応（「ちがう」は出さない）を使う
  * isStarred(線の ID) が true の線は starred を立て、名前の前に ★ を付ける（線の一覧と同じ印）
  * ノード: { id, kind: 'plane'|'line'|'point', label, ref, weight, starred?（線だけ）, isolated? }
- * 辺: kind = plane（面 → 線）/ member（線 → 点）/ related（関わる点）/ far（遠いつながり）/ link（自分のリンク）/ relation（面どうしの関係）
+ * 辺: kind = plane（面 → 線）/ member（線 → 点）/ related（関わる点）/ far（遠いつながり。idea）/ link（自分のリンク。reason）/ relation（面どうしの関係）
  */
 export function mapElements(analysis, { library = null, isStarred = () => false } = {}) {
   const planes = analysis?.planes || [];
@@ -23,11 +23,11 @@ export function mapElements(analysis, { library = null, isStarred = () => false 
   const nodes = [];
   const edges = [];
   const edgeIds = new Set();
-  const edge = (kind, source, target, label = '') => {
+  const edge = (kind, source, target, label = '', extra = {}) => {
     const id = `${kind}:${source}|${target}`;
     if (source === target || edgeIds.has(id) || edgeIds.has(`${kind}:${target}|${source}`)) return;
     edgeIds.add(id);
-    edges.push({ id, source, target, kind, ...(label ? { label } : {}) });
+    edges.push({ id, source, target, kind, ...(label ? { label } : {}), ...extra });
   };
 
   const planeOfLine = new Map();
@@ -63,14 +63,15 @@ export function mapElements(analysis, { library = null, isStarred = () => false 
 
   // 塊の間の橋。リンク・遠いつながりの端は今の点の ID なので、図の点（分析したときの ID）を今の ID で引く
   const onMap = new Map([...points].map((h) => [currentPointId(library, h), h]));
-  const bridge = (kind, a, b) => {
+  // 橋には、札でたどったときに添える言葉（遠いつながりの共通する考え・リンクの理由）を載せる。canvas には描かない
+  const bridge = (kind, a, b, extra) => {
     const [x, y] = [onMap.get(currentPointId(library, a)), onMap.get(currentPointId(library, b))];
-    if (x && y) edge(kind, pointNode(x), pointNode(y));
+    if (x && y) edge(kind, pointNode(x), pointNode(y), '', extra);
   };
   for (const id of ordered) for (const h of lineById.get(id).relatedIds || []) if (points.has(h)) edge('related', `l:${id}`, pointNode(h));
   for (const [lineId, h] of later) edge('related', `l:${lineId}`, pointNode(h));
-  for (const f of visibleFarConnections(analysis, library)) bridge('far', f.a, f.b);
-  for (const l of liveLinks(library)) bridge('link', l.a, l.b);
+  for (const f of visibleFarConnections(analysis, library)) bridge('far', f.a, f.b, { idea: f.idea || '' });
+  for (const l of liveLinks(library)) bridge('link', l.a, l.b, { reason: l.reason || '' });
   const planeIds = new Set(planes.map((p) => p.id));
   for (const r of analysis?.solid?.relations || []) if (planeIds.has(r.from) && planeIds.has(r.to)) edge('relation', `p:${r.from}`, `p:${r.to}`, r.type || '');
   return { nodes, edges };
@@ -78,26 +79,57 @@ export function mapElements(analysis, { library = null, isStarred = () => false 
 
 // ---- 押したときの札 ----
 
-// 札に出す点の文の長さ（冒頭だけ）
+// 札に出す点の文の長さ（冒頭だけ）。つながる相手は 1 行で見せるので、もっと短く
 const PEEK_TEXT_CHARS = 80;
+const PEER_TEXT_CHARS = 30;
+const BRIDGE_KINDS = ['far', 'link'];
 
-const headOf = (text) => {
+const headOf = (text, max = PEEK_TEXT_CHARS) => {
   const chars = [...String(text ?? '').replace(/\s+/g, ' ').trim()];
-  return chars.length > PEEK_TEXT_CHARS ? chars.slice(0, PEEK_TEXT_CHARS).join('') + '…' : chars.join('');
+  return chars.length > max ? chars.slice(0, max).join('') + '…' : chars.join('');
+};
+
+/** 図の点（分析したときの ID）の、今の点。無ければ見せる理由 */
+const pointOf = (library, ref) => {
+  const id = currentPointId(library, ref);
+  const p = pointById(library, id);
+  return { p, missing: p ? '' : pointArrived(library, id) ? '消えた点' : 'この端末にまだ届いていない点' };
+};
+
+/** 札から移れる相手（遠いつながりが先、次にリンク）。bridges はその点につながる辺（mapElements の辺の形） */
+const peersOf = (nodeId, bridges, library) =>
+  BRIDGE_KINDS.flatMap((kind) =>
+    bridges
+      .filter((e) => e?.kind === kind && (e.source === nodeId || e.target === nodeId))
+      .map((e) => {
+        const id = e.source === nodeId ? e.target : e.source;
+        const { p, missing } = pointOf(library, id.replace(/^pt:/, ''));
+        return { id, kind, edge: e.id, title: p ? headOf(p.text, PEER_TEXT_CHARS) : missing };
+      }),
+  );
+
+/** たどってきた辺に添える言葉（遠いつながりは共通する考え、リンクは理由）。橋でない・言葉が無ければ null */
+const whyOf = (via) => {
+  const text = via?.kind === 'far' ? via.idea : via?.kind === 'link' ? via.reason : '';
+  return text ? { kind: via.kind, text: String(text) } : null;
 };
 
 /**
  * 点・線を押したときに、移る前に図の上に出す札の中身。面（とそれ以外）は札を出さずにすぐ移るので null
  * 点: 文の冒頭と書名（思いつきは「思いつき」）。線: 名前と点の数。点は分析したときの ID なので、今の ID で引く
- * @returns {{ kind: 'point'|'line', title: string, sub: string } | null}
+ * 点は、つながる遠いつながり・リンクの相手（peers）と件数、相手から札を移してきたときはその辺の言葉（why）も返す（NIH-88）
+ * 文字はエスケープしない（HTML にするのは画面側）
+ * @param {{ bridges?: object[], via?: object | null }} [opts] bridges: その点につながる辺 / via: 札を移してくるのにたどった辺
+ * @returns {{ kind: 'point'|'line', title: string, sub: string, peers?: { id: string, kind: 'far'|'link', edge: string, title: string }[], counts?: { far: number, link: number }, why?: { kind: 'far'|'link', text: string } | null } | null}
  */
-export function mapPeek(node, library) {
+export function mapPeek(node, library, { bridges = [], via = null } = {}) {
   if (node?.kind === 'line') return { kind: 'line', title: node.label || '', sub: `点 ${node.weight || 0} 件` };
   if (node?.kind !== 'point') return null;
-  const id = currentPointId(library, node.ref);
-  const p = pointById(library, id);
-  if (!p) return { kind: 'point', title: '', sub: pointArrived(library, id) ? '消えた点' : 'この端末にまだ届いていない点' };
-  return { kind: 'point', title: headOf(p.text), sub: pointLabel(library, p) };
+  const peers = peersOf(node.id ?? pointNode(node.ref), bridges, library);
+  const links = { peers, counts: { far: peers.filter((x) => x.kind === 'far').length, link: peers.filter((x) => x.kind === 'link').length }, why: whyOf(via) };
+  const { p, missing } = pointOf(library, node.ref);
+  if (!p) return { kind: 'point', title: '', sub: missing, ...links };
+  return { kind: 'point', title: headOf(p.text), sub: pointLabel(library, p), ...links };
 }
 
 // ---- 座標 ----
