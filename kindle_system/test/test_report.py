@@ -276,12 +276,15 @@ class MainIntegrationTest(unittest.TestCase):
         # 本物の data/kindle_monitor.db を読まない（CI の新しいチェックアウトには data/ が無く開けない）
         self._unpriced = unittest.mock.patch.object(report, "get_unpriced_reasons", return_value={})
         self._unpriced.start()
+        self._publishers = unittest.mock.patch.object(report, "get_publishers", return_value={})
+        self.mock_publishers = self._publishers.start()
 
     def tearDown(self):
         self._points.stop()
         self._all_points.stop()
         self._targets.stop()
         self._unpriced.stop()
+        self._publishers.stop()
         shutil.rmtree(self.tmpdir, ignore_errors=True)
         for key, value in self._saved_env.items():
             if value is None:
@@ -294,6 +297,13 @@ class MainIntegrationTest(unittest.TestCase):
         self._run_main_with_marks({})
         book = json.loads(self._read_wishlist_text())["books"][0]
         self.assertEqual(book["target_price"], 800)
+
+    def test_main_publishes_publisher_from_db(self):
+        """run.py sync が呼ぶ report.main() が、DB の出版社を wishlist.json の publisher に載せる（NIH-104）。"""
+        self.mock_publishers.return_value = {"B0INTEG1": "技術評論社"}
+        self._run_main_with_marks({})
+        book = json.loads(self._read_wishlist_text())["books"][0]
+        self.assertEqual(book["publisher"], "技術評論社")
 
     def _run_main_with_marks(self, env):
         fake_book = {"title": "結合テスト本", "asin": "B0INTEG1", "actual_price": 1000, "is_unlimited": 0}
@@ -406,6 +416,8 @@ class ShrinkGuardTest(unittest.TestCase):
         self._unpriced.start()
         self._targets = unittest.mock.patch.object(report, "get_target_prices", return_value={})
         self._targets.start()
+        self._publishers = unittest.mock.patch.object(report, "get_publishers", return_value={})
+        self._publishers.start()
         self.path = os.path.join(self.tmpdir, "wishlist.json")
 
     def tearDown(self):
@@ -413,6 +425,7 @@ class ShrinkGuardTest(unittest.TestCase):
         self._all_points.stop()
         self._unpriced.stop()
         self._targets.stop()
+        self._publishers.stop()
         self._env.stop()
         shutil.rmtree(self.tmpdir, ignore_errors=True)
 
