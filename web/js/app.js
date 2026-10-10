@@ -7,6 +7,8 @@ import { kindleAlertBlock, openSheet, toast } from './ui.js';
 import { book, books, home, search } from './views/library.js';
 import { autoStatusBlock, historyView, isolatedView, knowledge, lineView, planeView } from './views/knowledge.js';
 import { linesView, planesView, solidView } from './views/layers.js';
+import { starsView } from './views/stars.js';
+import { toggleLineStar } from '../core/line-stars.js';
 import { discoveriesView, discoveryView } from './views/discoveries.js';
 import { farView } from './views/far.js';
 import { noteView, notesView } from './views/notes.js';
@@ -55,6 +57,8 @@ const ROUTES = [
   [/^\/lines$/, linesView, 'knowledge'],
   [/^\/planes$/, planesView, 'knowledge'],
   [/^\/solid$/, solidView, 'knowledge'],
+  // ★をつけた線(グループ)と点（入口はホームの「★ N」と線(グループ)の画面）
+  [/^\/stars$/, starsView, 'home'],
   [/^\/knowledge\/line\/(?<id>[\w-]+)$/, lineView, 'knowledge'],
   [/^\/knowledge\/plane\/(?<id>[\w-]+)$/, planeView, 'knowledge'],
   [/^\/knowledge\/isolated$/, isolatedView, 'knowledge'],
@@ -729,6 +733,16 @@ const actions = {
       render({ keepScroll: true });
       autoSyncAfterChange();
     });
+  },
+  // 線(グループ)の★（★のページの「無くなった線(グループ)」からも外せるよう、分析に無い線は★をつけたときの名前で外す）
+  async 'line-star'(el) {
+    if (!state.loaded) return toast('まだ端末のデータを読み込んでいます。少し待ってから押してください');
+    const line = (state.analysis?.lines || []).find((l) => l.id === el.dataset.id) || { id: el.dataset.id, name: '' };
+    const on = toggleLineStar(state.library, line);
+    await persistLibrary();
+    toast(on ? '★をつけました（★の一覧はホームの「★」から）' : '★を外しました');
+    render({ keepScroll: true });
+    autoSyncAfterChange();
   },
   async 'thought-unline'(el) {
     // ほかの端末の同期で先に外れていたら、何もしない

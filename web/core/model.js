@@ -17,6 +17,7 @@ import { normalizeNote } from './notes.js';
 import { mergeLinks } from './links.js';
 import { normalizeOutline } from './outlines.js';
 import { mergeLineAssignments } from './line-assignments.js';
+import { mergeLineStars } from './line-stars.js';
 
 export const SOURCES = {
   kindle: 'Kindle',
@@ -412,6 +413,8 @@ export function mergeLibraries(base, incoming) {
   out.outlines = mergeCollections(base.outlines, incoming.outlines, { stickyDelete: true, normalize: (o) => normalizeOutline(o, now) });
   // 思いつきを自分で入れた線(グループ)は、入れた・外した時刻が新しい方
   out.lineAssignments = mergeLineAssignments(base.lineAssignments, incoming.lineAssignments, now);
+  // 線(グループ)の★は、つけた・外した時刻が新しい方
+  out.lineStars = mergeLineStars(base.lineStars, incoming.lineStars, now);
   out.updatedAt = later(base.updatedAt, incoming.updatedAt);
   return out;
 }

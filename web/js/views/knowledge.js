@@ -9,6 +9,7 @@ import { RELATED_MAX } from '../../core/analysis/neighbors.js';
 import { pendingPoints } from '../../core/auto-analysis.js';
 import { analysisPointById, analysisPoints, isThought } from '../../core/points.js';
 import { assignedThoughtIds } from '../../core/line-assignments.js';
+import { isLineStarred } from '../../core/line-stars.js';
 import { lineIndex, pointCard } from '../ui.js';
 import { amazonKindleUrl, findWishlistBook, formatPrice } from '../../core/wishlist.js';
 import { loadWishlist } from '../wishlist-data.js';
@@ -304,6 +305,7 @@ export const lineView = {
     if (!l) return html`<p class="empty">線(グループ)が見つかりません（分析し直して無くなった可能性があります）。<a href="#/lines">線(グループ)の一覧へ</a></p>`;
     const plane = a.planes.find((p) => p.lineIds.includes(l.id));
     // 線の点（本に引いた線と思いつき）と、自分で入れた思いつき（AI の線にすでに入っているものは重ねない）
+    const starred = isLineStarred(state.library, l.id);
     const aiIds = new Set(l.highlightIds);
     const manual = assignedThoughtIds(state.library, l.id).filter((id) => !aiIds.has(id));
     const hs = [...l.highlightIds, ...manual].map((id) => analysisPointById(state.library, id)).filter(Boolean);
@@ -319,6 +321,7 @@ export const lineView = {
       <section class="card stack">
         <p style="font-family:var(--serif);line-height:1.9">${l.summary}</p>
         ${l.keywords?.length ? html`<div class="chips">${l.keywords.map((k) => html`<a class="chip" href="#/search?q=${encodeURIComponent(k)}">${k}</a>`)}</div>` : ''}
+        <div class="row"><button type="button" class="btn small" data-action="line-star" data-id="${l.id}" aria-pressed="${String(starred)}">${starred ? '★ ★を外す' : '☆ ★をつける'}</button><a class="small" href="#/stars">★の一覧</a></div>
         <div class="row"><button type="button" class="btn small primary" data-action="line-to-note" data-id="${l.id}">この線を永久ノートにする</button><span class="small muted">AI の線を下書きにして、自分の言葉に直せます</span></div>
         <div class="row"><a class="btn small" href="#/outline/new?line=${l.id}">文章の骨組みを作る</a></div>
       </section>
