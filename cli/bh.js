@@ -5,14 +5,16 @@
 //   bh analyze                    ローカル LLM で 点→線→面→立体 を分析し、おすすめの本を選ぶ
 //   bh recommend                   おすすめの本だけ選び直す
 //   bh serve                       コンパニオンサーバを起動（Web アプリ + 同期 + LLM 中継 + Play ブックスの自動取り込み）
+//   bh update                      マージした main を取り込み、常駐の bh serve を新しいコードで起動し直す
 //   bh google login|sync|logout    Play ブックスのメモ（Google ドライブ）との連携
 //   bh list / bh search <語>       一覧・検索
 //   bh config [キー 値]            設定の表示・変更
 
 import { readdir, readFile, stat } from 'node:fs/promises';
 import path from 'node:path';
-import { createStore } from './store.js';
+import { REPO_ROOT, createStore } from './store.js';
 import { createCompanionServer } from './server.js';
+import { runUpdate } from './update.js';
 import { createGoogleClient, describeSync, isFolderId, MIN_INTERVAL_SEC, startDriveWatcher } from './google.js';
 import { SOURCES, listBooks, libraryStats, searchHighlights } from '../web/core/model.js';
 import { applyImport } from '../web/core/importing.js';
@@ -39,6 +41,9 @@ const HELP = `使い方: bh <コマンド> [オプション]
   recommend                           おすすめの本を選び直す
   serve [--port 8787] [--host 127.0.0.1]  コンパニオンサーバを起動（Google にログイン済みなら Play ブックスの線を自動で取り込む。
                                       点が増えたら自動で分析し直す）
+  update                              マージした main を常駐の bh serve に反映する（data/ の library.json・analysis.json を
+                                      退避 → git pull --ff-only origin main → bh serve を止めて起動し直す → 新しい版で
+                                      動いているか確かめる。取り込めなければ bh serve は止めない）
   google login                        Google にログインする（ドライブの読み取りだけを許可）
   google sync                         Play ブックスのメモを今すぐ取り込む
   google logout                       ログアウトする（Google 側の許可も取り消す）
@@ -189,6 +194,10 @@ async function main() {
         console.log(`  自動の分析: ${auto.enabled ? `前回のあとに点が ${auto.minPoints} 件増えるか、${auto.maxHours} 時間たって 1 件以上増えたら分析（bh config auto off で止める）` : '切ってあります（bh config auto on）'}`);
         console.log(`  スマホから使うには: tailscale serve --bg ${port}`);
       });
+      break;
+    }
+    case 'update': {
+      await runUpdate({ repoDir: REPO_ROOT, dataDir: store.dataDir, cfg: await store.config() });
       break;
     }
     case 'google': {
