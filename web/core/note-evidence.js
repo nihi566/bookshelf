@@ -29,3 +29,16 @@ export function notesCiting(library, ids) {
   const set = new Set(given.flatMap((id) => [id, currentPointId(library, id)]));
   return liveNotes(library).filter((n) => n.pointIds.some((id) => set.has(id) || set.has(currentPointId(library, id))));
 }
+
+/**
+ * その点（ID の集まり）のすべてを根拠にしている永久ノート（直した順。リンクの両端の点から、もう書いたノートを引くため）。
+ * 伸ばす前・伸ばしたあとの点の ID は、どちらも今の点で比べる
+ */
+export function notesCitingAll(library, ids) {
+  const wanted = [...new Set([...ids].map((id) => currentPointId(library, id)))];
+  if (!wanted.length) return [];
+  return liveNotes(library).filter((n) => {
+    const cited = new Set(n.pointIds.map((id) => currentPointId(library, id)));
+    return wanted.every((id) => cited.has(id));
+  });
+}
