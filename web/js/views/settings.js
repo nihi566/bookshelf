@@ -29,7 +29,9 @@ export function playbooksSyncBlock(state) {
   if (!g.active) return html`<p class="small">自動取り込み: ${g.error || '未設定'}</p>`;
   const problems = Array.isArray(g.problems) ? g.problems : [];
   const count = Number.isInteger(g.problemCount) ? g.problemCount : problems.length;
-  return html`<p class="small">自動取り込み: 有効（最終確認 ${shortTime(g.lastCheck)}・この起動のあとの最終取り込み ${shortTime(g.lastImport)}）</p>
+  const n = g.lastNew;
+  return html`<p class="small">自動取り込み: 有効（最終確認 ${shortTime(g.lastCheck)}）</p>
+    <p class="small">最後に新しい点: ${n?.at ? `${shortTime(n.at)}・${Number(n.added) || 0} 件${n.updated ? `（更新 ${n.updated} 件）` : ''}` : 'まだ届いていません'}</p>
     ${count
       ? html`<details class="pb-problems">
           <summary class="small">取り込めない本 ${count} 冊（押すと理由）</summary>
