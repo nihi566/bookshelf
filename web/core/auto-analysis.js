@@ -24,7 +24,8 @@ export function pendingPoints(points, analysis) {
  */
 export function notesKey(notes) {
   if (!notes.length) return '';
-  return hash(notes.map((n) => `${n.id}:${hash(humanLine(n))}`).sort().join('|'));
+  // 根拠の点も入れる（点を付け替えると、ノートを見せる面が変わる）
+  return hash(notes.map((n) => `${n.id}:${hash(humanLine(n))}:${hash((n.pointIds || []).join(','))}`).sort().join('|'));
 }
 
 /**

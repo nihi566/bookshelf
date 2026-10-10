@@ -32,6 +32,8 @@ test('NIH-83: 点は増えていないが永久ノートを直したとき、前
   const analysis = analysisAt(hoursAgo(25), lib);
   assert.equal(notesChanged(lib, analysis), false, '分析したときのノートのまま');
   assert.equal(autoAnalyzeDue({ points: pts(4), analysis, now: NOW, notesChanged: notesChanged(lib, analysis) }).due, false, '点もノートも変わっていない');
+  // 1 時間前に、直す前のノートで分析した場合（下で、24 時間たつまで待つことを確かめる）
+  const recent = analysisAt(hoursAgo(1), lib);
 
   updateNote(lib, NOTE_ID, { body: '書き直した自分の言葉' }, hoursAgo(2));
   assert.equal(notesChanged(lib, analysis), true);
@@ -41,7 +43,6 @@ test('NIH-83: 点は増えていないが永久ノートを直したとき、前
   assert.match(r.reason, /永久ノート/);
 
   // 前回から 24 時間たっていなければ待つ（書いている途中で始めない）。待っている理由にノートが出る
-  const recent = analysisAt(hoursAgo(1), libraryWithNote());
   const wait = autoAnalyzeDue({ points: pts(4), analysis: recent, now: NOW, notesChanged: notesChanged(lib, recent) });
   assert.equal(wait.due, false);
   assert.match(wait.reason, /永久ノート/);
@@ -61,6 +62,11 @@ test('NIH-83: 新しく書いた・消したノートも数え、線から作っ
   const base = analysisAt(hoursAgo(25), lib);
   deleteNote(lib, NOTE_ID, hoursAgo(2));
   assert.equal(notesChanged(lib, base), true, '消した');
+
+  const moved = libraryWithNote();
+  const before = analysisAt(hoursAgo(25), moved);
+  updateNote(moved, NOTE_ID, { pointIds: ['h1'] }, hoursAgo(2));
+  assert.equal(notesChanged(moved, before), true, '根拠の点を付け替えた（見せる面が変わる）');
 });
 
 test('NIH-83: ノートの指紋を持たない古い分析では、分析の時刻より後に直したノートを数える', () => {
