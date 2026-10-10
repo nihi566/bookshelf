@@ -45,7 +45,7 @@ test('G5-3: 知識の画面に、自動の分析の失敗の理由と最後に�
   const lib = sample();
   const pcInfo = { autoAnalysis: { enabled: true, minPoints: 10, maxHours: 24, pending: 12, lastSuccessAt: '2026-10-04T01:02:00.000Z', lastError: 'LLM サーバに接続できません <script>', lastErrorAt: '2026-10-04T03:04:00.000Z', lastTrigger: 'auto' } };
   const out = String(autoStatusBlock(st(lib, null, { pcInfo })));
-  assert.match(out, /自動の分析: <b>オン<\/b> — 前回の分析のあとに点が 10 件増えるか、24 時間たって点が 1 件以上増えるか永久ノートを書いた・直したとき、PC が分析し直します/);
+  assert.match(out, /自動の分析: <b>オン<\/b> — 前回の分析のあとに点が 10 件増える・減るか、24 時間たって点が 1 件以上増える・減るか永久ノートを書いた・直したとき、PC が分析し直します/);
   assert.match(out, /最後に成功: 10\/4 /);
   // 永久ノートだけを直したときは、次の分析で面・立体に入ると伝える（NIH-83）
   assert.doesNotMatch(out, /書いた・直した永久ノートがあります/);

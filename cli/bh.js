@@ -60,7 +60,7 @@ const HELP = `使い方: bh <コマンド> [オプション]
   config google-interval <秒>         ドライブを確認する間隔（既定: 60、最短 ${MIN_INTERVAL_SEC}）
   config auto on|off                  bh serve の自動の分析を入れる・切る（既定: on）
   config auto-points <件数>           前回の分析のあとに点がこの件数増えたら自動で分析する（既定: 10）
-  config auto-hours <時間>            前回からこの時間たち、点が 1 件以上増えていたら自動で分析する（既定: 24）
+  config auto-hours <時間>            前回からこの時間たち、点が 1 件以上増えた・減ったら自動で分析する（既定: 24）
 
 環境変数 BH_DATA でデータの保存先（既定: リポジトリの data/）を変えられます。`;
 
@@ -191,7 +191,7 @@ async function main() {
         console.log(`コンパニオンサーバ: http://${host === '0.0.0.0' ? 'localhost' : host}:${port}`);
         console.log(`  LLM: ${cfg.llm.baseUrl}（チャット: ${cfg.llm.chatModel || '未設定'} / 埋め込み: ${cfg.llm.embedModel || '文字 n-gram'}）`);
         console.log(`  Play ブックス: ${cfg.google.clientId ? `${Math.max(MIN_INTERVAL_SEC, cfg.google.intervalSec)} 秒ごとに Google ドライブを確認` : '未設定（docs/setup.md の「Play ブックスの自動取り込み」）'}`);
-        console.log(`  自動の分析: ${auto.enabled ? `前回のあとに点が ${auto.minPoints} 件増えるか、${auto.maxHours} 時間たって 1 件以上増えたら分析（bh config auto off で止める）` : '切ってあります（bh config auto on）'}`);
+        console.log(`  自動の分析: ${auto.enabled ? `前回のあとに点が ${auto.minPoints} 件増える・減るか、${auto.maxHours} 時間たって 1 件以上増えた・減ったら分析（bh config auto off で止める）` : '切ってあります（bh config auto on）'}`);
         console.log(`  スマホから使うには: tailscale serve --bg ${port}`);
       });
       break;
