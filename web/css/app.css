@@ -475,6 +475,7 @@ ul.plain li { margin: 4px 0; }
 html:has(dialog[open]) { overflow: hidden; } /* シートを開いている間は後ろの画面をスクロールさせない */
 .sheet { overscroll-behavior: contain; }
 .sheet::backdrop { background: rgba(0, 0, 0, 0.35); }
+.sheet:focus { outline: none; } /* 開いたときはシート自体にフォーカスを置く（NIH-90）。枠は中の欄に移ってから出す */
 .sheet form { padding: 16px 16px calc(16px + env(safe-area-inset-bottom)); }
 .sheet h2 { margin-bottom: 8px; }
 /* 保存・やめるの並びは、シートが画面より高いとき（横向き・キーボード）も下に見せておく */
