@@ -85,7 +85,8 @@ const HELP_BY_EXT = {
  */
 export function importHelpTargets(name) {
   const ext = /\.([^.]+)$/.exec(String(name ?? ''))?.[1].toLowerCase();
-  return HELP_BY_EXT[ext] || [HELP.kindleDevice, HELP.kindleExport, HELP.playbooks];
+  // a.constructor のような名前で Object の持ち物を拾わないよう、自分の持ち物だけを見る
+  return (ext && Object.hasOwn(HELP_BY_EXT, ext)) ? HELP_BY_EXT[ext] : [HELP.kindleDevice, HELP.kindleExport, HELP.playbooks];
 }
 
 /** 読めなかったファイルの行の、取り出し方の説明を開くボタン */

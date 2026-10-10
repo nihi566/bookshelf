@@ -90,6 +90,9 @@ test('案内の宛先はファイルの拡張子で決まり、分からない�
   assert.deepEqual(ids('memo.md'), ['help-reading-notes']);
   assert.deepEqual(ids('photo.png'), ['help-kindle-device', 'help-kindle-export', 'help-playbooks']);
   assert.deepEqual(ids('拡張子なし'), ['help-kindle-device', 'help-kindle-export', 'help-playbooks']);
+  for (const name of ['a.constructor', 'a.__proto__', 'a.toString']) {
+    assert.deepEqual(ids(name), ['help-kindle-device', 'help-kindle-export', 'help-playbooks'], `${name} でも結果欄が壊れない`);
+  }
 });
 
 test('案内の宛先はすべて取り込み画面に実在し、ファイル名に入った記号で壊れない', () => {
