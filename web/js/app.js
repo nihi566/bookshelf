@@ -562,6 +562,13 @@ const actions = {
     await navigator.clipboard.writeText(await buildBookmarklet());
     toast('ブックマークレットをコピーしました。ブックマークの URL に貼り付けてください');
   },
+  // 取り込みで読めなかったファイルの行から、同じ画面の取り出し方の説明を開いて見せる
+  'open-import-help'(el) {
+    const target = document.getElementById(el.dataset.target);
+    if (!target) return;
+    if (target.tagName === 'DETAILS') target.open = true;
+    target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  },
 };
 
 const forms = {
