@@ -24,7 +24,7 @@ from sqlmodel import Session, select, text
 from src import database as database_module
 from src.book_kind import KINDS, classify_kind
 from src.database import DB_PATH, get_session, init_db_orm
-from src.models import UNPRICED_REASONS, BookMapping, BookmeterAsinOverride, BookMark, PriceHistory, TargetPrice, UnpricedReason
+from src.models import UNPRICED_REASONS, BookMapping, BookmeterAsinOverride, BookMark, BookPublisher, PriceHistory, TargetPrice, UnpricedReason
 
 logger = logging.getLogger(__name__)
 
@@ -516,6 +516,34 @@ def save_price_history(data: dict) -> None:
         session.commit()
     if sell_price is None:
         _save_unpriced_reason(data["asin"], data.get("unpriced_reason"), now)
+    _save_publisher(data["asin"], data.get("publisher"), now)
+
+
+def _save_publisher(paid_asin: str, publisher, at: str) -> None:
+    """読めた出版社を本ごとに残す（読めなかった取得では前の名前を残す）。失敗しても価格の記録は止めない。"""
+    if not isinstance(publisher, str) or not publisher.strip():
+        return
+    try:
+        BookPublisher.__table__.create(bind=database_module.engine, checkfirst=True)
+        with get_session() as session:
+            session.merge(BookPublisher(paid_asin=paid_asin, publisher=publisher.strip(), updated_at=at))
+            session.commit()
+    except Exception:
+        logger.warning("出版社を保存できませんでした（ASIN: %s）", paid_asin, exc_info=True)
+
+
+def get_publishers() -> dict:
+    """
+    {paid_asin: 出版社}。読み取り専用の経路（report.py）から呼ばれるので、
+    テーブルが未作成なら作らずに空の dict を返す（get_unpriced_reasons と同じ）。
+    """
+    with get_session() as session:
+        exists = session.exec(
+            text("SELECT name FROM sqlite_master WHERE type='table' AND name='book_publishers'")
+        ).first()
+        if exists is None:
+            return {}
+        return {r.paid_asin: r.publisher for r in session.exec(select(BookPublisher)).all()}
 
 
 def _save_unpriced_reason(paid_asin: str, reason: Optional[str], at: str) -> None:

@@ -51,7 +51,7 @@ test('parseWishlist: 形式を確かめて正規化する', () => {
   const w = parseWishlist(data([book(), book({ asin: 'B0AAAAAAA2', ku: true, price: null, tag: 'seen', rating: 4, kind: 'manga' })]));
   assert.equal(w.lastScraped, '2026-01-02T03:04:05');
   assert.equal(w.books.length, 2);
-  assert.deepEqual(w.books[0], { asin: 'B0AAAAAAA1', title: '欲しい本', price: 900, ku: false, wanted: true, purchased: false, sources: ['bookmeter'], saved: { tag: '', rating: '', kind: 'book' }, trend: { prev: null, changedAt: null, low: null }, scrapedAt: '2026-01-01T00:00:00', history: [], priceReason: '', bookmeterId: '', label: '', index: 0 });
+  assert.deepEqual(w.books[0], { asin: 'B0AAAAAAA1', title: '欲しい本', price: 900, ku: false, wanted: true, purchased: false, sources: ['bookmeter'], saved: { tag: '', rating: '', kind: 'book' }, trend: { prev: null, changedAt: null, low: null }, scrapedAt: '2026-01-01T00:00:00', history: [], priceReason: '', bookmeterId: '', publisher: '', label: '', index: 0 });
   assert.deepEqual(w.books[1].saved, { tag: 'seen', rating: '4', kind: 'manga' });
 });
 
@@ -600,6 +600,26 @@ test('parseWishlist: 書名からレーベルを持ち、filterWishlist はレ�
   assert.equal(asins(filterWishlist(all, { label: '' })), '1234', '空ならレーベルで絞り込まない');
   assert.equal(asins(filterWishlist(all, { label: '無いレーベル' })), '');
   assert.equal(asins(filterWishlist(all, { q: '光文社' })), '2', '出版社名の一部でも検索窓で当たる（レーベルは書名に入っている）');
+});
+
+test('parseWishlist: 出版社（publisher）があればそれで、無ければ書名のレーベルで絞り込む（NIH-104）', () => {
+  const w = parseWishlist(data([
+    book({ asin: 'B0AAAAAAA1', title: 'ある技術書', publisher: '技術評論社' }),
+    book({ asin: 'B0AAAAAAA2', title: '海辺の経済学 (光文社新書)', publisher: '光文社' }),
+    book({ asin: 'B0AAAAAAA3', title: '単行本の随筆', publisher: ' 光文社 ' }),
+    book({ asin: 'B0AAAAAAA4', title: '星の少年 (岩波ジュニア新書 912)', publisher: null }),
+    book({ asin: 'B0AAAAAAA5', title: 'まだ出版社を読んでいない本' }),
+    book({ asin: 'B0AAAAAAA6', title: 'おかしな値', publisher: ['光文社'] }),
+  ]));
+  assert.deepEqual(w.books.map((b) => b.publisher), ['技術評論社', '光文社', '光文社', '', '', '']);
+  assert.deepEqual(w.books.map((b) => b.label), ['技術評論社', '光文社', '光文社', '岩波ジュニア新書', '', '']);
+  const all = w.books.map((b) => ({ book: b, marks: loadMarks(b, memoryStore()) }));
+  assert.equal(asins(filterWishlist(all, { label: '光文社' })), '23', '書名にレーベルが無い単行本も出版社で当たる');
+  assert.equal(asins(filterWishlist(all, { label: '技術評論社' })), '1');
+  assert.equal(asins(filterWishlist(all, { label: '岩波ジュニア新書' })), '4');
+  assert.equal(asins(filterWishlist(all, { q: '技術評論' })), '1', '検索窓でも出版社に当たる');
+  assert.deepEqual(labelCounts(all)[0], ['光文社', 2], '出版社とレーベルを同じ選択肢で数える');
+  assert.equal(labelCounts(all).length, 3);
 });
 
 test('labelCounts: レーベルごとの冊数を、多い順（同数は名前順）に返す。レーベルの無い本は数えない', () => {

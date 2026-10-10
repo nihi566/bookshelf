@@ -138,6 +138,50 @@ def format_image_url_line(prefix: str, url: str) -> str:
     return f"  {prefix} Image URL   : {url}" if prefix else f"  Image URL   : {url}"
 
 
+# ─── 出版社 ────────────────────────────────────────────────────────────────────
+# 価格チェックの「出版社」の絞り込み（bookshelf）用。書名にレーベルが無い本（技術書・単行本）も
+# 出版社で選べるよう、価格を取るのと同じページから読む（Amazon への取得回数は増やさない）。
+# 新しい表示（本の情報のカルーセル）の値 → 登録情報の「出版社 : 光文社 (2020/10/14)」の行の順に探す。
+
+_PUBLISHER_SCRIPT = """
+() => {
+    const rpi = document.querySelector('#rpi-attribute-book_details-publisher .rpi-attribute-value');
+    if (rpi && rpi.textContent.trim()) return rpi.textContent;
+    const rows = document.querySelectorAll('#detailBullets_feature_div li, #detailBulletsWrapper_feature_div li');
+    for (const li of rows) {
+        const label = li.querySelector('.a-text-bold');
+        if (label && /出版社|Publisher/.test(label.textContent)) return li.textContent;
+    }
+    return '';
+}
+"""
+MAX_PUBLISHER_LENGTH = 100
+# 方向制御・ゼロ幅の文字（登録情報の「出版社 ‏ : ‎ 光文社」に入っている）
+_INVISIBLE_RE = re.compile(r"[​-‏‪-‮⁠﻿]")
+_PUBLISHER_LABEL_RE = re.compile(r"^\s*(?:出版社|Publisher)\s*:\s*", re.IGNORECASE)
+# 名前の後ろの発売日「(2020/10/14)」
+_PUBLISHER_DATE_RE = re.compile(r"\s*\([^()]*\d{4}[^()]*\)\s*$")
+
+
+def clean_publisher(text) -> str:
+    """登録情報の 1 行や表示の値から出版社の名前だけを返す。「; 第2版」などの版と発売日は落とす。無ければ空文字。"""
+    if not isinstance(text, str):
+        return ""
+    value = _INVISIBLE_RE.sub("", unicodedata.normalize("NFKC", text))
+    value = _PUBLISHER_LABEL_RE.sub("", " ".join(value.split()))
+    value = _PUBLISHER_DATE_RE.sub("", value.split(";")[0]).strip()
+    return value[:MAX_PUBLISHER_LENGTH]
+
+
+async def extract_publisher(page) -> str:
+    """出版社の名前を返す。取れない・失敗したときは空文字（価格の取得は止めない）。"""
+    try:
+        value = await page.evaluate(_PUBLISHER_SCRIPT)
+    except Exception:
+        return ""
+    return clean_publisher(value)
+
+
 # ─── 価格抽出ロジック ──────────────────────────────────────────────────────────
 
 async def _try_get_text(page, selector: str) -> str:
@@ -400,6 +444,7 @@ async def crawl_price_info(
             "campaign_text": str,          # キャンペーン文（"" = 無し）
             "url":           str,
             "unpriced_reason": str | None, # 価格が取れなかった理由（UNPRICED_REASONS。取れたら None）
+            "publisher":     str,          # 出版社（"" = 取れなかった）
         }
     """
     from playwright.async_api import async_playwright
@@ -427,6 +472,7 @@ async def crawl_price_info(
         "url":           url,
         "is_unlimited":  0,
         "unpriced_reason": None,
+        "publisher":     "",
     }
 
     async with async_playwright() as pw:
@@ -477,6 +523,11 @@ async def crawl_price_info(
             image_url = await extract_cover_image_url(page)
             if image_url:
                 print(format_image_url_line(prefix, image_url))
+
+            # ── 出版社（価格チェックの絞り込み用。取れなければ空のまま） ──
+            result["publisher"] = await extract_publisher(page)
+            if debug:
+                print(f"  {prefix}-> 出版社: {result['publisher'] or '（なし）'}")
 
             # ── 価格取得 ──────────────────────────────────────────
             print(f"  {prefix}[1/3] 販売価格を取得中...")

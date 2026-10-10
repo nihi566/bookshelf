@@ -80,6 +80,7 @@ class BuildWishlistTest(unittest.TestCase):
                 "price_history": [],
                 "price_reason": None,
                 "bookmeter_id": None,
+                "publisher": None,
                 "sell_price": None,
                 "points": 0,
                 "campaign": "",
