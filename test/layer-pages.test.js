@@ -92,7 +92,8 @@ test('#64: 立体のページは核・行動の原則・知識マップ。面の
   assert.match(out, /知識の核/);
   assert.match(out, /原則その一/);
   assert.match(out, /id="knowledge-map"/);
-  assert.match(out, /aria-label="縮小" disabled>/, '最初は最小の倍率なので縮小は押せない');
+  assert.match(out, /data-map="back" hidden>/, '最初は全体を見せるので「全体」に戻るボタンは隠す');
+  assert.equal(typeof solidView.mount, 'function', '図は画面を出したあとに描く');
   assert.doesNotMatch(out, /plane-card|line-row/);
 });
 
@@ -104,18 +105,6 @@ test('#64: 線・面・立体のページの上で、点・線・面・立体を
     for (const href of ['#/search', '#/lines', '#/planes', '#/solid']) assert.match(out, new RegExp(`href="${href}"`));
     assert.match(out, new RegExp(`<a class="stat ${key}" href="[^"]+" aria-current="page">`));
   }
-});
-
-test('#64: 知識マップを立体のページへ移しても、面の名前は隣の面と重ならない長さに切る', async () => {
-  const { solidView } = await import('../web/js/views/layers.js');
-  const lib = sample();
-  const a = analysisOf(lib);
-  const name = 'とても長い面の名前でラベルが重なる';
-  a.planes = Array.from({ length: 8 }, (_, i) => ({ id: `p${i}`, name: `${name}${i}`, summary: '', lineIds: [] }));
-  const out = String(solidView.render({ state: st(lib, a) }));
-  const labels = [...out.matchAll(/class="n-plane"><circle[^>]*\/><text[^>]*>([^<]*)<\/text>/g)].map((m) => m[1]);
-  assert.equal(labels.length, 8);
-  assert.ok(labels.every((l) => [...l].length < 12), `面が 8 つ並ぶと 12 字より短く切る: ${labels.join(' / ')}`);
 });
 
 test('#64: 分析が無いときの線・面・立体のページは、知識の画面で分析するよう案内する', async () => {

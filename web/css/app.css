@@ -436,22 +436,15 @@ dl.kv dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
 ul.plain { padding-left: 1.2em; margin: 6px 0; }
 ul.card.plain { padding-left: calc(16px + 1.2em); } /* カードの余白の内側に箇条の点を置く（点がカードの外にはみ出さない） */
 ul.plain li { margin: 4px 0; }
-.map-wrap { position: relative; overflow: auto; border-radius: var(--radius); border: 1px solid var(--line); background: var(--surface); max-height: 70vh; -webkit-overflow-scrolling: touch; }
-.map-wrap svg { display: block; min-width: 600px; } /* スマホでも文字が読める大きさで描き、枠の中で横にスクロールする */
-.map-tools { position: sticky; top: 8px; left: 8px; z-index: 1; display: inline-flex; gap: 4px; margin: 8px; }
-.map-tools button { width: 36px; height: 36px; border-radius: 10px; border: 1px solid var(--line); background: var(--surface); cursor: pointer; font-size: 1.1rem; }
-.map-tools button:disabled { opacity: 0.4; cursor: default; }
-svg .edge-core { stroke: var(--layer-solid); stroke-opacity: 0.35; stroke-width: 3; }
-svg .edge-plane { stroke: var(--layer-plane); stroke-opacity: 0.4; stroke-width: 2; }
-svg .edge-relation { stroke: var(--layer-solid); stroke-width: 2.5; stroke-dasharray: 10 8; fill: none; }
-svg .n-core circle { fill: var(--layer-solid); }
-svg .n-plane circle { fill: var(--layer-plane); }
-svg .n-line circle { fill: var(--layer-line); }
-svg text { fill: var(--ink); font-family: var(--font); paint-order: stroke; stroke: var(--surface); stroke-width: 14px; stroke-linejoin: round; }
-svg .n-core text { font-weight: 700; font-size: 96px; }
-svg .n-plane text { font-weight: 700; font-size: 84px; }
-svg .n-line text { font-size: 66px; }
-svg a:hover text { fill: var(--accent); }
+.map-wrap { position: relative; border-radius: var(--radius); border: 1px solid var(--line); background: var(--surface); overflow: hidden; }
+/* 指で動かすと図が動くので、高さを画面より小さくして、枠の外でページをスクロールできるようにする */
+.map-canvas { height: min(62vh, 560px); min-height: 320px; }
+.map-tools { position: absolute; top: 8px; left: 8px; right: 8px; z-index: 1; display: flex; flex-wrap: wrap; align-items: center; gap: 4px; pointer-events: none; }
+.map-tools > * { pointer-events: auto; }
+.map-tools button { min-width: 36px; height: 36px; padding: 0 8px; border-radius: 10px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); cursor: pointer; font-size: 1.1rem; }
+.map-tools .map-back { font-size: 0.9rem; font-weight: 700; }
+.map-tools .map-plane { padding: 6px 10px; border-radius: 10px; background: var(--surface); border: 1px solid var(--line); font-size: 0.85rem; font-weight: 700; color: var(--layer-plane-ink); }
+.map-tools[hidden], .map-tools [hidden] { display: none; }
 .rec { display: flex; gap: 12px; }
 .rec img { flex: none; width: 56px; height: 80px; object-fit: cover; border-radius: 4px; background: var(--surface-2); }
 .rec .kind { font-size: 0.72rem; font-weight: 700; }

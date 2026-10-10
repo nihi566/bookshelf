@@ -4,7 +4,7 @@
 
 - **静的サイト + PC のコンパニオン**：画面は GitHub Pages に置ける静的ファイルだけで作り、AI（ローカル LLM）は PC 側が受け持つ。ハイライトと分析結果はこのシステムだけで管理する（Obsidian などへの書き出しはしない）
 - **同じコードをブラウザと PC で使う**：`web/core/` はブラウザと Node の両方で動く純粋な ES モジュール（DOM や `fs` に依存しない）。パーサ・モデル・分析パイプラインは 1 か所にしかない
-- **依存ライブラリなし**：zip の読み書き、docx の解析、HTML の分解、k-means まで自前。ビルド不要で `web/` をそのまま公開できる
+- **依存ライブラリは 1 つだけ**：zip の読み書き、docx の解析、HTML の分解、k-means まで自前。例外は知識マップの図（重ならない並べ方・拡大縮小・指での移動）を描く Cytoscape.js（MIT）で、ビルド済みの 1 ファイルを `web/vendor/` に同梱している（npm では入れない）。ビルド不要で `web/` をそのまま公開できる
 - **データは手元だけ**：ハイライトは端末の IndexedDB と PC の `data/*.json` にだけ置く。外に出るのは、ローカル LLM への依頼と、おすすめの本を探す検索語・書名（Google Books / 国立国会図書館サーチ）のみ。ハイライトの本文は外部に送らない
 
 ## ブラウザからローカル LLM に届かせる方法の比較
@@ -160,13 +160,13 @@ Analysis = { version: 2, createdAt, model: { chat, embed }, incremental,
 
 ## 画面の安全性
 
-- すべての埋め込みはエスケープする（`web/js/html.js` の `html` タグ付きテンプレート）。知識マップの SVG も ID・座標・ラベルをエスケープ／数値化して組み立てる
+- すべての埋め込みはエスケープする（`web/js/html.js` の `html` タグ付きテンプレート）。知識マップの名前は Cytoscape.js が canvas に文字として描く（HTML として解釈されない）
 - 外部由来の URL（書誌 DB のリンク・表紙画像）は `https:` だけ通す
 - ブックマークレットからの `postMessage` は Kindle ノートブックのドメイン（`read.amazon.com` / `.co.jp` など）の完全一致だけ受け付ける
 
 ## 知識マップ・PC の状態
 
-- 知識マップの配置（中心 = 核、内側の輪 = 面、外側の輪 = 線）は `web/core/knowledge-map.js` の `layoutKnowledgeMap`
+- 知識マップは立体のページ（`#/solid`）で、同梱の Cytoscape.js（`web/vendor/cytoscape.esm.min.js`、3.34.3）で描く。最初は核と面だけを出し、面を押すとその面の線だけを広げる。図に置く要素・見た目・並べ方は `web/core/knowledge-map.js`、描画と操作は `web/js/knowledge-map-view.js`（このページを開いたときだけ読み込む）。更新するときは npm の `cytoscape` パッケージの `dist/cytoscape.esm.min.mjs` を `.js` に名前を変えて置き換え、`web/sw.js` の `CACHE` を上げる
 - ブラウザ拡張は確認のたびに結果（成否・ログイン切れ・新しい線の件数・確認の間隔・エラー文）だけを `POST /api/kindle-status` に送り、コンパニオンサーバが `state.json` の `kindleSync` に残す（`/api/info` で Web アプリの取り込み画面に見せる）。トークン・URL・本の一覧は送らない
 
 ## パーサ（`web/core/parsers/`）

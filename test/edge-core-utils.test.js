@@ -6,7 +6,6 @@ import { crc32, isZip, readZip, createZip } from '../web/core/zip.js';
 import { analysisPoints, pointById, analysisPointById, isThought, pointLabel, embedText, legacyEmbedText, searchPoints } from '../web/core/points.js';
 import { newerItem, mergeCollections } from '../web/core/collections.js';
 import { isUploadedCover, bookCoverUrl, COVER_MAX_LENGTH } from '../web/core/covers.js';
-import { layoutKnowledgeMap } from '../web/core/knowledge-map.js';
 import { analysisStamp, makeBackup, applyImport, BACKUP_FORMAT } from '../web/core/importing.js';
 import { followJob, pcJobOutcome } from '../web/core/jobs.js';
 import { normalizeKindleReport, mergeKindleSync, kindleSyncState } from '../web/core/kindle-status.js';
@@ -406,35 +405,6 @@ test('bookCoverUrl: アップロードした表紙を優先、壊れた表紙な
   assert.equal(bookCoverUrl({ volumeId: 'ab\ncd' }), '');
   assert.equal(bookCoverUrl(undefined), '');
   assert.equal(bookCoverUrl({}), '');
-});
-
-// ---- knowledge-map.js ----
-
-test('layoutKnowledgeMap: 面が無い分析でも核だけ出す', () => {
-  const { nodes, edges } = layoutKnowledgeMap({ planes: [], lines: [], solid: {} });
-  assert.deepEqual(nodes.map((n) => n.id), ['core']);
-  assert.equal(nodes[0].label, '知識の核');
-  assert.deepEqual(edges, []);
-  assert.equal(layoutKnowledgeMap({ lines: [] }).nodes.length, 1);
-});
-
-test('layoutKnowledgeMap: 線が無い面・存在しない線 ID・面にない関係は飛ばし、座標はすべて有限', () => {
-  const analysis = {
-    lines: [{ id: 'l1', name: '線1', highlightIds: ['h1', 'h2'] }],
-    planes: [
-      { id: 'p1', name: '面1', lineIds: ['l1', 'lX'] },
-      { id: 'p2', name: '面2', lineIds: [] },
-    ],
-    solid: { title: '核', relations: [{ from: 'p1', to: 'p2' }, { from: 'p1', to: 'pX', type: 'x' }] },
-  };
-  const before = structuredClone(analysis);
-  const { nodes, edges } = layoutKnowledgeMap(analysis);
-  assert.deepEqual(nodes.map((n) => n.id), ['core', 'p1', 'l1', 'p2']);
-  assert.equal(nodes[0].label, '核');
-  assert.equal(nodes.find((n) => n.id === 'l1').weight, 2);
-  for (const n of nodes) assert.ok(Number.isFinite(n.x) && Number.isFinite(n.y), n.id);
-  assert.deepEqual(edges.filter((e) => e.kind === 'relation'), [{ from: 'p1', to: 'p2', kind: 'relation', label: '' }]);
-  assert.deepEqual(analysis, before);
 });
 
 // ---- importing.js ----

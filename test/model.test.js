@@ -5,7 +5,6 @@ import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { bookHighlights, dailyPicks, deleteBook, emptyLibrary, highlightIdFor, bookIdFor, libraryStats, listBooks, mergeLibraries, mergeParsed, searchHighlights, updateHighlight } from '../web/core/model.js';
-import { layoutKnowledgeMap } from '../web/core/knowledge-map.js';
 import { createZip, readZip } from '../web/core/zip.js';
 import { SAMPLE_BOOKS } from '../web/core/sample.js';
 
@@ -112,15 +111,6 @@ function fakeAnalysis(lib) {
     recommendations: [{ title: '次の本', author: '誰か', reason: '理由', kind: 'deepen', planeId: 'p1', verified: false }],
   };
 }
-
-test('layoutKnowledgeMap: 核・面・線をすべて有限の座標に置き、核→面→線をつなぐ', () => {
-  const lib = sampleLibrary();
-  const analysis = fakeAnalysis(lib);
-  const layout = layoutKnowledgeMap(analysis);
-  assert.equal(layout.nodes.length, 1 + 1 + 2);
-  assert.ok(layout.nodes.every((n) => Number.isFinite(n.x) && Number.isFinite(n.y)));
-  assert.equal(layout.edges.length, 3);
-});
 
 test('zip: 書き出しと読み込みの往復、system unzip でも検証', async () => {
   const files = [

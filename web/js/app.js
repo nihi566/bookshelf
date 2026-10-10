@@ -126,9 +126,6 @@ function render({ keepScroll = false } = {}) {
   // 別の画面に移ったとき、押したリンクは描き直しで消えてフォーカスが行方不明になる。
   // キーボード・読み上げで使う人が新しい画面の先頭から読めるよう、本文にフォーカスを移す
   if (path !== currentPath && !view.contains(document.activeElement)) view.focus({ preventScroll: true });
-  // 知識マップは横にスクロールする枠より広く描くので、最初は中心（核）を見せる
-  const mapWrap = document.getElementById('map-wrap');
-  if (mapWrap) mapWrap.scrollLeft = (mapWrap.scrollWidth - mapWrap.clientWidth) / 2;
   if (keepScroll || path === currentPath) window.scrollTo(0, y);
   else window.scrollTo(0, 0);
   currentPath = path;
@@ -802,21 +799,6 @@ const actions = {
     toast(r.status === 'wrong' ? '「ちがう」にしました。この組はもう出しません（すべての遠いつながりの画面で取り消せます）' : r.status === 'interesting' ? '「面白い」にしました。分析し直しても残ります' : '反応を外しました');
     render({ keepScroll: true });
     autoSyncAfterChange();
-  },
-  'map-zoom'(el) {
-    // いま見えている大きさから拡大・縮小し、見ていた中心を保つ（CSS の最小幅があるので % ではなく px で決める）
-    const svg = document.getElementById('knowledge-map');
-    const wrap = document.getElementById('map-wrap');
-    const box = svg.getBoundingClientRect();
-    const fx = (wrap.scrollLeft + wrap.clientWidth / 2) / box.width;
-    const fy = (wrap.scrollTop + wrap.clientHeight / 2) / box.height;
-    const base = Math.max(600, wrap.clientWidth);
-    const next = Math.max(base, Math.min(base * 4, box.width * (el.dataset.dir === '1' ? 1.5 : 1 / 1.5)));
-    svg.style.width = `${next}px`;
-    const after = svg.getBoundingClientRect();
-    wrap.scrollLeft = fx * after.width - wrap.clientWidth / 2;
-    wrap.scrollTop = fy * after.height - wrap.clientHeight / 2;
-    for (const b of wrap.querySelectorAll('[data-action="map-zoom"]')) b.disabled = b.dataset.dir === '1' ? next >= base * 4 - 1 : next <= base + 1;
   },
   sync: () => sync(),
   async 'toggle-autosync'(el) {
