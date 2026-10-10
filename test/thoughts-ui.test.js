@@ -50,6 +50,34 @@ test('読み込みが終わる前は、端末のライブラリを保存しな�
   await assert.rejects(save.library(), /まだ端末のデータを読み込んでいます/);
 });
 
+test('NIH-82: メモの削除は確かめてから消す。断ったらシートを開いたまま何も消さない（永久ノート・リンク・骨組みの削除とそろえる）', async () => {
+  const { fakeApp, formData, button } = await import('./helpers/app-actions.js');
+  const st = { ...state(), loaded: true };
+  const t = addThought(st.library, { text: '書いた思いつき' }, T1);
+  // 墓標は同期で生き返らない（stickyDelete）ので「元に戻す」ではなく、消す前に確かめる
+  const asked = [];
+  let answer = false;
+  const app = fakeApp(st, { confirm: (m) => (asked.push(m), answer) });
+  app.actions['edit-thought'](button({ id: t.id }));
+  // 断ったら: 何も消さず・保存も同期もせず、シートを開いたままにする（true を返すと openSheet は閉じない）
+  assert.equal(await app.sheets[0].onSubmit(formData({ text: '書いた思いつき' }), 'delete'), true);
+  assert.match(asked[0], /このメモを削除しますか？/);
+  assert.equal(st.library.thoughts[t.id].text, '書いた思いつき');
+  assert.deepEqual(app.log, ['openSheet']);
+  // 確かめて OK なら消す
+  answer = true;
+  await app.sheets[0].onSubmit(formData({ text: '書いた思いつき' }), 'delete');
+  assert.equal(st.library.thoughts[t.id].deleted, true);
+  assert.deepEqual(app.log, ['openSheet', 'persist', 'toast', 'render', 'sync']);
+  // 「保存」では確かめない
+  const t2 = addThought(st.library, { text: '別の思いつき' }, T1);
+  asked.length = 0;
+  app.actions['edit-thought'](button({ id: t2.id }));
+  await app.sheets[1].onSubmit(formData({ text: '直した思いつき' }), 'save');
+  assert.deepEqual(asked, []);
+  assert.equal(st.library.thoughts[t2.id].text, '直した思いつき');
+});
+
 test('G1-3: ホームの受け箱に未整理のメモが件数付きで出て、「整理済みにする」「捨てる」を押せる', async () => {
   const { home } = await import('../web/js/views/library.js');
   const lib = emptyLibrary();
