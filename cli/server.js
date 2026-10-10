@@ -7,6 +7,7 @@
 // スマホからは `tailscale serve --bg 8787` で https://<PC名>.<tailnet>.ts.net として届く。
 
 import { createServer } from 'node:http';
+import { readFileSync } from 'node:fs';
 import { readFile, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { REPO_ROOT } from './store.js';
@@ -18,6 +19,7 @@ import { createLlmClient, normalizeBaseUrl } from '../web/core/analysis/llm.js';
 import { analyzeLibrary, recommendBooks, recommendationNote } from '../web/core/analysis/pipeline.js';
 import { autoAnalyzeDue, autoConfig, pendingPoints } from '../web/core/auto-analysis.js';
 import { analysisShapeError } from '../web/core/analysis/shape.js';
+import { swVersion } from '../web/core/serve-version.js';
 import { restoreAnalysis } from '../web/core/analysis/restore.js';
 import { wishlistForRecommend } from '../web/core/wishlist.js';
 import { parseFiles } from '../web/core/parsers/index.js';
@@ -32,6 +34,22 @@ const NO_EMBED_MODEL = 'PC に埋め込みモデルが設定されていない�
 const NO_CHAT_MODEL = 'PC のチャットモデルが設定されていないので、AI に頼めません（PC で bh config model qwen2.5:7b などを実行してください）';
 
 const WEB_ROOT = path.join(REPO_ROOT, 'web');
+const SW_PATH = path.join(WEB_ROOT, 'sw.js');
+// web/sw.js の版（読めなければ空。画面は「版を返さない古い bh serve」と同じに扱う）
+function startupSwVersion() {
+  try {
+    return swVersion(readFileSync(SW_PATH, 'utf8'));
+  } catch {
+    return '';
+  }
+}
+async function diskSwVersion() {
+  try {
+    return swVersion(await readFile(SW_PATH, 'utf8'));
+  } catch {
+    return '';
+  }
+}
 // 画面に渡す、Play ブックスの取り込めないドキュメントの数の上限（件数は problemCount で全部を渡す）
 const DRIVE_PROBLEMS_MAX = 30;
 const MIME = {
@@ -57,6 +75,8 @@ export function createCompanionServer({ store, log = console.log, catalogFetch, 
   // trigger: 'manual'（画面のボタン・bh）/ 'auto'（点が増えたので PC が自分で始めた）
   // bh update が「止めた後に起動したプロセス（= 新しいコード）か」を確かめるのに使う
   const serverStartedAt = new Date().toISOString();
+  // 起動したときの web/sw.js の版（= 動いているコードの版）。/sw.js はディスクから毎回配るので、そちらでは古いコードか分からない
+  const serverVersion = startupSwVersion();
   const job = { running: false, stage: '', message: '', done: 0, total: 0, error: '', startedAt: null, finishedAt: null, trigger: '', controller: null };
   // 取り込みの最中は自動の分析を始めない（取り込み途中の点で分析しない）
   let activeImports = 0;
@@ -185,7 +205,8 @@ export function createCompanionServer({ store, log = console.log, catalogFetch, 
         const st = await store.state();
         return send(res, 200, {
           app: 'book-highlights',
-          server: { startedAt: serverStartedAt },
+          // 設定 → 接続を確認 が、古いコードのまま動いていないかを見る（web/core/serve-version.js）
+          server: { startedAt: serverStartedAt, version: serverVersion, diskVersion: await diskSwVersion() },
           stats: libraryStats(lib),
           // Web アプリはこれが自分の持つものより新しいときだけ同期する
           updatedAt: lib.updatedAt,
