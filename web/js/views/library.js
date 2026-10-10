@@ -310,15 +310,16 @@ function renderResults(root, ctx, q) {
   const { state, query } = ctx;
   const source = query.get('source') || '';
   const fav = query.get('fav') === '1';
+  const edited = query.get('edited') === '1';
   // 捨てた思いつきは出さない（メモの一覧の「捨てた」でだけ見られる）
-  const results = searchPoints(state.library, q, { source, favorite: fav });
+  const results = searchPoints(state.library, q, { source, favorite: fav, edited });
   const idx = lineIndex(state.analysis);
   const link = (patch, label, on) => {
     const p = new URLSearchParams(query);
     for (const [k, v] of Object.entries(patch)) v ? p.set(k, v) : p.delete(k);
     return html`<a class="chip ${on ? 'on' : ''}" href="#/search?${p}" ${on ? html`aria-current="true"` : ''}>${label}</a>`;
   };
-  root.querySelector('#search-filters').innerHTML = String(html`${link({ source: '' }, 'すべて', !source)}${link({ source: 'kindle' }, 'Kindle', source === 'kindle')}${link({ source: 'playbooks' }, 'Play Books', source === 'playbooks')}${link({ source: 'paper' }, '紙の本', source === 'paper')}${link({ source: 'memo' }, '読書メモ', source === 'memo')}${link({ source: 'thought' }, THOUGHT_LABEL, source === 'thought')}${link({ fav: fav ? '' : '1' }, '★ お気に入り', fav)}`);
+  root.querySelector('#search-filters').innerHTML = String(html`${link({ source: '' }, 'すべて', !source)}${link({ source: 'kindle' }, 'Kindle', source === 'kindle')}${link({ source: 'playbooks' }, 'Play Books', source === 'playbooks')}${link({ source: 'paper' }, '紙の本', source === 'paper')}${link({ source: 'memo' }, '読書メモ', source === 'memo')}${link({ source: 'thought' }, THOUGHT_LABEL, source === 'thought')}${link({ fav: fav ? '' : '1' }, '★ お気に入り', fav)}${link({ edited: edited ? '' : '1' }, '直した文', edited)}`);
   const shown = results.slice(0, 200);
   // 検索語に当たる永久ノート（先頭 5 件。ノートは点ではないので、点の件数とは分けて出す）
   const notes = q.trim() ? searchNotes(state.library, q) : [];
