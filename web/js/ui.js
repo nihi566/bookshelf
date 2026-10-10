@@ -4,7 +4,8 @@ import { isTextEdited, listBooks, SOURCES } from '../core/model.js';
 import { hash, isoDate } from '../core/text.js';
 import { kindleSyncState } from '../core/kindle-status.js';
 import { bookCoverUrl } from '../core/covers.js';
-import { isThought } from '../core/points.js';
+import { analysisPoints, isThought } from '../core/points.js';
+import { pendingPoints } from '../core/auto-analysis.js';
 import { THOUGHT_LABEL, THOUGHT_STATUS, isThoughtUnsynced } from '../core/thoughts.js';
 
 export const COLOR_VAR = {
@@ -374,4 +375,18 @@ export function homeAlertBlock(state) {
   const playbooks = playbooksSyncAlert(state.pcInfo.google);
   const text = autoAnalysisAlert(state.pcInfo.autoAnalysis);
   return html`${kindleAlertBlock(state)}${playbooks ? html`<a class="notice err" href="#/import" style="${ALERT_STYLE}">${playbooks}（詳しく）</a>` : ''}${text ? html`<a class="notice err" href="#/knowledge" style="${ALERT_STYLE}">${text}（詳しく）</a>` : ''}`;
+}
+
+/**
+ * 前回の分析のあとに増えた点（どの線にも「まだつながらない点」にも入っていない点。ID で数える）の数と、「分析し直す」への案内。
+ * 知識の画面は 0 件でも数を出す。ホーム（toKnowledge）は 1 件以上のときだけ出し、知識の画面の「分析し直す」へリンクする
+ */
+export function pendingNudge(state, { toKnowledge = false } = {}) {
+  const a = state.analysis;
+  if (!a) return '';
+  const n = pendingPoints(analysisPoints(state.library), a);
+  const head = html`前回の分析のあとに増えた点 <b>${n}</b> 件`;
+  if (!n) return toKnowledge ? '' : html`<p class="small">${head}</p>`;
+  const lead = toKnowledge ? html` — <a href="#/knowledge">分析し直す</a>` : '。「分析し直す」で、変わったところだけ作り直します';
+  return html`<p class="small pending-nudge" style="${toKnowledge ? 'margin-top:8px' : ''}">${head}（まだ線につながっていません）${lead}</p>`;
 }
