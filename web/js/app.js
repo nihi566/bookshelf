@@ -9,6 +9,7 @@ import { book, books, home, search } from './views/library.js';
 import { autoStatusBlock, historyView, isolatedView, knowledge, lineView, pendingView, planeView } from './views/knowledge.js';
 import { linesView, planesView, solidView } from './views/layers.js';
 import { starsView } from './views/stars.js';
+import { trashView } from './views/trash.js';
 import { toggleLineStar } from '../core/line-stars.js';
 import { discoveriesView, discoveryView } from './views/discoveries.js';
 import { farView } from './views/far.js';
@@ -86,6 +87,8 @@ const ROUTES = [
   [/^\/discoveries$/, discoveriesView, 'home'],
   [/^\/import$/, importView, 'settings'],
   [/^\/settings$/, settingsView, 'settings'],
+  // 削除した点（通知の「元に戻す」が消えた後でも戻せる。入口は設定の「データ」）
+  [/^\/trash$/, trashView, 'settings'],
 ];
 
 const view = document.getElementById('view');
@@ -730,6 +733,10 @@ const actions = {
     toast('削除しました', 6000, { label: '元に戻す', run: () => undoDeleteHighlight(id) });
     render({ keepScroll: true });
     autoSyncAfterChange();
+  },
+  // 削除した点の画面（#/trash）から戻す。通知の「元に戻す」と同じ処理
+  'restore-highlight'(el) {
+    return undoDeleteHighlight(el.dataset.id);
   },
   async copy(el) {
     const h = pointById(state.library, el.dataset.id);

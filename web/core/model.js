@@ -544,6 +544,16 @@ export function updateHighlight(library, id, patch, now = new Date().toISOString
   return h;
 }
 
+/**
+ * 利用者が削除した点（ゴミ箱。削除した時刻の新しい順）。updateHighlight(…, { deleted: false }) で戻せるものだけ。
+ * 取り込みで長い文に置き換わった点（supersededBy）と、本が削除されたままの点（戻しても見えない）は出さない
+ */
+export function deletedHighlights(library) {
+  return Object.values(library.highlights)
+    .filter((h) => h.deleted && !h.supersededBy && library.books[h.bookId] && !library.books[h.bookId].deleted)
+    .sort((a, b) => String(b.userUpdatedAt || b.updatedAt || '').localeCompare(String(a.userUpdatedAt || a.updatedAt || '')));
+}
+
 export function deleteBook(library, bookId, now = new Date().toISOString()) {
   const b = library.books[bookId];
   if (!b) return;

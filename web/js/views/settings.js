@@ -1,6 +1,6 @@
 // 取り込み・設定の画面
 import { html } from '../html.js';
-import { libraryStats } from '../../core/model.js';
+import { deletedHighlights, libraryStats } from '../../core/model.js';
 import { ACCEPT } from '../../core/parsers/index.js';
 import { isoDate } from '../../core/text.js';
 import { kindleSyncLines } from '../ui.js';
@@ -192,6 +192,7 @@ export const settingsView = {
       <div class="section"><h2>データ</h2></div>
       <div class="card stack">
         <p class="help">ハイライトと思いつきはこの端末（ブラウザ）の中だけに保存されています。本 ${s.books} 冊 / 点 ${s.points} 件${s.thoughts ? `（うち思いつき ${s.thoughts} 件）` : ''}。</p>
+        <a class="row spread" href="#/trash"><b>削除した点</b><span class="muted">${deletedHighlights(state.library).length} 件 ›</span></a>
         <div class="row"><button class="btn" data-action="backup">バックアップを保存</button><a class="btn" href="#/import">バックアップから戻す</a></div>
         <button class="btn danger" data-action="clear-all">この端末のデータをすべて消す</button>
       </div>
