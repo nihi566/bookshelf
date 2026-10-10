@@ -1,6 +1,6 @@
 // ホーム・本・検索の画面
 import { html } from '../html.js';
-import { bookHighlights, dailyPicks, isTechnicalBook, libraryStats, listBooks, searchHighlights, SOURCES } from '../../core/model.js';
+import { bookHighlights, dailyPicks, guessTechnical, isTechnicalBook, libraryStats, listBooks, searchHighlights, SOURCES } from '../../core/model.js';
 import { searchPoints } from '../../core/points.js';
 import { THOUGHT_LABEL, liveThoughts } from '../../core/thoughts.js';
 import { normalizeText } from '../../core/text.js';
@@ -202,6 +202,39 @@ export const book = {
       <div style="margin-top:16px">${items}</div>`;
   },
 };
+
+/** 技術書の選択肢。自動のときは、書名から今どちらと判断しているかも見せる */
+function technicalField(b) {
+  const value = typeof b?.technical === 'boolean' ? (b.technical ? 'yes' : 'no') : 'auto';
+  const guess = b ? (guessTechnical(b.title) ? '技術書' : '技術書ではない') : '';
+  const opt = (v, label) => html`<option value="${v}" ${v === value ? 'selected' : ''}>${label}</option>`;
+  return html`<label class="field"><span>技術書（IT の教科書）か</span>
+    <select name="technical">${opt('auto', `自動${guess ? `（今: ${guess}）` : '（書名から判断）'}`)}${opt('yes', '技術書（線を点に数えない）')}${opt('no', '技術書ではない')}</select></label>`;
+}
+
+/** 技術書の選択肢の値（technicalField の select） → 本の technical（null は書名から判断） */
+export const TECHNICAL_VALUES = { auto: null, yes: true, no: false };
+
+/** 紙の本を登録するシート */
+export function registerBookSheet() {
+  return html`<h2>紙の本を登録</h2>
+    <label class="field"><span>書名</span><input type="text" name="title" autocomplete="off"></label>
+    <label class="field"><span>著者（任意）</span><input type="text" name="author" autocomplete="off"></label>
+    <label class="field"><span>表紙の画像（任意）</span><input type="file" name="cover" accept="image/*"></label>
+    ${technicalField(null)}
+    <div class="row spread"><span></span><span class="row"><button class="btn" value="cancel">やめる</button><button class="btn primary" value="save">登録</button></span></div>`;
+}
+
+/** 本の情報（著者・表紙・技術書か）を直すシート */
+export function editBookSheet(b) {
+  return html`<h2>本の情報</h2>
+    <p class="quote">${b.title}</p>
+    <label class="field"><span>著者</span><input type="text" name="author" value="${b.author || ''}" autocomplete="off"></label>
+    <label class="field"><span>表紙の画像を${b.cover ? '差し替える' : '選ぶ'}（任意）</span><input type="file" name="cover" accept="image/*"></label>
+    ${b.cover ? html`<label class="check"><input type="checkbox" name="removeCover" value="1"> アップロードした表紙を外す</label>` : ''}
+    ${technicalField(b)}
+    <div class="row spread"><span></span><span class="row"><button class="btn" value="cancel">やめる</button><button class="btn primary" value="save">保存</button></span></div>`;
+}
 
 /** 探し方の切り替え先（今の言葉・絞り込みをそのまま持っていく） */
 function modeHref(query, value) {

@@ -1,6 +1,6 @@
 // オフラインでも開けるようにするサービスワーカー。
 // ネットワーク優先（更新をすぐ反映）で、つながらないときだけキャッシュを使う。
-const CACHE = 'bh-v24';
+const CACHE = 'bh-v25';
 const SHELL = [
   './',
   'index.html',
@@ -8,6 +8,8 @@ const SHELL = [
   'manifest.webmanifest',
   'icons/icon.svg',
   'js/app.js',
+  'js/routes.js',
+  'js/app-actions.js',
   'js/db.js',
   'js/html.js',
   'js/services.js',

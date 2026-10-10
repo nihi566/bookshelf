@@ -1,16 +1,12 @@
 // #66 受け箱の思いつきを、自分で選んだ線(グループ)に入れる（外せる・同期される・分析し直しても消えない）
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { emptyLibrary, mergeLibraries, mergeParsed } from '../web/core/model.js';
 import { addThought, deleteThought, updateThought } from '../web/core/thoughts.js';
 import { SAMPLE_BOOKS } from '../web/core/sample.js';
 import { analyzeLibrary } from '../web/core/analysis/pipeline.js';
 import { assignThoughtToLine, assignedThoughtIds, lineAssignmentOf, unassignThought } from '../web/core/line-assignments.js';
 
-const WEB = join(dirname(fileURLToPath(import.meta.url)), '..', 'web');
 const T1 = '2026-10-01T00:00:00.000Z';
 const T2 = '2026-10-02T00:00:00.000Z';
 const T3 = '2026-10-03T00:00:00.000Z';
@@ -150,15 +146,34 @@ test('#66: 入れた思いつきは、その線(グループ)の画面の点の�
   assert.match(card, /data-action="thought-unline"/);
 });
 
-test('#66: 操作（app.js）: 線(グループ)を選ぶシートで入れ、外す。保存してから同期する', async () => {
-  const app = readFileSync(join(WEB, 'js/app.js'), 'utf8');
-  const pick = app.match(/'thought-to-line'\(el\) \{([\s\S]*?)\n  \},/)[1];
-  assert.match(pick, /openSheet\(lineSheet\(/);
-  assert.match(pick, /assignThoughtToLine\(state\.library, t\.id, line\)[\s\S]*?await persistLibrary\(\);[\s\S]*?autoSyncAfterChange\(\);/);
-  const unline = app.match(/async 'thought-unline'\(el\) \{([\s\S]*?)\n  \},/)[1];
-  assert.match(unline, /unassignThought\(state\.library, el\.dataset\.id\);[\s\S]*?await persistLibrary\(\);[\s\S]*?autoSyncAfterChange\(\);/);
+test('#66: 操作: 線(グループ)を選ぶシートで入れ、外す。保存してから同期する', async () => {
+  const { fakeApp, formData, button } = await import('./helpers/app-actions.js');
   const { lineSheet } = await import('../web/js/views/thoughts.js');
   const lib = sample();
+  const t = addThought(lib, { text: 'メモ' }, T1);
+  const st = { library: lib, analysis: analysisOf(lib), loaded: true };
+  const app = fakeApp(st);
+  app.actions['thought-to-line'](button({ id: t.id }));
+  assert.equal(app.sheets[0].content, String(lineSheet(t, st.analysis.lines)));
+  await app.sheets[0].onSubmit(formData({ line: 'l2' }));
+  assert.equal(lineAssignmentOf(lib, t.id).lineId, 'l2');
+  assert.deepEqual(app.log, ['openSheet', 'persist', 'toast', 'render', 'sync']);
+  // シートを開いている間に分析し直して、選んだ線(グループ)が無くなったら入れない（シートに理由を出す）
+  st.analysis = analysisOf(lib, [{ id: 'l1', name: '仕組みの線' }]);
+  await assert.rejects(app.sheets[0].onSubmit(formData({ line: 'l2' })), /分析し直して無くなりました/);
+  // 外す
+  app.log.length = 0;
+  await app.actions['thought-unline'](button({ id: t.id }));
+  assert.equal(lineAssignmentOf(lib, t.id), null);
+  assert.deepEqual(app.log, ['persist', 'toast', 'render', 'sync']);
+  // ほかの端末の同期で先に外れていたら、描き直すだけ（保存・同期しない）
+  app.log.length = 0;
+  await app.actions['thought-unline'](button({ id: t.id }));
+  assert.deepEqual(app.log, ['render']);
+  // 線(グループ)がまだ無ければ、シートを開かずに知らせる
+  const none = fakeApp({ library: lib, analysis: null, loaded: true });
+  none.actions['thought-to-line'](button({ id: t.id }));
+  assert.deepEqual(none.log, ['toast']);
   const sheet = String(lineSheet({ text: '<メモ>' }, analysisOf(lib).lines));
   assert.match(sheet, /<select name="line"[^>]*>/);
   assert.match(sheet, /<option value="l1">仕組みの線<\/option>/);

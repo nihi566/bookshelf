@@ -453,7 +453,7 @@ test('G6-5: 遠いつながりの発見は、ホーム・すべての発見に�
   assert.match(String(discoveryView.render({ state, params: { id: d.id } })), /「ちがう」としたか、分析し直して消えました/);
 });
 
-test('G6-4: 反応を付ける相手は、画面に出ている遠いつながりか、「ちがう」とした組なら反応の記録から探す（取り消せる）', () => {
+test('G6-4: 反応を付ける相手は、画面に出ている遠いつながりか、「ちがう」とした組なら反応の記録から探す（取り消せる）', async () => {
   const { state } = farState((pair) => [pair(0, '考え', '説明'), pair(1, '別の考え', '別の説明')]);
   const [x, y] = state.analysis.farConnections;
   assert.equal(farConnectionById(state.analysis, state.library, x.id).id, x.id);
@@ -463,10 +463,22 @@ test('G6-4: 反応を付ける相手は、画面に出ている遠いつなが�
   assert.equal(farConnectionById({ farConnections: [] }, state.library, y.id).idea, '別の考え');
   assert.equal(farConnectionById(state.analysis, state.library, 'constructor'), null, '入れ物の継承した名前は引かない');
   assert.equal(farConnectionById(state.analysis, state.library, 'fnothing'), null);
-  // app.js: 押したら端末に保存して同期する
-  const app = readFileSync(join(WEB, 'js/app.js'), 'utf8');
-  assert.match(app, /\[\/\^\\\/knowledge\\\/far\$\/, farView, 'knowledge'\]/);
-  assert.match(app, /async 'far-react'\(el\) \{[\s\S]*?farConnectionById\(state\.analysis, state\.library, el\.dataset\.id\)[\s\S]*?reactFar\(state\.library, f, el\.dataset\.status\)[\s\S]*?await persistLibrary\(\);[\s\S]*?autoSyncAfterChange\(\);/);
+  // 押したら端末に保存して同期する。「ちがう」とした組（画面には無い）も取り消せる
+  const { matchRoute } = await import('../web/js/routes.js');
+  const { farView } = await import('../web/js/views/far.js');
+  assert.equal(matchRoute('/knowledge/far').view, farView);
+  const { fakeApp, button } = await import('./helpers/app-actions.js');
+  const app = fakeApp({ ...state, loaded: true });
+  await app.actions['far-react'](button({ id: x.id, status: 'interesting' }));
+  assert.equal(farReactionsOf(state.library)[x.id].status, 'interesting');
+  assert.deepEqual(app.log, ['persist', 'toast', 'render', 'sync']);
+  await app.actions['far-react'](button({ id: y.id, status: 'wrong' }));
+  assert.equal(farReactionsOf(state.library)[y.id].status, '', '同じ反応をもう一度押すと外れる');
+  // 知らない反応・無い組には何もしない
+  app.log.length = 0;
+  await app.actions['far-react'](button({ id: x.id, status: 'constructor' }));
+  await app.actions['far-react'](button({ id: 'fnothing', status: 'wrong' }));
+  assert.deepEqual(app.log, []);
   const sw = readFileSync(join(WEB, 'sw.js'), 'utf8');
   for (const f of ['js/views/far.js', 'core/analysis/far.js', 'core/far-reactions.js']) assert.ok(sw.includes(`'${f}'`), `${f} をオフライン用に持つ`);
 });
