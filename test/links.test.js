@@ -689,3 +689,58 @@ test('NIH-15: リンクの行（点どうし・点とメモ）の「ノートに
   assert.equal(log.sheets.length, 3);
   assert.match(log.toasts.at(-1), /読み込んで/);
 });
+
+test('NIH-97: リンクの行（点どうし・点とメモ）に、両端の点をどちらも根拠にしている永久ノートがあれば「ノート: <題>」が出て、「ノートにする」は出ない', async () => {
+  const { linksBlock } = await import('../web/js/views/links.js');
+  const { notesCitingAll } = await import('../web/core/note-evidence.js');
+  const lib = sampleLibrary();
+  const [h1, h2, h3] = pointsFromBooks(lib, 3);
+  const t = addThought(lib, { text: '集中は環境で決まる' }, T, 'tnih97');
+  addLink(lib, h1.id, h2.id, '集中を守る仕組み', T);
+  const pt = addLink(lib, h1.id, t.id, '', T2);
+  addLink(lib, h1.id, h3.id, '', T3);
+  // 片方の点だけを根拠にしたノートは数えない
+  addNote(lib, { title: '片方だけ', body: '', pointIds: [h1.id] }, T, 'nhalf1');
+  const state = { library: lib, analysis: null, loaded: true };
+  assert.deepEqual(notesCitingAll(lib, [h1.id, h2.id]), []);
+  assert.deepEqual(notesCitingAll(lib, []), [], '点を渡さなければ無い');
+  let block = String(linksBlock(state, h1.id));
+  assert.equal(count(block, /data-action="link-to-note"/g), 3, 'まだ無ければ今どおり「ノートにする」');
+  assert.doesNotMatch(block, /ノート: /);
+  // 両端を根拠にしたノートができると、その行は「ノート: <題>」（押すとそのノートへ）になる
+  addNote(lib, { title: '注意は<資源>', body: '', pointIds: [h3.id, h2.id, h1.id] }, T, 'nboth1');
+  addNote(lib, { title: 'メモと点', body: '', pointIds: [t.id, h1.id] }, T2, 'nboth2');
+  addNote(lib, { title: 'もう 1 冊', body: '', pointIds: [h1.id, h2.id] }, T3, 'nboth3');
+  assert.deepEqual(notesCitingAll(lib, [h1.id, h2.id]).map((n) => n.id), ['nboth3', 'nboth1'], '直した順');
+  block = String(linksBlock(state, h1.id));
+  assert.equal(count(block, /data-action="link-to-note"/g), 0, 'ノートがある行には「ノートにする」を出さない');
+  assert.match(block, /<a class="btn small" href="#\/note\/nboth2"[^>]*>ノート: メモと点<\/a>/);
+  assert.match(block, /href="#\/note\/nboth1"[^>]*>ノート: 注意は&lt;資源&gt;<\/a>/, '題は文字として出る');
+  // 2 冊以上なら直した順の 1 冊と「ほか N」。相手の画面（逆向き）からも同じ
+  assert.match(block, /href="#\/note\/nboth3"[^>]*>ノート: もう 1 冊<\/a><span class="small muted">ほか 1<\/span>/);
+  const other = String(linksBlock(state, h2.id));
+  assert.match(other, /href="#\/note\/nboth3"[^>]*>ノート: もう 1 冊<\/a><span class="small muted">ほか 1<\/span>/);
+  assert.doesNotMatch(other, /data-action="link-to-note"/);
+  // 消したノートは数えない（「ノートにする」に戻る）
+  deleteNote(lib, 'nboth2', T4);
+  assert.match(String(linksBlock(state, h1.id)), new RegExp(`data-action="link-to-note" data-id="${pt.id}"`));
+});
+
+test('NIH-97: Kindle で伸ばしたハイライトは、伸ばす前・伸ばしたあとのどちらの ID で書いた根拠でも、リンクの両端として数える', async () => {
+  const { linksBlock } = await import('../web/js/views/links.js');
+  const { notesCitingAll } = await import('../web/core/note-evidence.js');
+  const lib = sampleLibrary();
+  const h1 = Object.values(lib.highlights).find((h) => h.source === 'kindle' && h.location != null);
+  const h2 = Object.values(lib.highlights).find((h) => h.bookId !== h1.bookId);
+  addLink(lib, h1.id, h2.id, '', T);
+  addNote(lib, { title: '伸ばす前に書いた', body: '', pointIds: [h1.id, h2.id] }, T, 'nold01');
+  mergeParsed(lib, [{ title: lib.books[h1.bookId].title, author: lib.books[h1.bookId].author, source: 'kindle', highlights: [{ text: `${h1.text}さらに続く文。`, location: h1.location }] }], { now: T2 });
+  const longer = Object.values(lib.highlights).find((h) => h.text === `${h1.text}さらに続く文。`);
+  assert.equal(lib.highlights[h1.id].supersededBy, longer.id, '伸ばしたハイライトに置き換わった（試験の前提）');
+  addNote(lib, { title: '伸ばしたあとに書いた', body: '', pointIds: [longer.id, h2.id] }, T3, 'nnew01');
+  assert.deepEqual(notesCitingAll(lib, [h1.id, h2.id]).map((n) => n.id), ['nnew01', 'nold01']);
+  assert.deepEqual(notesCitingAll(lib, [longer.id, h2.id]).map((n) => n.id), ['nnew01', 'nold01']);
+  const block = String(linksBlock({ library: lib, analysis: null, loaded: true }, h2.id));
+  assert.match(block, /href="#\/note\/nnew01"[^>]*>ノート: 伸ばしたあとに書いた<\/a><span class="small muted">ほか 1<\/span>/);
+  assert.doesNotMatch(block, /data-action="link-to-note"/);
+});
