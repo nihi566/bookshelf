@@ -1,7 +1,9 @@
-// 永久ノートの操作（書く・直す・消す・線やメモから作る・点を根拠にする）。
+// 永久ノートの操作（書く・直す・消す・線やメモから作る・点を根拠にする・リンクから書く）。
 // 画面の部品・保存・同期・画面の移動は引数で受け取る（app.js がブラウザの物を渡す。テストからは偽物を渡して確かめる）
-import { addNote, addNotePoint, deleteNote, noteDraftFromLine, noteFromThought, notesOf, updateNote } from '../core/notes.js';
+import { NOTE_TITLE_MAX, addNote, addNotePoint, deleteNote, isNoteId, noteDraftFromLine, noteFromThought, notesOf, updateNote } from '../core/notes.js';
+import { linksOf } from '../core/links.js';
 import { pointById } from '../core/points.js';
+import { currentPointId } from '../core/point-ids.js';
 import { randomId } from '../core/text.js';
 import { citeSheet, noteSheet } from './views/notes.js';
 
@@ -37,20 +39,33 @@ export function noteActions({ state, openSheet, toast, persist, sync, render, go
       running.delete(key);
     }
   };
+  // 新しいノートを書くシートを開く（根拠の点と題の下書きを渡せる）
+  const writeNote = (pointIds = [], draftTitle = '') => {
+    // ID はシートを開いたときに 1 回だけ作る（保存に失敗して押し直しても、同じノートが 2 件にならない）
+    const id = randomId('n');
+    openSheet(noteSheet(state.library, null, pointIds, draftTitle), async (data) => {
+      addNote(state.library, { title: data.get('title'), body: data.get('body'), pointIds: data.getAll('point') }, undefined, id);
+      await persist();
+      toast('永久ノートを保存しました');
+      go(`#/note/${id}`);
+      sync();
+    });
+  };
   const actions = {
     // 書く（点のページからは、その点を根拠にして書く）
     'new-note'(el) {
       if (notLoaded()) return;
-      // ID はシートを開いたときに 1 回だけ作る（保存に失敗して押し直しても、同じノートが 2 件にならない）
-      const id = randomId('n');
-      const pointIds = el.dataset.point ? [el.dataset.point] : [];
-      openSheet(noteSheet(state.library, null, pointIds), async (data) => {
-        addNote(state.library, { title: data.get('title'), body: data.get('body'), pointIds: data.getAll('point') }, undefined, id);
-        await persist();
-        toast('永久ノートを保存しました');
-        go(`#/note/${id}`);
-        sync();
-      });
+      writeNote(el.dataset.point ? [el.dataset.point] : []);
+    },
+    // リンク（点どうし・点とメモ）を種にして書く。両端の点を根拠に、理由を題の下書きにする（ノートに張ったリンクは対象外）
+    'link-to-note'(el) {
+      if (notLoaded()) return;
+      const all = linksOf(state.library);
+      const l = Object.hasOwn(all, el.dataset.id) && !all[el.dataset.id].deleted ? all[el.dataset.id] : null;
+      if (!l || isNoteId(l.a) || isNoteId(l.b)) return;
+      // Kindle で伸ばした点は置き換わった先を根拠にする。消えた点は写さない
+      const pointIds = [...new Set([l.a, l.b].map((x) => currentPointId(state.library, x)))].filter((x) => pointById(state.library, x));
+      writeNote(pointIds, String(l.reason || '').slice(0, NOTE_TITLE_MAX));
     },
     'edit-note'(el) {
       const all = notesOf(state.library);
