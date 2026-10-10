@@ -1,4 +1,6 @@
 // NIH-101: 受け箱に「PC に未同期 N 件」と、その場で同期し直す「同期する」を出す
+// 「同期する」は設定の「今すぐ同期」と同じ app.js の sync 操作を呼ぶ（失敗の理由はそこでトーストに出る。
+// app.js を文字列で読むテストは増やさない決まり〔app-source-reads.test.js〕なので、ここでは data-action だけを確かめる）
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { emptyLibrary } from '../web/core/model.js';
@@ -64,12 +66,4 @@ test('受け箱: PC を使わない画面（pcSyncOf が null）では出さな�
   const pages = state(lib, null);
   pages.servedByCompanion = false;
   assert.doesNotMatch(await inbox(pages), ROW, 'GitHub Pages などで開いた画面');
-});
-
-test('同期に失敗したら理由を出す（既存の sync が e.message をトーストする）', async () => {
-  const { readFileSync } = await import('node:fs');
-  const src = readFileSync(new URL('../web/js/app.js', import.meta.url), 'utf8');
-  const body = src.match(/async function sync\(\{ quiet = false \} = \{\}\) \{([\s\S]*?)\n\}/)[1];
-  assert.match(body, /catch \(e\) \{[\s\S]*if \(!quiet\) toast\(e\.message/);
-  assert.match(src, /\n  sync: \(\) => sync\(\),/, '受け箱のボタンは quiet なしで呼ぶ');
 });
