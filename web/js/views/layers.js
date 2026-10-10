@@ -3,6 +3,7 @@ import { html, raw, esc } from '../html.js';
 import { layoutKnowledgeMap } from '../../core/knowledge-map.js';
 import { truncate } from '../../core/text.js';
 import { libraryStats } from '../../core/model.js';
+import { isLineStarred } from '../../core/line-stars.js';
 
 // 面の一覧で見せる要約の長さ（全文は面の詳細ページで見る）
 const PLANE_SUMMARY_MAX = 80;
@@ -34,7 +35,7 @@ export const linesView = {
       <div class="page-head"><div><h1>線(グループ)</h1><div class="sub">点をつなぐ概念 ${lines.length} 本（点の多い順）</div></div></div>
       <div class="lines-of-plane">${lines.map((l) => {
         const p = planeOf.get(l.id);
-        return html`<a class="line-row" href="#/knowledge/line/${l.id}"><b>${l.name}</b><span>${l.summary}</span><em>点 ${l.highlightIds.length}${p ? ` ・ ${p.name}` : ''}</em></a>`;
+        return html`<a class="line-row" href="#/knowledge/line/${l.id}"><b>${isLineStarred(state.library, l.id) ? '★ ' : ''}${l.name}</b><span>${l.summary}</span><em>点 ${l.highlightIds.length}${p ? ` ・ ${p.name}` : ''}</em></a>`;
       })}</div>`;
   },
 };
