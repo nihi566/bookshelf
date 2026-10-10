@@ -92,7 +92,8 @@ test('#64: 立体のページは核・行動の原則・知識マップ。面の
   assert.match(out, /知識の核/);
   assert.match(out, /原則その一/);
   assert.match(out, /id="knowledge-map"/);
-  assert.match(out, /data-map="back" hidden>/, '最初は全体を見せるので「全体」に戻るボタンは隠す');
+  assert.match(out, /data-map="fit">全体</, '拡大したあと全体へ戻すボタン（面を開く操作は無くし、押すとその画面へ移る。NIH-61）');
+  assert.doesNotMatch(out, /data-map="back"/);
   assert.equal(typeof solidView.mount, 'function', '図は画面を出したあとに描く');
   assert.doesNotMatch(out, /plane-card|line-row/);
 });

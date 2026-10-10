@@ -171,7 +171,7 @@ Analysis = { version: 2, createdAt, model: { chat, embed }, incremental,
 
 ## 知識マップ・PC の状態
 
-- 知識マップは立体のページ（`#/solid`）で、同梱の Cytoscape.js（`web/vendor/cytoscape.esm.min.js`、3.34.3）で描く。最初は核と面だけを出し、面を押すとその面の線だけを広げる。図に置く要素・見た目・並べ方は `web/core/knowledge-map.js`、描画と操作は `web/js/knowledge-map-view.js`（このページを開いたときだけ読み込む）。更新するときは npm の `cytoscape` パッケージの `dist/cytoscape.esm.min.mjs` を `.js` に名前を変えて置き換え、`web/sw.js` の `CACHE` を上げる
+- 知識マップは立体のページ（`#/solid`）で、同梱の Cytoscape.js（`web/vendor/cytoscape.esm.min.js`、3.34.3）で描く。核は置かず、面を塊の中心にして面 → 線 → 点の 3 段で置き（Obsidian のグラフビューのような見え方）、塊の間に遠いつながり（「ちがう」は除く）・自分のリンク（両端が図にある点どうしだけ）・関わる点を引く。まだつながらない点は、いちばん外の輪に散らす（橋が無ければ辺を持たない）。点が 2,000 近くになるので、座標は力学的な並べ方を使わず `mapPositions` で計算する（線のまわりに点、面のまわりに線を詰め、塊どうしを重ならないように並べる。毎回同じ形・1,800 点で数十 ms）。面の名前と橋の太さは、縮めても読める・見える大きさに倍率に合わせて変える。★を付けた線は名前の前に ★ と枠を付ける。面・線・点を押すと、その画面へ移る。図に置く要素・見た目・座標は `web/core/knowledge-map.js`、描画と操作は `web/js/knowledge-map-view.js`（このページを開いたときだけ読み込む）。更新するときは npm の `cytoscape` パッケージの `dist/cytoscape.esm.min.mjs` を `.js` に名前を変えて置き換え、`web/sw.js` の `CACHE` を上げる
 - ブラウザ拡張は確認のたびに結果（成否・ログイン切れ・新しい線の件数・確認の間隔・エラー文）だけを `POST /api/kindle-status` に送り、コンパニオンサーバが `state.json` の `kindleSync` に残す（`/api/info` で Web アプリの取り込み画面に見せる）。トークン・URL・本の一覧は送らない
 
 ## パーサ（`web/core/parsers/`）
