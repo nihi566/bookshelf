@@ -69,6 +69,8 @@ export const companion = {
   historyEntry: (id) => call(`/api/history/${encodeURIComponent(id)}`),
   // 過去の分析に戻す（PC が今の時刻の分析として保存し、戻した分析が返る）
   restoreHistory: (id) => call(`/api/history/${encodeURIComponent(id)}/restore`, { method: 'POST' }),
+  // 履歴の回に「この回を残す」の印を付け外しする（印の付いた回は直近 12 回を過ぎても消えない。付け外した回の要約が返る）
+  pinHistory: (id, pinned) => call(`/api/history/${encodeURIComponent(id)}/pin`, { method: 'POST', body: { pinned } }),
 };
 
 /**

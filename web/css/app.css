@@ -478,6 +478,8 @@ ul.plain li { margin: 4px 0; }
 .changes h3 { margin-bottom: 4px; color: var(--ink-2); }
 .history-list li { padding: 6px 0; border-bottom: 1px solid var(--line); }
 .history-list li:last-child { border-bottom: none; }
+/* 「この回を残す」の印（NIH-102） */
+.pin-mark { display: inline-block; padding: 0 8px; border-radius: 999px; background: var(--accent-soft); color: var(--accent); font-size: 0.75rem; font-weight: 600; line-height: 1.6; white-space: nowrap; }
 .rec-feedback .chip { min-height: 36px; }
 .rec-dismissed img, .rec-dismissed .grow > :not(.rec-feedback) { opacity: 0.6; } /* 取り消す操作（興味なし）は薄くしない */
 

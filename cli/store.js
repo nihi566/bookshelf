@@ -11,6 +11,8 @@ export const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url
 
 // 分析の履歴を残す回数（直近から。完了条件は 10 回分以上）
 export const HISTORY_KEEP = 12;
+// 「この回を残す」の印を付けられる回数（NIH-102。印の付いた回は HISTORY_KEEP を過ぎても消さない。履歴は多くても HISTORY_KEEP + これ）
+export const HISTORY_PIN_MAX = 12;
 
 export const DEFAULT_CONFIG = {
   llm: { baseUrl: 'http://127.0.0.1:11434', chatModel: '', embedModel: '' },
@@ -126,17 +128,35 @@ export function createStore(dataDir = process.env.BH_DATA || path.join(REPO_ROOT
         const id = historyId(a);
         if (!id) return;
         await writeJson(`history/${id}.json`, a);
-        const index = [historySummary(a), ...(await readJson('history/index.json', [])).filter((h) => h.id !== id)].sort((x, y) => String(y.createdAt).localeCompare(String(x.createdAt)));
+        const old = await readJson('history/index.json', []);
+        // 同じ回を差し替える（おすすめを選び直した）ときも「この回を残す」の印は引き継ぐ
+        const pinned = old.some((h) => h.id === id && h.pinned === true);
+        const index = [{ ...historySummary(a), ...(pinned ? { pinned: true } : {}) }, ...old.filter((h) => h.id !== id)].sort((x, y) => String(y.createdAt).localeCompare(String(x.createdAt)));
         // 一覧を先に書いてから古い回を消す（途中で止まっても、消えたファイルを指す一覧を残さない）。
-        // 消すのは一覧ではなく実際のファイルで決める（一覧から漏れたファイルも残さない）
-        const kept = index.slice(0, HISTORY_KEEP);
+        // 消すのは一覧ではなく実際のファイルで決める（一覧から漏れたファイルも残さない）。印の付いた回は直近でなくても残す
+        const kept = index.filter((h, i) => i < HISTORY_KEEP || h.pinned === true);
         await writeJson('history/index.json', kept);
         const keep = new Set(kept.map((h) => `${h.id}.json`));
         for (const f of await readdir(file('history'))) {
           if (f !== 'index.json' && !keep.has(f) && /^[0-9TZ]{8,40}\.json$/.test(f)) await rm(file(`history/${f}`), { force: true });
         }
       }),
-    /** 分析の履歴（新しい順の要約） */
+    /**
+     * 履歴の回に「この回を残す」の印を付け外しする（NIH-102）。外した回は、直近 12 回から外れていれば次の保存で消える。
+     * 返り値: { ok: true, item } / { ok: false, reason: 'missing' | 'limit' }
+     */
+    setHistoryPin: (id, pinned) =>
+      analysisLock(async () => {
+        const index = HISTORY_ID.test(String(id)) ? await readJson('history/index.json', []) : [];
+        const at = index.findIndex((h) => h.id === id);
+        if (at < 0) return { ok: false, reason: 'missing' };
+        if (pinned && index[at].pinned !== true && index.filter((h) => h.pinned === true).length >= HISTORY_PIN_MAX) return { ok: false, reason: 'limit' };
+        const { pinned: _was, ...rest } = index[at];
+        const item = pinned ? { ...rest, pinned: true } : rest;
+        await writeJson('history/index.json', index.map((h, i) => (i === at ? item : h)));
+        return { ok: true, item };
+      }),
+    /** 分析の履歴（新しい順の要約。印の付いた回は pinned: true） */
     history: () => readJson('history/index.json', []),
     /** 過去の分析を 1 回分。ID の形が違えば null */
     historyEntry: (id) => (HISTORY_ID.test(String(id)) ? readJson(`history/${id}.json`, null) : Promise.resolve(null)),
