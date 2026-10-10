@@ -3,7 +3,7 @@ import { html } from './html.js';
 import { kv, requestPersistence } from './db.js';
 import { loadCache, loadState, save, saveCache, state } from './state.js';
 import { buildBookmarklet, companion, detectCompanion, download, syncWithPc } from './services.js';
-import { homeAlertBlock, openSheet, toast } from './ui.js';
+import { highlightEditSheet, homeAlertBlock, openSheet, toast } from './ui.js';
 import { book, books, home, search } from './views/library.js';
 import { autoStatusBlock, historyView, isolatedView, knowledge, lineView, planeView } from './views/knowledge.js';
 import { linesView, planesView, solidView } from './views/layers.js';
@@ -660,13 +660,7 @@ const actions = {
   edit(el) {
     const h = state.library.highlights[el.dataset.id];
     openSheet(
-      html`<h2>点を編集</h2>
-        <label class="field"><span>線を引いた文</span><textarea name="text" rows="4">${h.text}</textarea></label>
-        ${h.originalText && h.originalText !== h.text ? html`<p class="help">取り込んだときの文: ${h.originalText}</p>` : ''}
-        <label class="field"><span>自分のメモ</span><textarea name="userNote">${h.userNote || ''}</textarea></label>
-        <label class="field"><span>タグ（空白かカンマ区切り）</span><input type="text" name="tags" value="${(h.tags || []).join(' ')}" placeholder="例: 習慣 仕事"></label>
-        <p class="help">自分のメモ・タグ・★は、AI が点をつなぐときに「読者自身の言葉」として使います（次の分析から）。</p>
-        <div class="row spread"><button class="btn danger" value="delete">この点を削除</button><span class="row"><button class="btn" value="cancel">やめる</button><button class="btn primary" value="save">保存</button></span></div>`,
+      highlightEditSheet(h),
       async (data, action) => {
         if (action === 'delete') {
           updateHighlight(state.library, h.id, { deleted: true });
@@ -680,6 +674,14 @@ const actions = {
         autoSyncAfterChange();
       },
     );
+  },
+  'restore-original-text'(el) {
+    // 文の欄に取り込んだときの文を入れるだけ（保存は利用者が「保存」を押す。やめれば何も変わらない）
+    const original = state.library.highlights[el.dataset.id]?.originalText;
+    const field = el.closest('form')?.elements.text;
+    if (typeof original !== 'string' || !field) return;
+    field.value = original;
+    field.focus();
   },
   async copy(el) {
     const h = pointById(state.library, el.dataset.id);

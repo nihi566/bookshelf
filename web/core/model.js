@@ -232,6 +232,11 @@ function importedText(h) {
 
 const validText = (t) => typeof t === 'string' && Boolean(cleanText(t));
 
+/** 利用者が文を直した点か（取り込んだときの文といまの文が違う。取り込んだときの文に戻したら直した点ではない） */
+export function isTextEdited(h) {
+  return validText(h?.originalText) && h.originalText !== h.text;
+}
+
 /** 空白・改行の違いを無視して比べるための形 */
 function compact(text) {
   return normalizeText(text).replace(/\s/g, '');

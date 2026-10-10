@@ -1,6 +1,6 @@
 // 画面の部品（ハイライト・思いつきのカード、本の行、トースト、シート）
 import { html, mark } from './html.js';
-import { listBooks, SOURCES } from '../core/model.js';
+import { isTextEdited, listBooks, SOURCES } from '../core/model.js';
 import { hash, isoDate } from '../core/text.js';
 import { kindleSyncState } from '../core/kindle-status.js';
 import { bookCoverUrl } from '../core/covers.js';
@@ -62,7 +62,7 @@ export function highlightCard(h, { library, lines = [], query = '', showBook = t
       <div class="hl-meta">
         ${showBook && book ? html`<a class="book-link" href="#/book/${book.id}">${book.title}</a>` : ''}
         <span>${locationParts(h).map((p, i) => html`${i ? ' · ' : ''}<span class="nowrap">${p}</span>`)}</span>
-        ${sourceBadge(h.source)}
+        ${sourceBadge(h.source)}${isTextEdited(h) ? html` <span class="badge edited" title="取り込んだときの文から直しています（✎ で元に戻せます）">直した文</span>` : ''}
       </div>
       <div class="hl-actions">
         <button class="icon-btn ${h.favorite ? 'on' : ''}" data-action="fav" data-id="${h.id}" aria-pressed="${String(Boolean(h.favorite))}" aria-label="お気に入り">${h.favorite ? '★' : '☆'}</button>
@@ -72,6 +72,17 @@ export function highlightCard(h, { library, lines = [], query = '', showBook = t
       </div>
     </div>
   </article>`;
+}
+
+/** 点の編集シート。文を直した点は取り込んだときの文と、それを文の欄に入れ直すボタン（保存はしない）を出す */
+export function highlightEditSheet(h) {
+  return html`<h2>点を編集</h2>
+    <label class="field"><span>線を引いた文</span><textarea name="text" rows="4">${h.text}</textarea></label>
+    ${isTextEdited(h) ? html`<div class="row spread original-text"><p class="help">取り込んだときの文: ${h.originalText}</p><button type="button" class="btn small" data-action="restore-original-text" data-id="${h.id}">この文に戻す</button></div>` : ''}
+    <label class="field"><span>自分のメモ</span><textarea name="userNote">${h.userNote || ''}</textarea></label>
+    <label class="field"><span>タグ（空白かカンマ区切り）</span><input type="text" name="tags" value="${(h.tags || []).join(' ')}" placeholder="例: 習慣 仕事"></label>
+    <p class="help">自分のメモ・タグ・★は、AI が点をつなぐときに「読者自身の言葉」として使います（次の分析から）。</p>
+    <div class="row spread"><button class="btn danger" value="delete">この点を削除</button><span class="row"><button class="btn" value="cancel">やめる</button><button class="btn primary" value="save">保存</button></span></div>`;
 }
 
 // 思いつきの状態を変えるボタン（いまの状態から行ける先）

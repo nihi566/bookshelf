@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { bookHighlights, bookIdFor, emptyLibrary, highlightIdFor, mergeLibraries, mergeParsed, searchHighlights, updateHighlight } from '../web/core/model.js';
+import { readFileSync } from 'node:fs';
+import { bookHighlights, bookIdFor, emptyLibrary, highlightIdFor, isTextEdited, mergeLibraries, mergeParsed, searchHighlights, updateHighlight } from '../web/core/model.js';
 
 const T1 = '2025-01-01T00:00:00.000Z';
 const T2 = '2025-02-01T00:00:00.000Z';
@@ -141,4 +142,45 @@ test('同期: 外から来た直した文が空・文字列でなければ採ら
   assert.equal(mergeLibraries(pc, broken).highlights[id].text, '取り込んだ文');
   Object.assign(broken.highlights[id], { text: { x: 1 }, textEditedAt: T3 });
   assert.equal(mergeLibraries(broken, pc).highlights[id].text, '取り込んだ文');
+});
+
+// NIH-66: 文を直した点の印・取り込んだときの文へ戻す
+test('isTextEdited: 取り込んだときの文と違う文になっている点だけを直した点とみなす', () => {
+  const { lib, id } = oneHighlight();
+  assert.equal(isTextEdited(lib.highlights[id]), false);
+  updateHighlight(lib, id, { text: '直した文' }, T2);
+  assert.equal(isTextEdited(lib.highlights[id]), true);
+  // 取り込んだときの文に戻して保存したら、直した点ではない
+  updateHighlight(lib, id, { text: '取り込んだ文' }, T3);
+  assert.equal(isTextEdited(lib.highlights[id]), false);
+  assert.equal(isTextEdited({ text: 'a', originalText: { x: 1 } }), false, '壊れた取り込んだときの文は数えない');
+  assert.equal(isTextEdited({ text: 'a', originalText: '  ' }), false);
+});
+
+test('NIH-66: 文を直した点のカードにだけ「直した文」の印を出す', async () => {
+  const { highlightCard } = await import('../web/js/ui.js');
+  const { lib, id } = oneHighlight();
+  assert.doesNotMatch(String(highlightCard(lib.highlights[id], { library: lib })), /直した文/);
+  updateHighlight(lib, id, { text: '直した文章' }, T2);
+  assert.match(String(highlightCard(lib.highlights[id], { library: lib })), /<span class="badge edited"[^>]*>直した文<\/span>/);
+});
+
+test('NIH-66: 編集シートの「取り込んだときの文」の横に、保存しない「この文に戻す」を出す', async () => {
+  const { highlightEditSheet } = await import('../web/js/ui.js');
+  const { lib, id } = oneHighlight();
+  assert.doesNotMatch(String(highlightEditSheet(lib.highlights[id])), /この文に戻す|取り込んだときの文/);
+  updateHighlight(lib, id, { text: '直した<b>文</b>' }, T2);
+  const sheet = String(highlightEditSheet(lib.highlights[id]));
+  assert.match(sheet, /取り込んだときの文: 取り込んだ文/);
+  assert.match(sheet, /<button type="button" class="btn small" data-action="restore-original-text" data-id="[^"]+">この文に戻す<\/button>/, 'type="button" なのでシートを送信（保存）しない');
+  assert.match(sheet, /<textarea name="text" rows="4">直した&lt;b&gt;文&lt;\/b&gt;<\/textarea>/);
+});
+
+test('NIH-66: 「この文に戻す」は文の欄に取り込んだときの文を入れるだけで、保存しない', () => {
+  const app = readFileSync(new URL('../web/js/app.js', import.meta.url), 'utf8');
+  const action = app.match(/'restore-original-text'\(el\) \{([\s\S]*?)\n  \},/)[1];
+  assert.match(action, /\.originalText/);
+  assert.match(action, /elements\.text/);
+  assert.doesNotMatch(action, /updateHighlight|persistLibrary|autoSyncAfterChange/);
+  assert.match(app, /openSheet\(\s*highlightEditSheet\(h\)/);
 });

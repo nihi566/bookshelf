@@ -192,6 +192,7 @@ input[type="file"] { max-width: 100%; }
 textarea { min-height: 96px; resize: vertical; line-height: 1.6; }
 .search-box { position: sticky; top: var(--topbar-h, calc(53px + env(safe-area-inset-top))); z-index: 5; background: var(--bg); padding: 4px 0 8px; }
 .help { font-size: 0.85rem; color: var(--ink-2); }
+.original-text > .help { flex: 1 1 16em; margin: 0; overflow-wrap: anywhere; } /* 取り込んだときの文が長くても「この文に戻す」を押せる幅に残す */
 .help code, .code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.82rem; background: var(--surface-2); padding: 1px 6px; border-radius: 6px; overflow-wrap: anywhere; }
 pre.code { display: block; padding: 10px 12px; white-space: pre-wrap; overflow-x: auto; }
 details { border-top: 1px solid var(--line); padding: 10px 0; }
