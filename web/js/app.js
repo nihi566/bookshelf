@@ -467,12 +467,16 @@ let pulling = false;
 async function pullIfNewer() {
   if (pulling || document.visibilityState !== 'visible') return;
   pulling = true;
+  // 入力中の画面を描き直すと書きかけ・キーボードが消えるので、そのときは同期だけして描き直しは次の画面遷移に任せる
+  const typing = () => document.activeElement?.matches?.('#view input:not([type="checkbox"]):not([type="radio"]), #view textarea, #view select, #view [contenteditable]');
   try {
     // 起動したときに PC に届かなかった画面（Tailscale がまだつながっていなかった等）は、ここで PC を探し直す。
     // 見つけたらその場で同期する（その間に端末へ書いたメモを PC へ送る）
     if (await detectCompanion()) {
-      if (canAutoSync()) await sync({ quiet: true });
-      else if (!hasDraft()) render({ keepScroll: true });
+      if (canAutoSync()) {
+        if (typing()) await syncWithPc();
+        else await sync({ quiet: true });
+      } else if (!typing() && !hasDraft()) render({ keepScroll: true });
       return;
     }
     if (!canAutoSync()) return;
@@ -481,9 +485,7 @@ async function pullIfNewer() {
     const stamp = (a) => [a?.createdAt || '', a?.recommendedAt || ''].sort().pop();
     const differs = (info.updatedAt || '') !== (state.library.updatedAt || '') || (info.analysis ? stamp(info.analysis) : '') > stamp(state.analysis);
     if (!differs) return;
-    // 入力中の画面を描き直すと書きかけが消えるので、そのときは同期だけして描き直しは次の画面遷移に任せる
-    const typing = document.activeElement?.matches?.('#view input:not([type="checkbox"]):not([type="radio"]), #view textarea, #view select, #view [contenteditable]');
-    if (typing) await syncWithPc();
+    if (typing()) await syncWithPc();
     else await sync({ quiet: true });
   } catch {
     // PC が止まっているときは黙って次の機会を待つ

@@ -8,6 +8,8 @@ import { analysisStamp } from '../core/importing.js';
 // 意味で探す・問いかける・骨組みを作るを待つ長さ（問いかけ・骨組みは PC の AI が文を書くので長め。切れると PC 側の処理も止まる）
 const SEARCH_TIMEOUT_MS = 30 * 1000;
 const ASK_TIMEOUT_MS = 3 * 60 * 1000;
+// PC が配信している画面かを確かめるのを待つ長さ（つながりかけの Tailscale で返事が来ないまま、探し直しが止まらないように）
+const PROBE_TIMEOUT_MS = 5 * 1000;
 
 export function companionBase() {
   const url = state.settings.ai.companionUrl.trim().replace(/\/+$/, '');
@@ -69,16 +71,22 @@ export const companion = {
 
 /**
  * 同一オリジンでコンパニオンサーバが動いているか（http://localhost:8787 や Tailscale の URL で開いた場合など）。
- * 通信できなければ null（まだ分からない。Tailscale がつながっていない間も、画面はサービスワーカーのキャッシュから開ける）
+ * 通信できない・返事が無い・5xx（PC の bh serve が再起動中で Tailscale が 502 を返す等）なら null（まだ分からない。
+ * Tailscale がつながっていない間も、画面はサービスワーカーのキャッシュから開ける）
  */
-export async function probeCompanionOrigin(st = state) {
+export async function probeCompanionOrigin(st = state, timeoutMs = PROBE_TIMEOUT_MS) {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), timeoutMs);
   let res;
   try {
-    res = await fetch('api/info', { headers: st.settings.ai.token ? { 'X-BH-Token': st.settings.ai.token } : {} });
+    res = await fetch('api/info', { headers: st.settings.ai.token ? { 'X-BH-Token': st.settings.ai.token } : {}, signal: ctrl.signal });
   } catch {
     return null;
+  } finally {
+    clearTimeout(timer);
   }
   if (res.status === 401) return true;
+  if (res.status >= 500) return null;
   if (!res.ok) return false;
   try {
     return (await res.json())?.app === 'book-highlights';

@@ -57,8 +57,13 @@ test('同じオリジンへの問い合わせ: 通信できなければ null（�
     throw new TypeError('Failed to fetch');
   };
   assert.equal(await probeCompanionOrigin(s), null);
+  globalThis.fetch = async () => new Response('bad gateway', { status: 502 });
+  assert.equal(await probeCompanionOrigin(s), null, 'PC の bh serve が再起動中（Tailscale が 502）はまだ分からない');
+  // 返事が来ないままなら、待つ長さで切り上げて「まだ分からない」（探し直しを止めない）
+  globalThis.fetch = (_url, { signal }) => new Promise((_resolve, reject) => signal.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError'))));
+  assert.equal(await probeCompanionOrigin(s, 20), null);
   globalThis.fetch = async () => new Response('not found', { status: 404 });
-  assert.equal(await probeCompanionOrigin(s), false);
+  assert.equal(await probeCompanionOrigin(s), false, 'GitHub Pages など: PC ではない');
   globalThis.fetch = async () => new Response(JSON.stringify({ app: 'book-highlights' }), { status: 200 });
   assert.equal(await probeCompanionOrigin(s), true);
   globalThis.fetch = async () => new Response('{"error":"token"}', { status: 401 });
@@ -68,7 +73,7 @@ test('同じオリジンへの問い合わせ: 通信できなければ null（�
 test('画面: 1 分ごと・画面に戻ったとき・オンラインに戻ったときに PC を探し直し、見つけたら同期する', () => {
   const app = readFileSync(join(WEB, 'js/app.js'), 'utf8');
   const pull = app.match(/async function pullIfNewer\(\) \{([\s\S]*?)\n\}/)[1];
-  assert.match(pull, /if \(await detectCompanion\(\)\) \{[\s\S]*?await sync\(\{ quiet: true \}\);[\s\S]*?return;/, '見つけたらその場で同期する（端末に残っていたメモを PC へ送る）');
+  assert.match(pull, /if \(await detectCompanion\(\)\) \{[\s\S]*?if \(typing\(\)\) await syncWithPc\(\);\s*else await sync\(\{ quiet: true \}\);[\s\S]*?return;/, '見つけたらその場で同期する（端末に残っていたメモを PC へ送る）。入力中は描き直さない');
   assert.ok(pull.indexOf('detectCompanion()') < pull.indexOf('canAutoSync()'), 'PC を探し直してから、同期できるかを判定する');
   assert.match(app, /window\.addEventListener\('online', pullIfNewer\)/);
   assert.match(app, /setInterval\(pullIfNewer, PULL_INTERVAL_MS\)/);
