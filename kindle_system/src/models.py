@@ -84,6 +84,20 @@ class BookmeterAsinOverride(SQLModel, table=True):
     updated_at: str = Field()
 
 
+class BookPublisher(SQLModel, table=True):
+    """
+    本ごとの出版社（商品ページの登録情報から読んだ最新のもの。src/crawler.py の extract_publisher）。
+    wishlist.json の publisher に載せ、bookshelf の価格チェックが出版社で絞り込むのに使う。
+    読めなかった取得では上書きしない（前に読めた名前を残す）。
+    既存テーブルに列を足さないためマイグレーションは不要（BookMark と同じく create_all / 保存時に新規作成する）。
+    """
+    __tablename__ = "book_publishers"
+
+    paid_asin: str = Field(primary_key=True)
+    publisher: str = Field()
+    updated_at: str = Field()
+
+
 # 価格が取れなかった理由（src/crawler.py の classify_unpriced と BAN 検知・例外）
 #   not_found:  商品ページが無い（404。販売終了・削除の可能性）
 #   no_price:   ページは開けたが価格の表示が無い（販売停止・予約前など。買えない可能性）

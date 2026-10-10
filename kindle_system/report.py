@@ -42,7 +42,7 @@ sys.path.insert(0, BASE_DIR)
 
 from src.book_kind import KINDS, classify_kind
 from src.models import UNPRICED_REASONS
-from src.repository import MARK_TAGS, UNKNOWN_TITLE, get_all_price_points, get_book_marks, get_books, get_paid_price_points, get_target_prices, get_unpriced_reasons
+from src.repository import MARK_TAGS, UNKNOWN_TITLE, get_all_price_points, get_book_marks, get_books, get_paid_price_points, get_publishers, get_target_prices, get_unpriced_reasons
 
 # bookshelf アプリが読む欲しい本のデータ（wishlist.json）の形式名と版
 WISHLIST_FILE_FORMAT = "kindle-wishlist"
@@ -140,6 +140,11 @@ def _price_reason(book: dict, price, is_ku: bool):
     return "unknown"
 
 
+def _publisher(value):
+    """出版社（repository.get_publishers の 1 件）。空・文字列でない値は null にする（画面は書名のレーベルで代わりに絞り込む）。"""
+    return value.strip() if isinstance(value, str) and value.strip() else None
+
+
 def _sources(book: dict) -> list:
     """どこから来た本か。kindle（Kindle のサンプル）/ bookmeter（読書メーターの読みたい本）の順に、当てはまるものを並べる。"""
     flags = (("kindle", "from_kindle_sample"), ("bookmeter", "from_bookmeter"))
@@ -160,6 +165,7 @@ def build_wishlist(books: list) -> dict:
     ポイント差し引き前の販売価格（sell_price）・還元ポイント（points）・キャンペーン文（campaign）は、
     今の価格がある本にだけ載せる（KU の本のキャンペーン文は読み放題の宣伝文なので載せない）。
     希望価格（target_price。book["target_price"] = repository.get_target_prices の 1 件）は全冊に載せる（無ければ null）。
+    出版社（publisher。book["publisher"] = repository.get_publishers の 1 件）は全冊に載せる（まだ読めていなければ null）。
     """
     timestamps = [str(book["timestamp"]) for book in books if book.get("timestamp")]
     items = []
@@ -192,6 +198,8 @@ def build_wishlist(books: list) -> dict:
                 "price_reason": _price_reason(book, price, is_ku),
                 # 読書メーターの本 ID（数字だけ。bookshelf が https://bookmeter.com/books/<ID> を開く）
                 "bookmeter_id": _bookmeter_id(book.get("bookmeter_id")),
+                # 出版社（商品ページの登録情報から。bookshelf が出版社で絞り込む。無ければ書名のレーベルを使う）
+                "publisher": _publisher(book.get("publisher")),
                 "sell_price": book.get("sell_price") if has_price else None,
                 "points": (book.get("point_value") or 0) if has_price else 0,
                 "campaign": (book.get("campaign_text") or "") if has_price else "",
@@ -472,6 +480,7 @@ def main(allow_shrink: bool = False) -> None:
     histories = summarize_price_history(get_all_price_points())
     unpriced = get_unpriced_reasons()
     targets = get_target_prices()
+    publishers = get_publishers()
     publish_marks = os.environ.get("PUBLISH_MARKS", "").strip().lower() in ("1", "true", "yes")
     for book in books:
         mark = marks.get(book["asin"])
@@ -482,6 +491,7 @@ def main(allow_shrink: bool = False) -> None:
         book["price_history"] = histories.get(book["asin"], [])
         book["unpriced_reason"] = unpriced.get(book["asin"])
         book["target_price"] = targets.get(book["asin"])
+        book["publisher"] = publishers.get(book["asin"])
     wishlist_path = os.path.join(public_site_dir, "wishlist.json")
     reason = _shrink_error(len(books), _published_book_count(wishlist_path))
     if reason and not allow_shrink:

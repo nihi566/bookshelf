@@ -118,6 +118,8 @@ python report.py [--allow-shrink]
 `wishlist.json`（データだけ。形式 `kindle-wishlist` v1）と `feed.xml`（値下がり・読み放題入り・読み放題の終了・キャンペーン開始の Atom フィード）、`feed-wanted.xml`（そのうち読みたい本の出来事・希望価格への到達・
 ¥300 以上の値下がりだけを載せる Atom フィード。欲しい本すべての細かい値下がりで埋もれないように）として書き出す。
 これらは生成物なので直接編集しない。
+`wishlist.json` の各本の `publisher` は、価格を取るときに同じ商品ページの登録情報から読んだ出版社
+（`book_publishers` テーブル。読めなかった取得では前の名前を残す。まだ読めていなければ null）。
 
 画面は持たない。欲しい本の一覧は bookshelf アプリの本タブ「欲しい本」
 （https://nihi566.github.io/bookshelf/#/wishlist）が同じ場所からこの `wishlist.json` を読んで表示する。
