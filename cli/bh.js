@@ -16,6 +16,7 @@ import { REPO_ROOT, createStore } from './store.js';
 import { createCompanionServer } from './server.js';
 import { runUpdate } from './update.js';
 import { createGoogleClient, describeSync, isFolderId, MIN_INTERVAL_SEC, startDriveWatcher } from './google.js';
+import { startCoverLookup } from './covers.js';
 import { SOURCES, listBooks, libraryStats, searchHighlights } from '../web/core/model.js';
 import { applyImport } from '../web/core/importing.js';
 import { ACCEPT, parseFiles } from '../web/core/parsers/index.js';
@@ -185,6 +186,7 @@ async function main() {
       const port = Number(args.port || cfg.port);
       const host = args.host || cfg.host;
       const drive = startDriveWatcher({ store, client: createGoogleClient({ store }) });
+      startCoverLookup({ store });
       const server = createCompanionServer({ store, drive, auto: { intervalMs: AUTO_CHECK_MS } });
       const auto = autoConfig(cfg.autoAnalyze);
       server.listen(port, host, () => {
@@ -192,6 +194,7 @@ async function main() {
         console.log(`  LLM: ${cfg.llm.baseUrl}（チャット: ${cfg.llm.chatModel || '未設定'} / 埋め込み: ${cfg.llm.embedModel || '文字 n-gram'}）`);
         console.log(`  Play ブックス: ${cfg.google.clientId ? `${Math.max(MIN_INTERVAL_SEC, cfg.google.intervalSec)} 秒ごとに Google ドライブを確認` : '未設定（docs/setup.md の「Play ブックスの自動取り込み」）'}`);
         console.log(`  自動の分析: ${auto.enabled ? `前回のあとに点が ${auto.minPoints} 件増える・減るか、${auto.maxHours} 時間たって 1 件以上増えた・減ったら分析（bh config auto off で止める）` : '切ってあります（bh config auto on）'}`);
+        console.log('  表紙: 表紙の取れない Play ブックスの本は、国立国会図書館サーチで書名・著者から ISBN を探す（10 分ごと）');
         console.log(`  スマホから使うには: tailscale serve --bg ${port}`);
       });
       break;
