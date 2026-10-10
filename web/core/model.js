@@ -656,17 +656,71 @@ export function addHighlight(library, bookId, { text, page = '', chapter = '', n
 /**
  * 日付をシードにした「今日の点」（思いつきも含む。捨てたものは出さない）。同じ日には同じ結果になる
  * seed を渡すと日付の代わりにそれで選ぶ（「別の点」用。日付をずらすと翌日以降の今日の点と同じ組になる）
+ * avoid の点は後ろへ回す（NIH-99: 最近見せた点。足りないときはそれでも埋める）
+ * @param {Set<string>} [avoid]
  */
-export function dailyPicks(library, count = 3, date = new Date(), seed = '') {
+export function dailyPicks(library, count = 3, date = new Date(), seed = '', avoid = new Set()) {
   const hs = [...pointHighlights(library), ...pointThoughts(library)].sort((a, b) => a.id.localeCompare(b.id));
   if (!hs.length) return [];
   const key = seed ? `seed:${seed}` : dayKey(date);
-  const scored = hs.map((h) => ({ h, s: hash(key + h.id) }));
-  scored.sort((a, b) => a.s.localeCompare(b.s));
+  const scored = hs.map((h) => ({ h, seen: avoid.has(h.id), s: hash(key + h.id) }));
+  scored.sort((a, b) => a.seen - b.seen || a.s.localeCompare(b.s));
   return scored.slice(0, Math.max(0, count)).map((x) => x.h);
 }
 
 const dayKey = (date) => `${date.getFullYear()}-${date.getMonth() + 1}-${date.getDate()}`;
+
+// 今日の点で、何日前までに見せた点を後ろへ回すか（NIH-99）
+export const RECENT_PICK_DAYS = 3;
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+/** dayKey の日が date の何日前か（読めない日は NaN）。夏時間の 1 時間のずれは丸めて吸収する */
+function daysBefore(day, date) {
+  const [y, m, d] = day.split('-').map(Number);
+  const today = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  return Math.round((today - new Date(y, m - 1, d)) / DAY_MS);
+}
+
+/**
+ * 今日の点で見せた点を、見せた日つきの履歴に足す（NIH-99）。RECENT_PICK_DAYS 日より前の日は捨てる
+ * 何も変わらないときは同じ配列を返す（保存し直さなくてよい）
+ * @param {{ day: string, ids: string[] }[]} history @param {Date} date @param {string[]} ids
+ * @returns {{ day: string, ids: string[] }[]}
+ */
+export function recordSeenPicks(history, date, ids) {
+  const today = dayKey(date);
+  const current = history.find((e) => e.day === today);
+  const kept = history.filter((e) => e.day !== today && daysBefore(e.day, date) <= RECENT_PICK_DAYS);
+  const merged = [...new Set([...(current?.ids || []), ...ids])];
+  if (current && merged.length === current.ids.length && kept.length === history.length - 1) return history;
+  return [{ day: today, ids: merged }, ...kept];
+}
+
+/** 端末に残した履歴の文字列を読む。無い・壊れているときは空。形の正しい項目だけ残す */
+export function parseSeenPicks(text) {
+  try {
+    const r = JSON.parse(text);
+    if (!Array.isArray(r)) return [];
+    return r
+      .filter((e) => e && typeof e.day === 'string' && Array.isArray(e.ids))
+      .map((e) => ({ day: e.day, ids: e.ids.filter((id) => typeof id === 'string') }));
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * 今日より前の RECENT_PICK_DAYS 日に見せた点。今日見せた点は入れない（同じ日に開き直しても組が変わらないように）
+ * @returns {Set<string>}
+ */
+export function recentPickIds(history, date) {
+  const out = new Set();
+  for (const e of history) {
+    const ago = daysBefore(e.day, date);
+    if (ago >= 1 && ago <= RECENT_PICK_DAYS) e.ids.forEach((id) => out.add(id));
+  }
+  return out;
+}
 
 /**
  * 「別の点」で選び直した種を、選んだ日つきで端末に残す形（NIH-89: 開き直しても最初の点に戻らないように）

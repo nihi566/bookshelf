@@ -112,13 +112,29 @@ test('削除した点は deleted: false で生きた点に戻り、メモ・タ�
   assert.equal(back.userUpdatedAt, '2026-10-10T00:02:00.000Z', '戻した時刻が新しいので、同期でも戻した方が勝つ');
 });
 
-test('点の編集シートの「この点を削除」は「元に戻す」付きの通知を出し、押すと印を外して保存・描き直し・同期する', () => {
-  const app = readFileSync(join(WEB, 'js/app.js'), 'utf8');
-  const sheet = app.match(/updateHighlight\(state\.library, h\.id, \{ deleted: true \}\);([\s\S]*?)autoSyncAfterChange\(\);/)[1];
-  assert.match(sheet, /await persistLibrary\(\);[\s\S]*?if \(action === 'delete'\) toast\('削除しました', \d+, \{ label: '元に戻す', run: \(\) => undoDeleteHighlight\(h\.id\) \}\)/, '端末に保存できてから知らせる（保存に失敗したのに「削除しました」と出さない）');
-  const undo = app.match(/async function undoDeleteHighlight\(id\) \{([\s\S]*?)\n\}/)[1];
-  assert.match(undo, /if \(!updateHighlight\(state\.library, id, \{ deleted: false \}\)\) throw new Error\([\s\S]*?await persistLibrary\(\);[\s\S]*?render\(\{ keepScroll: true \}\);[\s\S]*?autoSyncAfterChange\(\);/);
-  assert.match(undo, /toast\('元に戻しました'\)/);
+test('点の編集シートの「この点を削除」は「元に戻す」付きの通知を出し、押すと印を外して保存・描き直し・同期する', async () => {
+  const { fakeApp, button } = await import('./helpers/app-actions.js');
+  const lib = emptyLibrary();
+  mergeParsed(lib, SAMPLE_BOOKS);
+  const h = liveHighlights(lib)[0];
+  const app = fakeApp({ library: lib, analysis: null, loaded: true });
+  app.actions.edit(button({ id: h.id }));
+  await app.sheets[0].onSubmit(null, 'delete');
+  assert.ok(!liveHighlights(lib).some((x) => x.id === h.id));
+  assert.deepEqual(app.log, ['openSheet', 'persist', 'toast', 'render', 'sync'], '端末に保存できてから知らせる（保存に失敗したのに「削除しました」と出さない）');
+  const [deleted] = app.toasts;
+  assert.equal(deleted.message, '削除しました');
+  assert.equal(deleted.action.label, '元に戻す');
+  app.log.length = 0;
+  await deleted.action.run();
+  assert.ok(liveHighlights(lib).some((x) => x.id === h.id));
+  assert.deepEqual(app.log, ['persist', 'render', 'sync', 'toast']);
+  assert.equal(app.toasts.at(-1).message, '元に戻しました');
+  // 同期で点そのものが消えていたら、戻せないことを知らせる（保存しない）
+  app.log.length = 0;
+  delete lib.highlights[h.id];
+  await assert.rejects(deleted.action.run(), /この点はもう見つかりません/);
+  assert.deepEqual(app.log, []);
 });
 
 test('通知のボタンは押せる（通知全体は下の画面の操作を邪魔しないまま）', () => {

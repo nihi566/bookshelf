@@ -60,6 +60,40 @@ export function importOutcome(results, stats) {
   return { failed, summary, message: `取り込みました: ${summary}`, tone: stats.added || stats.backups ? 'ok' : '', note: summary };
 }
 
+// 取り込み画面の取り出し方の説明（下の details の id と、案内のボタンに出す名前）
+const HELP = {
+  kindleDevice: { id: 'help-kindle-device', label: 'Kindle 端末' },
+  kindleExport: { id: 'help-kindle-export', label: 'Kindle のエクスポート' },
+  kindleBookmarklet: { id: 'help-kindle-bookmarklet', label: 'ブックマークレット' },
+  playbooks: { id: 'help-playbooks', label: 'Play ブックスのメモ' },
+  readingNotes: { id: 'help-reading-notes', label: '読書メモ' },
+};
+const HELP_BY_EXT = {
+  txt: [HELP.kindleDevice],
+  html: [HELP.kindleExport, HELP.playbooks],
+  htm: [HELP.kindleExport, HELP.playbooks],
+  docx: [HELP.playbooks],
+  zip: [HELP.playbooks],
+  json: [HELP.kindleBookmarklet],
+  md: [HELP.readingNotes],
+};
+
+/**
+ * 読めなかったファイルに添える取り出し方の説明。拡張子から、そのファイルで取り込もうとしたらしい方法を選ぶ。分からない形式は主な取り出し方を並べる
+ * @param {string} name ファイル名
+ * @returns {{ id: string, label: string }[]}
+ */
+export function importHelpTargets(name) {
+  const ext = /\.([^.]+)$/.exec(String(name ?? ''))?.[1].toLowerCase();
+  // a.constructor のような名前で Object の持ち物を拾わないよう、自分の持ち物だけを見る
+  return (ext && Object.hasOwn(HELP_BY_EXT, ext)) ? HELP_BY_EXT[ext] : [HELP.kindleDevice, HELP.kindleExport, HELP.playbooks];
+}
+
+/** 読めなかったファイルの行の、取り出し方の説明を開くボタン */
+function importHelpLinks(name) {
+  return html`<div class="row small" style="margin-top:4px">取り出し方: ${importHelpTargets(name).map((t) => html`<button type="button" class="btn small" data-action="open-import-help" data-target="${t.id}">${t.label}</button>`)}</div>`;
+}
+
 /** 取り込み画面の結果欄の中身。{ error } は読み込みそのものの失敗、{ results, stats, analysisChanged } はファイルごとの結果 */
 export function importResultBlock(result) {
   if (result.error) return html`<p class="notice err">${result.error}</p>`;
@@ -67,7 +101,7 @@ export function importResultBlock(result) {
   const o = importOutcome(results, stats);
   return html`<div class="card" style="margin-top:12px">
         <p class="notice${o.tone ? ` ${o.tone}` : ''}">${o.note}${result.analysisChanged ? '（バックアップの新しい分析結果も反映）' : ''}</p>
-        <ul class="result-list">${results.map((r) => html`<li>${r.error ? '✗' : '✓'} <b>${r.name}</b><br><span class="small muted">${r.error || `${r.formatLabel} — 本 ${r.books} 冊 / 点 ${r.highlights} 件${r.images ? `（画像 ${r.images} 枚は取り込めません）` : ''}`}</span></li>`)}</ul>
+        <ul class="result-list">${results.map((r) => html`<li>${r.error ? '✗' : '✓'} <b>${r.name}</b><br><span class="small muted">${r.error || `${r.formatLabel} — 本 ${r.books} 冊 / 点 ${r.highlights} 件${r.images ? `（画像 ${r.images} 枚は取り込めません）` : ''}`}</span>${r.error ? importHelpLinks(r.name) : ''}</li>`)}</ul>
         ${stats.memoTitles?.length ? html`<p class="small muted">既にある本にまとめた読書メモ: ${stats.memoTitles.map((m) => `「${m.from}」→『${m.to}』`).join('、')}</p>` : ''}
         <div class="row" style="margin-top:8px"><a class="btn small" href="#/books">本を見る</a></div>
       </div>`;
@@ -98,7 +132,7 @@ export const importView = {
           <p class="help">ノートブックを開いたままにする必要はありません。Chrome が起動していて Amazon にログインしたままなら、裏側で確認します。ログインが切れると、拡張機能の状態欄とこの画面の Kindle 欄（ホームの先頭にも）に「Amazon のログインが切れています」と出ます。そのときだけノートブックを開いてログインし直してください。</p>
           <p class="help">Amazon のパスワードや Cookie は保存しません。ブラウザを閉じている間と、線がノートブックに反映されるまでの数分は届きません。</p>
         </details>
-        <details>
+        <details id="help-kindle-bookmarklet">
           <summary>Kindle アプリの線を手動でまとめて取り込む（ブックマークレット）</summary>
           <p class="help">PC を常に動かしていない場合はこちら。PC のブラウザで次の手順を 1 度設定すれば、全ての本のハイライトをまとめて取り込めます。</p>
           <ol class="help">
@@ -108,7 +142,7 @@ export const importView = {
           </ol>
           <div class="row"><a class="btn primary" id="bookmarklet" href="#" title="ブックマークバーへドラッグ">📥 Kindle ハイライトを集める</a><button class="btn small" data-action="copy-bookmarklet">コピー</button></div>
         </details>
-        <details>
+        <details id="help-kindle-device">
           <summary>Kindle 端末（Paperwhite など）で読んでいる</summary>
           <ol class="help">
             <li>Kindle を USB で PC につなぎます。</li>
@@ -116,7 +150,7 @@ export const importView = {
           </ol>
           <p class="help">何度取り込んでも重複しません。伸ばしたハイライトは新しい方に置き換わります。</p>
         </details>
-        <details>
+        <details id="help-kindle-export">
           <summary>アプリの「ノートブックをエクスポート」を使う（1 冊ずつ）</summary>
           <p class="help">Kindle アプリで本を開く → ノートブック → 共有（エクスポート）→「引用なし」でメール送信。届いた HTML ファイルを取り込みます。</p>
         </details>
@@ -125,7 +159,7 @@ export const importView = {
       <div class="section"><h2>Play ブックス</h2></div>
       <div class="card">
         <div id="playbooks-sync">${playbooksSyncBlock(state)}</div>
-        <details>
+        <details id="help-playbooks">
           <summary>Google ドライブの「Play ブックスのメモ」から</summary>
           <ol class="help">
             <li>Play ブックスの設定で「メモ、ハイライト、しおりを Google ドライブに保存」をオンにします（本ごとのドキュメントが自動で作られます）。</li>
@@ -138,7 +172,7 @@ export const importView = {
       </div>
 
       <div class="section"><h2>紙の本・読書メモ</h2></div>
-      <div class="card">
+      <div class="card" id="help-reading-notes">
         <p class="help">紙の本は <a href="#/books">読んだ本</a> の「＋ 紙の本」で書名と表紙を登録し、本の画面で線を引いた文を入力します。</p>
         <p class="help">Obsidian などに書いた<b>読書メモ（.md）</b>は、上の欄でそのまま選べます（複数可）。ファイル名を書名にし、見出しを章、段落・箇条書きの項目を 1 点ずつにします。書名の一部が同じ本が 1 冊だけあればその本にまとめ、既にある線と同じ文は増やしません。画像の埋め込みは取り込めません。PC では <code>bh import &lt;フォルダ&gt;</code> でフォルダごと取り込めます。</p>
       </div>

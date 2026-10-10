@@ -94,10 +94,39 @@ test('設定の「データ」に、削除した点の件数つきの入口が�
   assert.match(out, /<a class="row spread" href="#\/trash"><b>削除した点<\/b><span class="muted">2 件 ›<\/span><\/a>/);
 });
 
-test('app.js: #/trash の画面があり、「元に戻す」は通知の「元に戻す」と同じ処理で戻す', () => {
-  const app = readFileSync(join(WEB, 'js/app.js'), 'utf8');
-  assert.ok(app.includes("[/^\\/trash$/, trashView, 'settings']"));
-  assert.match(app, /'restore-highlight'\(el\) \{\s*return undoDeleteHighlight\(el\.dataset\.id\);/);
+test('#/trash の画面があり、設定のタブに属する', async () => {
+  const { ROUTES } = await import('../web/js/routes.js');
+  const { trashView } = await import('../web/js/views/trash.js');
+  const route = ROUTES.find(([re]) => re.test('/trash'));
+  assert.ok(route);
+  assert.equal(route[1], trashView);
+  assert.equal(route[2], 'settings');
+});
+
+test('一覧の「元に戻す」: 印を外してメモ・タグ・★ごと戻し、端末に保存してから描き直し・同期・通知する', async () => {
+  const { fakeApp, button } = await import('./helpers/app-actions.js');
+  const lib = sample();
+  const h = liveHighlights(lib)[0];
+  updateHighlight(lib, h.id, { userNote: '自分のメモ', tags: ['習慣'], favorite: true }, T1);
+  updateHighlight(lib, h.id, { deleted: true }, T2);
+  const app = fakeApp({ library: lib, loaded: true });
+  await app.actions['restore-highlight'](button({ id: h.id }));
+  const back = lib.highlights[h.id];
+  assert.ok(!back.deleted);
+  assert.deepEqual([back.userNote, back.tags, back.favorite], ['自分のメモ', ['習慣'], true]);
+  assert.deepEqual(app.log, ['persist', 'render', 'sync', 'toast']);
+  assert.equal(app.toasts[0].message, '元に戻しました');
+  assert.deepEqual(deletedHighlights(lib), []);
+});
+
+test('一覧の「元に戻す」: 点が見つからなければ理由を投げる（画面の共通の処理が通知に出す）', async () => {
+  const { fakeApp, button } = await import('./helpers/app-actions.js');
+  const app = fakeApp({ library: sample(), loaded: true });
+  await assert.rejects(() => app.actions['restore-highlight'](button({ id: 'hnone' })), /この点はもう見つかりません/);
+  assert.deepEqual(app.log, []);
+});
+
+test('sw.js: 削除した点の画面もオフラインで開ける', () => {
   const sw = readFileSync(join(WEB, 'sw.js'), 'utf8');
   assert.ok(sw.includes("'js/views/trash.js'"), 'オフラインでも開ける');
 });
