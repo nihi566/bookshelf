@@ -6,11 +6,10 @@ import { layerNav } from './layers.js';
 import { TFIDF_HINT } from '../../core/analysis/pipeline.js';
 import { hasChanges } from '../../core/analysis/changes.js';
 import { RELATED_MAX } from '../../core/analysis/neighbors.js';
-import { pendingPoints } from '../../core/auto-analysis.js';
-import { analysisPointById, analysisPoints, isThought } from '../../core/points.js';
+import { analysisPointById, isThought } from '../../core/points.js';
 import { assignedThoughtIds } from '../../core/line-assignments.js';
 import { isLineStarred } from '../../core/line-stars.js';
-import { lineIndex, pointCard } from '../ui.js';
+import { lineIndex, pendingNudge, pointCard } from '../ui.js';
 import { amazonKindleUrl, findWishlistBook, formatPrice } from '../../core/wishlist.js';
 import { loadWishlist } from '../wishlist-data.js';
 import { companion } from '../services.js';
@@ -112,7 +111,6 @@ export const knowledge = {
     const s = libraryStats(state.library);
     const job = state.job;
     const summary = aiSummary(state.settings, state.servedByCompanion);
-    const pending = a ? pendingPoints(analysisPoints(state.library), a) : 0;
     const runBtn = html`<button class="btn primary" data-action="run-analysis" ${job?.running || s.points < 4 ? 'disabled' : ''}>${a ? '分析し直す' : '点をつないで分析する'}</button>`;
     const head = html`<div class="page-head"><div><h1>知識</h1><div class="sub">点 ${s.points} → 線 ${a?.lines.length ?? '–'} → 面 ${a?.planes.length ?? '–'} → 立体</div></div><a class="btn small" href="#/ask">問いかける</a></div>
       <div class="card stack">
@@ -120,7 +118,7 @@ export const knowledge = {
         ${s.points < 4 ? html`<p class="notice">分析には 4 件以上の点が必要です。<a href="#/import">取り込む</a>か、上の「メモ」で思いつきを書いてください。</p>` : ''}
         <div class="row">${runBtn}${a ? html`<button class="btn" data-action="rerun-recommend" ${job?.running ? 'disabled' : ''}>おすすめを選び直す</button>` : ''}</div>
         ${a ? html`<p class="small muted">前回の分析: ${isoDate(a.createdAt)}・${a.model?.chat}${a.model?.embed ? ' / ' + a.model.embed : ''}・点 ${a.stats.points}${a.stats.calls ? `・AI を呼んだ回数 ${a.stats.calls.chat + a.stats.calls.embed}` : ''}${a.stats.far ? `（ほかに遠い組の判定 ${a.stats.far.calls}）` : ''}</p>
-          <p class="small">前回の分析のあとに増えた点: <b>${pending}</b> 件${pending ? '（「分析し直す」で、変わったところだけ作り直します）' : ''}</p>` : ''}
+          ${pendingNudge(state)}` : ''}
         <div id="auto-status">${autoStatusBlock(state)}</div>
         ${a ? html`<p class="small"><button type="button" class="btn small" data-action="run-analysis-full" ${job?.running ? 'disabled' : ''}>最初から作り直す</button> <span class="muted">線(グループ)・面を前回から引き継がず、すべて作り直します（時間がかかります）</span></p>` : ''}
         ${a?.model?.embed === 'tfidf' ? html`<p class="notice">${TFIDF_HINT}</p>` : ''}

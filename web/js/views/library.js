@@ -6,13 +6,14 @@ import { THOUGHT_LABEL, liveThoughts } from '../../core/thoughts.js';
 import { normalizeText } from '../../core/text.js';
 import { browserStore, formatPrice, loadMarks, searchWishlist, wishlistSummary } from '../../core/wishlist.js';
 import { loadWishlist } from '../wishlist-data.js';
-import { bookRow, bookSpine, emptyBooksBlock, highlightCard, homeAlertBlock, lineIndex, pointCard, sourceBadge } from '../ui.js';
+import { bookRow, bookSpine, emptyBooksBlock, highlightCard, homeAlertBlock, lineIndex, pendingNudge, pointCard, sourceBadge } from '../ui.js';
 import { inboxBlock } from './thoughts.js';
 import { discoveriesBlock, partnerBlock } from './discoveries.js';
 import { noteRow } from './notes.js';
 import { searchNotes } from '../../core/notes.js';
 import { meaningResults, semanticAvailability, unavailableNotice } from './ask.js';
 import { companion } from '../services.js';
+import { homeRecordsLine, loadMonthReading } from './records.js';
 
 const flow = html`<div class="flow" aria-label="点から立体へ">
   <div class="f-point"><b>点</b>線を引いた一文</div>
@@ -59,6 +60,7 @@ export const home = {
         <a class="stat solid" href="#/solid"><b>${a ? 1 : '–'}</b><span>立体</span></a>
       </div>
       <p class="small muted" style="margin-top:8px">${[`本 ${s.books} 冊`, ...bySource, html`<a href="#/stars">★ ${s.favorites}</a>`].map((x, i) => html`${i ? ' ・ ' : ''}<span class="nowrap">${x}</span>`)}${s.technical ? ` ・ 技術書の線 ${s.technical} 件は点に数えていません` : ''}</p>
+      <p id="home-records" class="small muted"></p>
 
       ${discoveriesBlock(state)}
 
@@ -75,7 +77,8 @@ export const home = {
               <div class="layer-label solid">立体</div>
               <h2>${a.solid.title}</h2>
               <p class="core">${a.solid.core}</p>
-            </a>`
+            </a>
+            ${pendingNudge(state, { toKnowledge: true })}`
         : html`<div class="section"><h2>AI 分析</h2></div>
             <div class="card"><p>点が ${s.points} 件たまりました。ローカル LLM で点をつないで、線(グループ)・面・立体にしてみましょう。</p>
             <a class="btn primary" href="#/knowledge">分析する</a></div>`}
@@ -85,10 +88,23 @@ export const home = {
       <div class="section"><h2>最近の点</h2><a class="small" href="#/search">全ての点の一覧</a></div>
       ${recent.map((h) => highlightCard(h, { library: lib, lines: idx.get(h.id) }))}`;
   },
-  mount(root) {
+  mount(root, ctx) {
+    renderHomeRecords(root.querySelector('#home-records'), ctx.state);
     renderHomeWishlist(root.querySelector('#home-wishlist'));
   },
 };
+
+/** ホームの「今月 N 冊・N ページ」。記録（GitHub の records.json）を読めないときは何も出さない（欲しい本の欄と同じ） */
+function renderHomeRecords(box, state) {
+  if (!box) return;
+  loadMonthReading(state)
+    .then((m) => {
+      if (box.isConnected) box.innerHTML = String(homeRecordsLine(m));
+    })
+    .catch(() => {
+      if (box.isConnected) box.innerHTML = '';
+    });
+}
 
 /** ホームの「欲しい本」。Kindle Unlimited で読める本に気づけるように。読めないときは何も出さない（ホームを邪魔しない） */
 function renderHomeWishlist(box) {

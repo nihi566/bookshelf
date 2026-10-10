@@ -40,15 +40,46 @@ export function playbooksSyncBlock(state) {
       : ''}`;
 }
 
+/**
+ * 取り込みの結果のまとめ。読めなかったファイルがあれば、通知と欄の色で成功と区別する
+ * @returns {{ failed: number, summary: string, message: string, tone: 'ok' | '' | 'err', note: string }}
+ */
+export function importOutcome(results, stats) {
+  const total = results.length;
+  const failed = results.filter((r) => r.error).length;
+  const summary = `新しい点 ${stats.added} 件${stats.updated ? `・更新 ${stats.updated} 件` : ''}${stats.unchanged ? `・既存 ${stats.unchanged} 件` : ''}`;
+  if (failed && failed === total) {
+    const what = total === 1 ? 'ファイルを読めませんでした' : `${total} 件のファイルがすべて読めませんでした`;
+    return { failed, summary, message: `取り込めませんでした: ${total === 1 ? 'ファイルを読めません' : `${total} 件のファイルがすべて読めません`}`, tone: 'err', note: `${what}（理由は下）` };
+  }
+  if (failed) {
+    return { failed, summary, message: `取り込みました（${failed} 件のファイルは読めませんでした）: ${summary}`, tone: '', note: `${summary}。${total} 件のうち ${failed} 件のファイルは読めませんでした（理由は下）` };
+  }
+  return { failed, summary, message: `取り込みました: ${summary}`, tone: stats.added || stats.backups ? 'ok' : '', note: summary };
+}
+
+/** 取り込み画面の結果欄の中身。{ error } は読み込みそのものの失敗、{ results, stats, analysisChanged } はファイルごとの結果 */
+export function importResultBlock(result) {
+  if (result.error) return html`<p class="notice err">${result.error}</p>`;
+  const { results, stats } = result;
+  const o = importOutcome(results, stats);
+  return html`<div class="card" style="margin-top:12px">
+        <p class="notice${o.tone ? ` ${o.tone}` : ''}">${o.note}${result.analysisChanged ? '（バックアップの新しい分析結果も反映）' : ''}</p>
+        <ul class="result-list">${results.map((r) => html`<li>${r.error ? '✗' : '✓'} <b>${r.name}</b><br><span class="small muted">${r.error || `${r.formatLabel} — 本 ${r.books} 冊 / 点 ${r.highlights} 件${r.images ? `（画像 ${r.images} 枚は取り込めません）` : ''}`}</span></li>`)}</ul>
+        ${stats.memoTitles?.length ? html`<p class="small muted">既にある本にまとめた読書メモ: ${stats.memoTitles.map((m) => `「${m.from}」→『${m.to}』`).join('、')}</p>` : ''}
+        <div class="row" style="margin-top:8px"><a class="btn small" href="#/books">本を見る</a></div>
+      </div>`;
+}
+
 export const importView = {
-  render({ state }) {
+  render({ state, refresh }) {
     return html`<a class="back" href="#/settings">‹ 設定</a>
       <div class="page-head"><div><h1>取り込み</h1><div class="sub">ファイルは端末の中だけで読み取ります</div></div></div>
       <label class="drop" id="drop">
         <input type="file" id="file-input" multiple accept="${ACCEPT}">
         <b>ファイルを選ぶ</b><br><span class="help">またはここにドロップ（.txt .html .docx .md .json .zip）</span>
       </label>
-      <div id="import-result"></div>
+      <div id="import-result">${refresh && state.lastImport ? importResultBlock(state.lastImport) : ''}</div>
 
       <div class="section"><h2>Kindle</h2></div>
       <div class="card">
