@@ -20,7 +20,7 @@ import { outlineNewView, outlineStatusBlock, outlineView, outlinesView } from '.
 import { outlineActions } from './outline-actions.js';
 import { markDiscoveryRead } from '../core/discovery-reads.js';
 import { FAR_REACTIONS, farConnectionById, reactFar } from '../core/far-reactions.js';
-import { importView, kindleSyncBlock, settingsView } from './views/settings.js';
+import { importView, kindleSyncBlock, playbooksSyncBlock, settingsView } from './views/settings.js';
 import { wishlist } from './views/wishlist.js';
 import { records } from './views/records.js';
 import { editThoughtSheet, newThoughtSheet, thoughtsView } from './views/thoughts.js';
@@ -417,7 +417,11 @@ async function sync({ quiet = false } = {}) {
 // PC の状態（拡張の確認結果など）を表示する画面
 const PC_INFO_PATHS = ['/settings', '/import', '/', '/knowledge'];
 // 描き直さず、欄だけ差し替える画面（描き直すと取り込み結果の表示・開いた説明・今日の点の「別の点」が消える）
-const PC_INFO_BOXES = { '/import': ['#kindle-sync', kindleSyncBlock], '/': ['#kindle-alert', kindleAlertBlock], '/knowledge': ['#auto-status', autoStatusBlock] };
+const PC_INFO_BOXES = {
+  '/import': [['#kindle-sync', kindleSyncBlock], ['#playbooks-sync', playbooksSyncBlock]],
+  '/': [['#kindle-alert', kindleAlertBlock]],
+  '/knowledge': [['#auto-status', autoStatusBlock]],
+};
 
 /** PC の状態（拡張の確認結果など）を取り直し、表示している画面に反映する */
 async function refreshPcInfo() {
@@ -433,9 +437,14 @@ async function refreshPcInfo() {
   const typing = document.activeElement?.matches?.('#view input:not([type="checkbox"]):not([type="radio"]), #view textarea, #view select');
   const partial = PC_INFO_BOXES[path];
   if (partial) {
-    const [selector, block] = partial;
-    const box = document.querySelector(`#view ${selector}`);
-    if (box) box.innerHTML = String(block(state));
+    for (const [selector, block] of partial) {
+      const box = document.querySelector(`#view ${selector}`);
+      if (!box) continue;
+      // 開いて読んでいる説明（取り込めない本の理由など）を、差し替えで閉じない
+      const open = box.querySelector('details')?.open;
+      box.innerHTML = String(block(state));
+      if (open) box.querySelector('details')?.setAttribute('open', '');
+    }
   } else if (PC_INFO_PATHS.includes(path) && !typing) render({ keepScroll: true });
 }
 
@@ -477,7 +486,8 @@ function googleLabel(g) {
   if (!g) return '未対応（PC の bh を更新してください）';
   if (!g.active) return g.error || '未設定';
   const time = (iso) => (iso ? new Date(iso).toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' }) : '—');
-  return `有効（最終確認 ${time(g.lastCheck)}・最終取り込み ${time(g.lastImport)}）${g.error ? ` ／ ${g.error}` : ''}`;
+  const problems = g.problemCount ?? g.problems?.length ?? 0;
+  return `有効（最終確認 ${time(g.lastCheck)}・最終取り込み ${time(g.lastImport)}）${problems ? ` ／ 取り込めない本 ${problems} 冊（取り込みの画面に理由）` : ''}${g.error ? ` ／ ${g.error}` : ''}`;
 }
 
 // ---- 紙の本（登録・本の情報の編集） ----

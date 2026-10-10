@@ -10,7 +10,7 @@ import { isZip, readZip } from '../zip.js';
 import { BACKUP_FORMAT } from '../importing.js';
 import { looksLikeClippings, parseKindleClippings } from './kindle-clippings.js';
 import { isNotebookJson, looksLikeKindleExport, parseKindleExportHtml, parseNotebookJson } from './kindle-notebook.js';
-import { looksLikePlayBooksMarkdown, parsePlayBooksDocx, parsePlayBooksHtml, parsePlayBooksMarkdown, titleFromFileName } from './playbooks.js';
+import { looksLikePlayBooksMarkdown, parsePlayBooksDocx, parsePlayBooksHtml, parsePlayBooksMarkdown, playBooksHtmlProblem, titleFromFileName } from './playbooks.js';
 import { noteTitleFromFileName, parseReadingNote } from './reading-notes.js';
 
 export const FORMAT_LABELS = {
@@ -112,6 +112,12 @@ async function parseOne(name, bytes) {
     if (looksLikeKindleExport(text)) return { format: 'kindle-export', books: parseKindleExportHtml(text) };
     const books = parsePlayBooksHtml(text, titleFromFileName(base));
     if (books.length) return { format: 'playbooks', books };
+    const problem = playBooksHtmlProblem(text);
+    // 線を全部消した本・しおりだけの本の文書は、取り込む点が無いだけで失敗ではない
+    if (problem?.kind === 'empty') return { format: 'playbooks', books: [], empty: true };
+    if (problem?.kind === 'hidden') {
+      return { error: 'Play ブックスがこの本のハイライトの文を書き出していません（ドライブのメモには「ハイライト表示したテキストを表示できません」とだけあります。出版社の設定で文を表示できない本です。Play ブックスのアプリでは線を見られます）' };
+    }
     return { error: 'ハイライトが見つからない HTML です（Kindle のエクスポートか Play ブックスのメモを選んでください）' };
   }
   // .md は読書メモを先に見る（Setext 見出しの ===== と「作成日」などで Clippings に見えることがある）
@@ -148,7 +154,7 @@ export async function parseFiles(files) {
     if (r.books) books.push(...r.books);
     const lib = r.backup?.library;
     const hl = r.books ? r.books.reduce((s, b) => s + b.highlights.length, 0) : lib ? Object.keys(lib.highlights).length : 0;
-    if (!r.error && !lib && hl === 0) r.error = 'ハイライトが見つかりませんでした';
+    if (!r.error && !lib && hl === 0 && !r.empty) r.error = 'ハイライトが見つかりませんでした';
     results.push({ name: f.name, format: r.format || '', formatLabel: FORMAT_LABELS[r.format] || '', books: r.books?.length ?? (lib ? Object.keys(lib.books).length : 0), highlights: hl, images: r.images || 0, error: r.error || '' });
   }
   return { books, backups, results };

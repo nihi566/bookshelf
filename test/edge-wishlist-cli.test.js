@@ -586,7 +586,7 @@ test('edge google: トークンの応答が JSON でない・Drive の一覧が�
   const { client } = await googleSetup({ tokenResponse: () => new Response('<html>oops</html>', { status: 500 }) });
   await assert.rejects(client.sync(), /HTTP 500/);
   const empty = await googleSetup({ docs: [] });
-  assert.deepEqual(await empty.client.sync(), { checked: 0, changed: 0, added: 0, updated: 0, booksAdded: 0, errors: [] });
+  assert.deepEqual(await empty.client.sync(), { checked: 0, changed: 0, added: 0, updated: 0, booksAdded: 0, errors: [], problems: [] });
   // 読めないドキュメントはエラーとして返し、落ちない
   const bad = await googleSetup({ docs: [{ id: 'd1', name: '../x', modifiedTime: 't' }] });
   const r = await bad.client.sync();

@@ -13,6 +13,8 @@ import { cleanText, parseLooseDate } from '../text.js';
 import { colorName, docxXmlToBlocks, htmlToBlocks } from './blocks.js';
 
 const UNAVAILABLE = /ハイライト表示したテキストを表示できません|can.?t (be )?display|cannot be displayed|non può essere visualizzato/i;
+// Play ブックスが作る文書の先頭の注意書き（「Play ブックスで変更を加えると、このドキュメントは上書きされます」）
+const PLAYBOOKS_BANNER = /Play ブックスで変更を加えると|changes in Play Books|modifiche in Play Libri/i;
 const COLOR_WORDS = {
   yellow: /^(yellow|黄色?|イエロー|giall[oe])$/i,
   green: /^(green|緑色?|グリーン|verd[ei])$/i,
@@ -130,6 +132,34 @@ export async function parsePlayBooksDocx(entries, fallbackTitle) {
   const rels = entries.find((e) => e.name === 'word/_rels/document.xml.rels');
   const volumeId = rels ? playBooksVolumeId(new TextDecoder().decode(rels.bytes)) : '';
   return withVolumeId(parsePlayBooksBlocks(docxXmlToBlocks(new TextDecoder().decode(doc.bytes)), fallbackTitle), volumeId);
+}
+
+/**
+ * 点が 1 件も読めなかった Play ブックスの HTML の理由。Play ブックスの文書でなければ null。
+ * - hidden: 注釈はあるが、Play ブックスが文を書き出していない（「ハイライト表示したテキストを表示できません」。出版社の設定による）
+ * - empty: 注釈が 1 件も無い（線を全部消した・しおりだけの本）
+ */
+export function playBooksHtmlProblem(html) {
+  // 新しい形式では同じ注釈が色別にも一度出るので、本文・日付・ページで数える（parsePlayBooksBlocks と同じ。
+  // 文が無い注釈は同じページ・同じ日のものを見分けられないので、件数は目安）
+  const all = new Set();
+  const hidden = new Set();
+  let banner = false;
+  for (const item of walk(htmlToBlocks(html))) {
+    if (item.kind === 'p') {
+      if (PLAYBOOKS_BANNER.test(item.block.text)) banner = true;
+      continue;
+    }
+    const { text, date, page } = item.a;
+    // 文の欄が空の行（画像だけの注釈など）は数えない
+    if (!text) continue;
+    const key = `${text}|${date}|${page}`;
+    all.add(key);
+    if (UNAVAILABLE.test(text)) hidden.add(key);
+  }
+  if (hidden.size && hidden.size === all.size) return { kind: 'hidden', hidden: hidden.size };
+  if (!all.size && banner) return { kind: 'empty' };
+  return null;
 }
 
 export function parsePlayBooksHtml(html, fallbackTitle) {

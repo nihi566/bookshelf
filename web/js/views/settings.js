@@ -11,6 +11,35 @@ export function kindleSyncBlock(state) {
   return html`${lines.map((l) => html`<p class="small">${l}</p>`)}`;
 }
 
+/** 時刻を短く（例: 10/4 18:05）。無ければ — */
+function shortTime(iso) {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? '—' : `${d.getMonth() + 1}/${d.getDate()} ${d.toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' })}`;
+}
+
+/**
+ * 取り込み画面の Play ブックス自動取り込みの状態欄の中身（PC がドライブを見張っている結果）。
+ * 取り込めない本は、文書が直るまで出し続ける（PC の記録に残っている）
+ */
+export function playbooksSyncBlock(state) {
+  if (state.settings.ai.mode !== 'companion' || !state.pcInfo) return '';
+  const g = state.pcInfo.google;
+  if (!g) return html`<p class="small">自動取り込み: 未対応（PC の bh を更新してください）</p>`;
+  if (!g.active) return html`<p class="small">自動取り込み: ${g.error || '未設定'}</p>`;
+  const problems = Array.isArray(g.problems) ? g.problems : [];
+  const count = Number.isInteger(g.problemCount) ? g.problemCount : problems.length;
+  return html`<p class="small">自動取り込み: 有効（最終確認 ${shortTime(g.lastCheck)}・この起動のあとの最終取り込み ${shortTime(g.lastImport)}）</p>
+    ${count
+      ? html`<details class="pb-problems">
+          <summary class="small">取り込めない本 ${count} 冊（押すと理由）</summary>
+          <ul class="plain small">${problems.map((p) => html`<li><b>${p.name}</b><br><span class="muted">${p.error}</span></li>`)}</ul>
+          ${count > problems.length ? html`<p class="small muted">ほか ${count - problems.length} 冊</p>` : ''}
+          <p class="help">Play ブックスがハイライトの文をドライブのメモに書き出していない本は、ここからは取り込めません（出版社の設定によります）。文書が更新されて読めるようになると、自動で取り込んでこの一覧から消えます。</p>
+        </details>`
+      : ''}`;
+}
+
 export const importView = {
   render({ state }) {
     return html`<a class="back" href="#/settings">‹ 設定</a>
@@ -62,6 +91,7 @@ export const importView = {
 
       <div class="section"><h2>Play ブックス</h2></div>
       <div class="card">
+        <div id="playbooks-sync">${playbooksSyncBlock(state)}</div>
         <details>
           <summary>Google ドライブの「Play ブックスのメモ」から</summary>
           <ol class="help">

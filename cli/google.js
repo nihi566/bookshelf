@@ -23,7 +23,8 @@ const FOLDER = 'application/vnd.google-apps.folder';
 export const FOLDER_NAMES = ['Play ブックスのメモ', 'Play Books Notes'];
 export const MIN_INTERVAL_SEC = 15;
 // 取り込み済みの記録（google-sync.json）の版。2: 表紙に使う書籍 ID を本に付けるようになった
-const SYNC_VERSION = 2;
+// 3: 取り込めない文書（problems）を残すようになった（前の版で失敗して記録済みの文書も、一度だけ読み直して載せる）
+const SYNC_VERSION = 3;
 
 /** ログインし直すしかない失敗（未ログイン・トークン失効・クライアント設定の誤り） */
 function needsLogin(message) {
@@ -177,16 +178,19 @@ export function createGoogleClient({ store, fetchImpl = fetch }) {
       const synced = await store.googleSync();
       // 記録の files が無い・形が違う（手で書き換えた・壊れた）ときは、取り込み済みの記録なしとして扱う
       if (!synced.files || typeof synced.files !== 'object') synced.files = {};
+      if (!synced.problems || typeof synced.problems !== 'object' || Array.isArray(synced.problems)) synced.problems = {};
       if (!docs.length) {
         // フォルダが作り直された（設定のオフ → オン等）かもしれないので、次の確認で探し直す。
         // 取り込み済みの記録は消さない（消すと全部を取り込み直すことになる）
         folders = null;
-        return { checked: 0, changed: 0, added: 0, updated: 0, booksAdded: 0, errors: [] };
+        // 一覧が一時的に空で返っただけかもしれないので、取り込めない文書の記録はそのまま出す
+        return { checked: 0, changed: 0, added: 0, updated: 0, booksAdded: 0, errors: [], problems: problemList(synced.problems, new Set(Object.keys(synced.problems))) };
       }
+      const present = new Set(docs.map((d) => d.id));
       // 前の版の記録（表紙の書籍 ID を拾う前）なら、変わっていないドキュメントも一度だけ読み直して本に ID を付ける
       const reread = synced.version !== SYNC_VERSION;
       const changed = docs.filter((d) => reread || synced.files[d.id] !== d.modifiedTime);
-      const result = { checked: docs.length, changed: changed.length, added: 0, updated: 0, booksAdded: 0, errors: [] };
+      const result = { checked: docs.length, changed: changed.length, added: 0, updated: 0, booksAdded: 0, errors: [], problems: problemList(synced.problems, present) };
       if (!changed.length) return result;
 
       const inputs = [];
@@ -200,6 +204,15 @@ export function createGoogleClient({ store, fetchImpl = fetch }) {
       }
       const { books, results } = await parseFiles(inputs);
       for (const r of results) if (r.error) result.errors.push(`${r.name}: ${r.error}`);
+      // 読めなかったドキュメントは、中身が変わって読めるようになるまで記録に残す（画面に出し続けるため。読み直しはしない）
+      // parseFiles は名前によって結果を飛ばすことがある（._ で始まる名前など）ので、数が合うときだけ文書と結果を並びで対応づける
+      if (results.length === inputs.length) {
+        results.forEach((r, i) => {
+          const d = inputs[i].doc;
+          if (r.error) synced.problems[d.id] = { name: d.name, error: r.error, modifiedTime: d.modifiedTime };
+          else delete synced.problems[d.id];
+        });
+      }
       if (books.length) {
         const st = await store.lock(async () => {
           const lib = await store.library();
@@ -212,14 +225,23 @@ export function createGoogleClient({ store, fetchImpl = fetch }) {
       }
       // 読めなかったドキュメントも、中身が変わるまでは試し直さない（毎回同じエラーを出さないため）
       for (const { doc } of inputs) synced.files[doc.id] = doc.modifiedTime;
-      const present = new Set(docs.map((d) => d.id));
       for (const id of Object.keys(synced.files)) if (!present.has(id)) delete synced.files[id];
+      for (const id of Object.keys(synced.problems)) if (!present.has(id)) delete synced.problems[id];
+      result.problems = problemList(synced.problems, present);
       // 読み直しで書き出せなかったドキュメントがあれば、次の確認でもう一度全部を読み直す
       if (inputs.length === changed.length) synced.version = SYNC_VERSION;
       await store.saveGoogleSync(synced);
       return result;
     },
   };
+}
+
+/** 取り込めないドキュメントの一覧（ドライブに今あるものだけ。書名の順） */
+function problemList(problems, present) {
+  return Object.entries(problems)
+    .filter(([id, p]) => present.has(id) && p && typeof p === 'object')
+    .map(([, p]) => ({ name: String(p.name || ''), error: String(p.error || ''), modifiedTime: String(p.modifiedTime || '') }))
+    .sort((a, b) => a.name.localeCompare(b.name, 'ja'));
 }
 
 export function describeSync(r) {
@@ -231,7 +253,8 @@ export function describeSync(r) {
  * 未ログインでも止めずに見張り続けるので、別のターミナルで bh google login すれば次の確認から取り込みが始まる。
  */
 export function startDriveWatcher({ store, client, log = console.log }) {
-  const status = { active: false, checking: false, lastCheck: null, lastImport: null, lastResult: null, error: '' };
+  // problems: 取り込めないドキュメント（読めるようになるまで残る。error は直近の確認で出たものだけ）
+  const status = { active: false, checking: false, lastCheck: null, lastImport: null, lastResult: null, error: '', problems: [] };
   let timer = null;
   let stopped = false;
   let lastLogged = '';
@@ -245,7 +268,7 @@ export function startDriveWatcher({ store, client, log = console.log }) {
     status.checking = true;
     try {
       const r = await client.sync();
-      Object.assign(status, { active: true, lastCheck: new Date().toISOString(), lastResult: r, error: r.errors.join(' / ') });
+      Object.assign(status, { active: true, lastCheck: new Date().toISOString(), lastResult: r, error: r.errors.join(' / '), problems: r.problems || [] });
       if (r.added || r.updated) status.lastImport = status.lastCheck;
       if (r.changed) log(`[google] ${describeSync(r)}`);
       // 書き出しに失敗したドキュメントは毎回試し直すので、同じエラーは 1 回だけ出す
