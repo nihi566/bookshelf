@@ -7,12 +7,17 @@ export const AUTO_RETRY_MS = 30 * 60 * 1000;
 // 分析に要る点の数（analyzeLibrary と同じ）
 const MIN_POINTS = 4;
 
-/** 前回の分析に入っていない点（どの線にも「まだつながらない点」にも無い点）の数。前回が無ければすべて（形の壊れた分析も無いものとして数える） */
-export function pendingPoints(points, analysis) {
-  if (!analysis || !Array.isArray(analysis.lines)) return points.length;
+/** 前回の分析に入っていない点（どの線にも「まだつながらない点」にも無い点）。前回が無ければすべて（形の壊れた分析も無いものとして扱う） */
+export function pendingPointList(points, analysis) {
+  if (!analysis || !Array.isArray(analysis.lines)) return points;
   const ids = (xs) => (Array.isArray(xs) ? xs.filter((x) => typeof x === 'string') : []);
   const seen = new Set([...analysis.lines.flatMap((l) => ids(l?.highlightIds)), ...ids(analysis.isolated)]);
-  return points.filter((p) => !seen.has(p.id)).length;
+  return points.filter((p) => !seen.has(p.id));
+}
+
+/** 前回の分析に入っていない点の数（pendingPointList の件数） */
+export function pendingPoints(points, analysis) {
+  return pendingPointList(points, analysis).length;
 }
 
 /** 数として読める値か（null・空文字・真偽値は既定値に戻す。Number(null) が 0 になるため） */

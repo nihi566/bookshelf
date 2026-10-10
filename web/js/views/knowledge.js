@@ -6,7 +6,8 @@ import { layerNav } from './layers.js';
 import { TFIDF_HINT } from '../../core/analysis/pipeline.js';
 import { hasChanges } from '../../core/analysis/changes.js';
 import { RELATED_MAX } from '../../core/analysis/neighbors.js';
-import { analysisPointById, isThought } from '../../core/points.js';
+import { analysisPointById, analysisPoints, isThought } from '../../core/points.js';
+import { pendingPointList } from '../../core/auto-analysis.js';
 import { assignedThoughtIds } from '../../core/line-assignments.js';
 import { isLineStarred } from '../../core/line-stars.js';
 import { lineIndex, pendingNudge, pointCard } from '../ui.js';
@@ -381,6 +382,19 @@ export const isolatedView = {
   render({ state }) {
     const hs = (state.analysis?.isolated || []).map((id) => analysisPointById(state.library, id)).filter(Boolean);
     return html`<a class="back" href="#/knowledge">‹ 知識</a><div class="page-head"><h1>まだつながっていない点</h1></div>
+      ${hs.map((h) => pointCard(h, { library: state.library }))}`;
+  },
+};
+
+/** 前回の分析のあとに増えた点（知識の画面・ホームの「増えた点 N 件」から。数え方は pendingPoints と同じ） */
+export const pendingView = {
+  render({ state }) {
+    const head = html`<a class="back" href="#/knowledge">‹ 知識</a><div class="page-head"><h1>前回の分析のあとに増えた点</h1></div>`;
+    if (!state.analysis) return html`${head}<p class="card small muted">まだ分析していません。</p>`;
+    const hs = pendingPointList(analysisPoints(state.library), state.analysis);
+    if (!hs.length) return html`${head}<p class="card small muted">前回の分析のあとに増えた点はありません。</p>`;
+    return html`${head}
+      <p class="help">${hs.length} 件。まだどの線(グループ)にも入っていません。分析し直す前に、自分のメモ・タグ・★を付けておくと、次の分析の線に反映されます。</p>
       ${hs.map((h) => pointCard(h, { library: state.library }))}`;
   },
 };

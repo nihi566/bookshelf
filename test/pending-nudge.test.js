@@ -34,7 +34,8 @@ function analysisOf(lib, skip = 0) {
 }
 
 const st = (library, analysis) => ({ library, analysis, settings: { ai: { mode: 'companion', companionUrl: '' } }, servedByCompanion: true, job: null, pcInfo: null });
-const NUDGE = /前回の分析のあとに増えた点 <b>(\d+)<\/b> 件（まだ線につながっていません）/;
+// 件数は一覧（#/knowledge/pending）へのリンクになっている（NIH-103）
+const NUDGE = /前回の分析のあとに増えた点 <a [^>]*><b>(\d+)<\/b> 件<\/a>（まだ線につながっていません）/;
 
 test('NIH-21: ホームの立体の欄に、増えた点の数と「分析し直す」への導線が出る', async () => {
   const { home } = await import('../web/js/views/library.js');
