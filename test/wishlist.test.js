@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { applyImportedMarks, cleanupSyncedMarks, collectMarks, filterWishlist, findWishlistBook, formatPrice, inShelf, loadMarks, priceChange, priceTotal, shelfCounts, marksFile, memoryStore, parseMarksFile, openWishlistFilters, parseWishlist, saveMarks, searchWishlist, tagCounts, titleKey, toggleMark, wishlistSummary } from '../web/core/wishlist.js';
+import { applyImportedMarks, cleanupSyncedMarks, collectMarks, filterWishlist, findWishlistBook, formatPrice, inShelf, labelCounts, loadMarks, priceChange, priceTotal, shelfCounts, marksFile, memoryStore, parseMarksFile, openWishlistFilters, parseWishlist, saveMarks, searchWishlist, tagCounts, titleKey, toggleMark, wishlistLabel, wishlistSummary } from '../web/core/wishlist.js';
 
 test('titleKey: 括弧のレーベル・版表記と記号・空白を落とす', () => {
   assert.equal(titleKey('731―石井四郎と細菌戦部隊の闇を暴く―（新潮文庫）'), titleKey('731 石井四郎と細菌戦部隊の闇を暴く'));
@@ -51,7 +51,7 @@ test('parseWishlist: 形式を確かめて正規化する', () => {
   const w = parseWishlist(data([book(), book({ asin: 'B0AAAAAAA2', ku: true, price: null, tag: 'seen', rating: 4, kind: 'manga' })]));
   assert.equal(w.lastScraped, '2026-01-02T03:04:05');
   assert.equal(w.books.length, 2);
-  assert.deepEqual(w.books[0], { asin: 'B0AAAAAAA1', title: '欲しい本', price: 900, ku: false, wanted: true, purchased: false, sources: ['bookmeter'], saved: { tag: '', rating: '', kind: 'book' }, trend: { prev: null, changedAt: null, low: null }, scrapedAt: '2026-01-01T00:00:00', history: [], priceReason: '', bookmeterId: '', index: 0 });
+  assert.deepEqual(w.books[0], { asin: 'B0AAAAAAA1', title: '欲しい本', price: 900, ku: false, wanted: true, purchased: false, sources: ['bookmeter'], saved: { tag: '', rating: '', kind: 'book' }, trend: { prev: null, changedAt: null, low: null }, scrapedAt: '2026-01-01T00:00:00', history: [], priceReason: '', bookmeterId: '', publisher: '', label: '', index: 0 });
   assert.deepEqual(w.books[1].saved, { tag: 'seen', rating: '4', kind: 'manga' });
 });
 
@@ -388,7 +388,7 @@ test('openWishlistFilters: リンクから開いた条件は描き直しで戻�
   const normal = { shelf: 'kindle', q: '自分の語', sort: 'price-asc', ku: false, min: '100', max: '900', tag: 'seen', kind: 'manga' };
   // ホームの「Kindle Unlimited 対象をすべて見る」から開く: KU だけで絞り込み、それまでの条件は取っておく
   let s = openWishlistFilters(normal, null, { ku: true });
-  assert.deepEqual(s.filters, { shelf: 'all', reading: 'all', q: '', sort: 'default', ku: true, min: '', max: '', tag: 'all', kind: 'all' });
+  assert.deepEqual(s.filters, { shelf: 'all', reading: 'all', q: '', sort: 'default', ku: true, min: '', max: '', tag: 'all', kind: 'all', label: '' });
   assert.equal(s.normal, normal);
   // リンク先で利用者が条件を変えた後、同期などで同じ画面を描き直しても変えた条件のまま
   const changed = { ...s.filters, shelf: 'kindle', q: '猫' };
@@ -552,6 +552,89 @@ test('FEED_WANTED_URL: 読みたい本・大きな値下がりだけのフィー
   assert.equal(FEED_WANTED_URL, FEED_URL.replace(/feed\.xml$/, name));
 });
 
+test('wishlistLabel: 書名の末尾の括弧からレーベル（出版社の叢書名）を取り出し、番号・版・巻は落とす', () => {
+  const cases = [
+    ['1985年の無条件降伏～プラザ合意とバブル～ (光文社新書)', '光文社新書'],
+    ['星を数える少年（岩波ジュニア新書 912）', '岩波ジュニア新書'],
+    ['古典の手引き (岩波文庫 赤435-5)', '岩波文庫'],
+    ['古典の手引き (岩波文庫 青 609-1)', '岩波文庫'],
+    ['ある随筆 (文春文庫 し 4-1)', '文春文庫'],
+    ['ある入門 (日経文庫 E 52)', '日経文庫'],
+    ['ある新書 (平凡社新書0911)', '平凡社新書'],
+    ['ある本 (BOW BOOKS010)', 'BOW BOOKS'],
+    ['ある新書 (ＮＨＫ出版新書 552)', 'NHK出版新書'],
+    ['ある経済書 (日本経済新聞出版)', '日本経済新聞出版'],
+    ['あるガイド ［AWS深掘りガイド］', 'AWS深掘りガイド'],
+    ['ある小説 上 (新潮文庫)', '新潮文庫'],
+    ['ある新書（岩波新書 新赤版 1234）', '岩波新書'],
+    ['ある文庫（ちくま学芸文庫 ミ 1-1）', 'ちくま学芸文庫'],
+    ['ある文庫（中公文庫ま-1-1）', '中公文庫'],
+    ['ある新書 (ブルーバックス 2100)', 'ブルーバックス'],
+    ['ある新書 (光文社新書) [Kindle版]', '光文社新書'],
+    ['ある新書 (光文社新書)【電子書籍限定特典付き】', '光文社新書'],
+    ['ある本【電子書籍限定特典付き】', ''],
+    ['ある本（Vol.3）', ''],
+    ['ある本（第1部）', ''],
+    ['サピエンス全史（上）', ''],
+    ['ある本 (1)', ''],
+    ['ある本 (新装版)', ''],
+    ['ある本 (増補新版)', ''],
+    ['ある本 (電子書籍版)', ''],
+    ['（新潮文庫）が途中にある 書名', ''],
+    ['サンプル技術書 第2版', ''],
+    ['', ''],
+  ];
+  for (const [title, label] of cases) assert.equal(wishlistLabel(title), label, title);
+});
+
+test('parseWishlist: 書名からレーベルを持ち、filterWishlist はレーベルで絞り込める', () => {
+  const w = parseWishlist(data([
+    book({ asin: 'B0AAAAAAA1', title: '森の歩き方 (岩波ジュニア新書)' }),
+    book({ asin: 'B0AAAAAAA2', title: '海辺の経済学 (光文社新書)' }),
+    book({ asin: 'B0AAAAAAA3', title: '星の少年 (岩波ジュニア新書 912)' }),
+    book({ asin: 'B0AAAAAAA4', title: 'レーベルの無い本' }),
+  ]));
+  assert.deepEqual(w.books.map((b) => b.label), ['岩波ジュニア新書', '光文社新書', '岩波ジュニア新書', '']);
+  const all = w.books.map((b) => ({ book: b, marks: loadMarks(b, memoryStore()) }));
+  assert.equal(asins(filterWishlist(all, { label: '岩波ジュニア新書' })), '13');
+  assert.equal(asins(filterWishlist(all, { label: '' })), '1234', '空ならレーベルで絞り込まない');
+  assert.equal(asins(filterWishlist(all, { label: '無いレーベル' })), '');
+  assert.equal(asins(filterWishlist(all, { q: '光文社' })), '2', '出版社名の一部でも検索窓で当たる（レーベルは書名に入っている）');
+});
+
+test('parseWishlist: 出版社（publisher）があればそれで、無ければ書名のレーベルで絞り込む（NIH-104）', () => {
+  const w = parseWishlist(data([
+    book({ asin: 'B0AAAAAAA1', title: 'ある技術書', publisher: '技術評論社' }),
+    book({ asin: 'B0AAAAAAA2', title: '海辺の経済学 (光文社新書)', publisher: '光文社' }),
+    book({ asin: 'B0AAAAAAA3', title: '単行本の随筆', publisher: ' 光文社 ' }),
+    book({ asin: 'B0AAAAAAA4', title: '星の少年 (岩波ジュニア新書 912)', publisher: null }),
+    book({ asin: 'B0AAAAAAA5', title: 'まだ出版社を読んでいない本' }),
+    book({ asin: 'B0AAAAAAA6', title: 'おかしな値', publisher: ['光文社'] }),
+  ]));
+  assert.deepEqual(w.books.map((b) => b.publisher), ['技術評論社', '光文社', '光文社', '', '', '']);
+  assert.deepEqual(w.books.map((b) => b.label), ['技術評論社', '光文社', '光文社', '岩波ジュニア新書', '', '']);
+  const all = w.books.map((b) => ({ book: b, marks: loadMarks(b, memoryStore()) }));
+  assert.equal(asins(filterWishlist(all, { label: '光文社' })), '23', '書名にレーベルが無い単行本も出版社で当たる');
+  assert.equal(asins(filterWishlist(all, { label: '技術評論社' })), '1');
+  assert.equal(asins(filterWishlist(all, { label: '岩波ジュニア新書' })), '4');
+  assert.equal(asins(filterWishlist(all, { q: '技術評論' })), '1', '検索窓でも出版社に当たる');
+  assert.deepEqual(labelCounts(all)[0], ['光文社', 2], '出版社とレーベルを同じ選択肢で数える');
+  assert.equal(labelCounts(all).length, 3);
+});
+
+test('labelCounts: レーベルごとの冊数を、多い順（同数は名前順）に返す。レーベルの無い本は数えない', () => {
+  const w = parseWishlist(data([
+    book({ asin: 'B0AAAAAAA1', title: 'A (講談社学術文庫)' }),
+    book({ asin: 'B0AAAAAAA2', title: 'B (中公新書)' }),
+    book({ asin: 'B0AAAAAAA3', title: 'C (講談社学術文庫)' }),
+    book({ asin: 'B0AAAAAAA4', title: 'D (ちくま新書)' }),
+    book({ asin: 'B0AAAAAAA5', title: 'E' }),
+  ]));
+  const all = w.books.map((b) => ({ book: b, marks: loadMarks(b, memoryStore()) }));
+  assert.deepEqual(labelCounts(all), [['講談社学術文庫', 2], ['ちくま新書', 1], ['中公新書', 1]]);
+  assert.deepEqual(labelCounts([]), []);
+});
+
 test('pageWishlist: 絞り込み結果から先頭の表示件数分だけ切り出し、残りの件数と次に足す件数を返す（NIH-23）', async () => {
   const { pageWishlist, WISHLIST_PAGE_SIZE } = await import('../web/core/wishlist.js');
   assert.equal(WISHLIST_PAGE_SIZE, 100);
@@ -589,5 +672,6 @@ test('価格チェックの画面: 同期・編集のあとの描き直し（ref
   const src = await readFile(new URL('../web/js/views/wishlist.js', import.meta.url), 'utf8');
   assert.match(src, /^let shown = WISHLIST_PAGE_SIZE;/m, '表示件数は画面の描き直しをまたいで持つ');
   assert.match(src, /if \(!ctx\?\.refresh\) shown = WISHLIST_PAGE_SIZE;/);
-  assert.doesNotMatch(src, /^\s+let shown =/m, 'mountList の中で毎回 100 に戻さない');
+  // 行頭の字下げは [ \t] で見る（\s だと Windows の作業ツリーの CRLF の \n に当たり、字下げの無い行まで拾う）
+  assert.doesNotMatch(src, /^[ \t]+let shown =/m, 'mountList の中で毎回 100 に戻さない');
 });

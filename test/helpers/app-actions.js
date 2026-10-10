@@ -36,6 +36,9 @@ export function fakeApp(state, overrides = {}) {
     restoreHistory: async () => {
       throw new Error('restoreHistory を差し替えていません');
     },
+    pinHistory: async () => {
+      throw new Error('pinHistory を差し替えていません');
+    },
     ...overrides,
   };
   const { actions, readDiscovery } = appActions(deps);

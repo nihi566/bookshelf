@@ -7,17 +7,19 @@
 // スマホからは `tailscale serve --bg 8787` で https://<PC名>.<tailnet>.ts.net として届く。
 
 import { createServer } from 'node:http';
+import { readFileSync } from 'node:fs';
 import { readFile, stat } from 'node:fs/promises';
 import path from 'node:path';
-import { REPO_ROOT } from './store.js';
+import { HISTORY_PIN_MAX, REPO_ROOT } from './store.js';
 import { libraryStats, mergeLibraries } from '../web/core/model.js';
 import { analysisPoints } from '../web/core/points.js';
 import { analysisStamp, applyImport } from '../web/core/importing.js';
 import { mergeKindleSync, normalizeKindleReport } from '../web/core/kindle-status.js';
 import { createLlmClient, normalizeBaseUrl } from '../web/core/analysis/llm.js';
 import { analyzeLibrary, recommendBooks, recommendationNote } from '../web/core/analysis/pipeline.js';
-import { autoAnalyzeDue, autoConfig, pendingPoints } from '../web/core/auto-analysis.js';
+import { autoAnalyzeDue, autoConfig, notesChanged, pendingPoints } from '../web/core/auto-analysis.js';
 import { analysisShapeError } from '../web/core/analysis/shape.js';
+import { swVersion } from '../web/core/serve-version.js';
 import { restoreAnalysis } from '../web/core/analysis/restore.js';
 import { wishlistForRecommend } from '../web/core/wishlist.js';
 import { parseFiles } from '../web/core/parsers/index.js';
@@ -32,6 +34,22 @@ const NO_EMBED_MODEL = 'PC に埋め込みモデルが設定されていない�
 const NO_CHAT_MODEL = 'PC のチャットモデルが設定されていないので、AI に頼めません（PC で bh config model qwen2.5:7b などを実行してください）';
 
 const WEB_ROOT = path.join(REPO_ROOT, 'web');
+const SW_PATH = path.join(WEB_ROOT, 'sw.js');
+// web/sw.js の版（読めなければ空。画面は「版を返さない古い bh serve」と同じに扱う）
+function startupSwVersion() {
+  try {
+    return swVersion(readFileSync(SW_PATH, 'utf8'));
+  } catch {
+    return '';
+  }
+}
+async function diskSwVersion() {
+  try {
+    return swVersion(await readFile(SW_PATH, 'utf8'));
+  } catch {
+    return '';
+  }
+}
 // 画面に渡す、Play ブックスの取り込めないドキュメントの数の上限（件数は problemCount で全部を渡す）
 const DRIVE_PROBLEMS_MAX = 30;
 const MIME = {
@@ -57,6 +75,8 @@ export function createCompanionServer({ store, log = console.log, catalogFetch, 
   // trigger: 'manual'（画面のボタン・bh）/ 'auto'（点が増えたので PC が自分で始めた）
   // bh update が「止めた後に起動したプロセス（= 新しいコード）か」を確かめるのに使う
   const serverStartedAt = new Date().toISOString();
+  // 起動したときの web/sw.js の版（= 動いているコードの版）。/sw.js はディスクから毎回配るので、そちらでは古いコードか分からない
+  const serverVersion = startupSwVersion();
   const job = { running: false, stage: '', message: '', done: 0, total: 0, error: '', startedAt: null, finishedAt: null, trigger: '', controller: null };
   // 取り込みの最中は自動の分析を始めない（取り込み途中の点で分析しない）
   let activeImports = 0;
@@ -178,6 +198,16 @@ export function createCompanionServer({ store, log = console.log, catalogFetch, 
       });
       return out ? send(res, out.status, out.body) : busy();
     }
+    // 履歴の回に「この回を残す」の印を付け外しする（NIH-102。印の付いた回は直近 12 回を過ぎても消さない）
+    const pin = req.method === 'POST' && url.pathname.match(/^\/api\/history\/([0-9TZ]{8,40})\/pin$/);
+    if (pin) {
+      const { pinned } = await readBody(req);
+      if (typeof pinned !== 'boolean') return send(res, 400, { error: 'pinned は true か false で送ってください' });
+      const r = await store.setHistoryPin(pin[1], pinned);
+      if (r.ok) return send(res, 200, r.item);
+      if (r.reason === 'limit') return send(res, 409, { error: `残せるのは ${HISTORY_PIN_MAX} 回までです。ほかの回の「残すのをやめる」を押してから、もう一度押してください。` });
+      return send(res, 404, { error: 'その分析は履歴にありません' });
+    }
     switch (route) {
       case 'GET /api/info': {
         const lib = await store.library();
@@ -185,7 +215,8 @@ export function createCompanionServer({ store, log = console.log, catalogFetch, 
         const st = await store.state();
         return send(res, 200, {
           app: 'book-highlights',
-          server: { startedAt: serverStartedAt },
+          // 設定 → 接続を確認 が、古いコードのまま動いていないかを見る（web/core/serve-version.js）
+          server: { startedAt: serverStartedAt, version: serverVersion, diskVersion: await diskSwVersion() },
           stats: libraryStats(lib),
           // Web アプリはこれが自分の持つものより新しいときだけ同期する
           updatedAt: lib.updatedAt,
@@ -193,9 +224,9 @@ export function createCompanionServer({ store, log = console.log, catalogFetch, 
           kindleSync: st.kindleSync || null,
           analysis: analysis ? { createdAt: analysis.createdAt, recommendedAt: analysis.recommendedAt, ...analysis.stats } : null,
           job: publicJob(),
-          google: drive ? publicDrive(drive.status) : null,
+          google: drive ? { ...publicDrive(drive.status), lastNew: st.playbooksSync?.lastNew || null } : null,
           // 自動の分析の設定と、最後に成功した時刻・失敗の理由（知識の画面に出す）
-          autoAnalysis: { ...autoConfig(cfg.autoAnalyze), running: Boolean(auto), pending: pendingPoints(analysisPoints(lib), analysis), ...publicAutoState(st.autoAnalysis) },
+          autoAnalysis: { ...autoConfig(cfg.autoAnalyze), running: Boolean(auto), pending: pendingPoints(analysisPoints(lib), analysis), notesChanged: notesChanged(lib, analysis), ...publicAutoState(st.autoAnalysis) },
         });
       }
       case 'GET /api/history':
@@ -447,6 +478,7 @@ export function createCompanionServer({ store, log = console.log, catalogFetch, 
       now,
       lastFailureAt: later(st.autoAnalysis?.lastErrorAt, lastStop.failure),
       lastCancelledAt: later(st.autoAnalysis?.lastCancelledAt, lastStop.cancel),
+      notesChanged: notesChanged(library, analysis),
     });
     if (!r.due || job.running) return { started: false, ...r };
     log(`[auto] ${r.reason}。分析を始めます`);

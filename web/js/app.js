@@ -3,7 +3,8 @@ import { html } from './html.js';
 import { kv, requestPersistence } from './db.js';
 import { loadCache, loadState, save, saveCache, state } from './state.js';
 import { buildBookmarklet, companion, detectCompanion, download, syncWithPc } from './services.js';
-import { openSheet, toast } from './ui.js';
+import { openSheet, serveVersionBlock, toast } from './ui.js';
+import { swVersion } from '../core/serve-version.js';
 import { LAYER_PATHS, PC_INFO_BOXES, PC_INFO_PATHS, THOUGHT_PATHS, matchRoute, parseHash as parseRouteHash } from './routes.js';
 import { appActions } from './app-actions.js';
 import { noteActions } from './note-actions.js';
@@ -416,6 +417,18 @@ function googleLabel(g) {
   return `有効（最終確認 ${time(g.lastCheck)}・最終取り込み ${time(g.lastImport)}）${problems ? ` ／ 取り込めない本 ${problems} 冊（取り込みの画面に理由）` : ''}${g.error ? ` ／ ${g.error}` : ''}`;
 }
 
+const OWN_VERSION_TIMEOUT_MS = 3000;
+/** この画面の sw.js の版（PC の bh serve の版と比べる。読めなければ空） */
+async function ownSwVersion() {
+  try {
+    // 版は補助の情報なので、待たされて接続の確認の結果まで出なくならないよう区切る
+    const res = await fetch('sw.js', { cache: 'no-store', signal: AbortSignal.timeout(OWN_VERSION_TIMEOUT_MS) });
+    return res.ok ? swVersion(await res.text()) : '';
+  } catch {
+    return '';
+  }
+}
+
 // ---- 紙の本（登録・本の情報の編集） ----
 
 // 表紙は一覧の小さな枠と本の画面に出すだけなので、この大きさに縮めて JPEG にする（同期を重くしない）
@@ -506,6 +519,7 @@ const appOps = appActions({
   coverDataUrl,
   clipboard: () => navigator.clipboard,
   restoreHistory: (id) => companion.restoreHistory(id),
+  pinHistory: (id, pinned) => companion.pinHistory(id, pinned),
 });
 
 const actions = {
@@ -628,8 +642,9 @@ const forms = {
         view.querySelector('#model-list').innerHTML = models.map((m) => `<option value="${m.replace(/"/g, '&quot;')}">`).join('');
         out.innerHTML = String(html`<p class="notice ok">接続できました。モデル: ${models.join('、') || '（なし）'}</p>`);
       } else {
-        const info = await companion.info();
-        out.innerHTML = String(html`<p class="notice ${info.llm.configured ? 'ok' : ''}">PC に接続できました。点 ${info.stats.points ?? info.stats.highlights} 件・チャットモデル: ${info.llm.chatModel || '未設定（PC で bh config model …）'}・埋め込み: ${info.llm.embedModel || '文字 n-gram'}・Play ブックスの自動取り込み: ${googleLabel(info.google)}</p>`);
+        const [info, appVersion] = await Promise.all([companion.info(), ownSwVersion()]);
+        out.innerHTML = String(html`<p class="notice ${info.llm.configured ? 'ok' : ''}">PC に接続できました。点 ${info.stats.points ?? info.stats.highlights} 件・チャットモデル: ${info.llm.chatModel || '未設定（PC で bh config model …）'}・埋め込み: ${info.llm.embedModel || '文字 n-gram'}・Play ブックスの自動取り込み: ${googleLabel(info.google)}</p>
+          ${serveVersionBlock(info.server, appVersion)}`);
       }
     } catch (e) {
       out.innerHTML = String(html`<p class="notice err">${e.message}</p>`);

@@ -74,10 +74,49 @@ export function parseWishlist(data) {
       priceReason: price === null && b?.ku !== true && Object.hasOwn(PRICE_REASON_LABELS, b?.price_reason) ? b.price_reason : '',
       // 読書メーターの本 ID（kindle_system が一覧から取る。数字だけ）
       bookmeterId: isBookmeterId(b?.bookmeter_id) ? b.bookmeter_id : '',
+      // 出版社（kindle_system が商品ページの登録情報から読む。まだ読めていない本は空）
+      publisher: parsePublisher(b?.publisher),
+      // 出版社の絞り込みに使う名前。出版社があればそれ、無ければ書名の末尾の括弧にあるレーベル（光文社新書など）
+      label: parsePublisher(b?.publisher) || wishlistLabel(b?.title),
       index,
     };
   });
   return { lastScraped: typeof data.last_scraped === 'string' ? data.last_scraped : null, books };
+}
+
+// 書名の末尾の括弧（NFKC で（）［］は半角になる）。【】は NFKC で変わらないので別に書く
+const TRAILING_BRACKET = /[(\[【]([^()\[\]【】]*)[)\]】]\s*$/;
+// レーベルの後ろの通し番号（「岩波文庫 赤435-5」「文春文庫 し 4-1」「日経文庫 E 52」「平凡社新書0911」「中公文庫ま-1-1」）
+const CATALOG_NUMBER = /(?:\s+[赤青緑白黄A-Za-zぁ-んァ-ン]|[ぁ-ん](?=-?\d+-\d))?\s*[\d-]+$/;
+// 番号の前の版の区分（「岩波新書 新赤版 1234」）
+const SERIES_EDITION = /\s+新?[赤青緑白黄]版$/;
+// 括弧に入っていてもレーベルではないもの（巻・版・特典の表記）。「日本経済新聞出版」のような出版社名は残す
+// 後読み（(?<!出)）は古い Safari で読み込めないので使わない
+const NOT_LABEL = /^[上中下]$|巻$|^版$|[^出]版$|特典|^Vol\.?$|^第/i;
+
+/** 書名の末尾の括弧からレーベル（出版社の叢書名）を取り出す。無ければ空文字。
+ *  末尾の括弧が版・特典の表記（「[Kindle版]」「【電子書籍限定特典付き】」）なら、その前の括弧を見る */
+export function wishlistLabel(title) {
+  let rest = String(title ?? '').normalize('NFKC');
+  for (let i = 0; i < 2; i++) {
+    const m = TRAILING_BRACKET.exec(rest);
+    if (!m) return '';
+    const label = m[1].trim().replace(CATALOG_NUMBER, '').replace(SERIES_EDITION, '').trim();
+    if (label && !NOT_LABEL.test(label)) return label;
+    rest = rest.slice(0, m.index);
+  }
+  return '';
+}
+
+// 出版社の名前の上限（kindle_system の crawler.MAX_PUBLISHER_LENGTH と同じ）
+const MAX_PUBLISHER_LENGTH = 100;
+const parsePublisher = (v) => (typeof v === 'string' ? v.trim().slice(0, MAX_PUBLISHER_LENGTH) : '');
+
+/** レーベルごとの冊数 [[レーベル, 冊数]]。多い順、同数は名前順。レーベルの無い本は数えない。items: [{ book }] */
+export function labelCounts(items) {
+  const counts = new Map();
+  for (const { book } of items) if (book.label) counts.set(book.label, (counts.get(book.label) || 0) + 1);
+  return [...counts].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], 'ja'));
 }
 
 /** スクレイピングの履歴（kindle_system が載せる price_history: [{ at, price, ku }]。古い順）。日時の無い行は捨てる */
@@ -190,7 +229,7 @@ export function cleanupSyncedMarks(store, book) {
 export function openWishlistFilters(filters, normal, { q = '', ku = false, refresh = false } = {}) {
   if (q || ku) {
     if (refresh && normal) return { filters, normal };
-    return { filters: { ...filters, q, ku, shelf: 'all', reading: 'all', sort: 'default', min: '', max: '', tag: 'all', kind: 'all' }, normal: normal ?? filters };
+    return { filters: { ...filters, q, ku, shelf: 'all', reading: 'all', sort: 'default', min: '', max: '', tag: 'all', kind: 'all', label: '' }, normal: normal ?? filters };
   }
   return { filters: normal ?? filters, normal: null };
 }
@@ -306,7 +345,7 @@ export function priceSparkline(history, { width = 120, height = 28, pad = 3 } = 
 }
 
 /**
- * items: [{ book, marks, reading? }]。f: { shelf: all|kindle|bookmeter|purchased, reading: all|unread|reading（購入済みのときだけ使う）, q, ku, min, max, tag, kind, sort }
+ * items: [{ book, marks, reading? }]。f: { shelf: all|kindle|bookmeter|purchased, reading: all|unread|reading（購入済みのときだけ使う）, q, ku, min, max, tag, kind, label（空なら絞り込まない）, sort }
  * 戻り値の priceRangeInvalid は下限 > 上限（そのときは価格帯を無視する）
  */
 export function filterWishlist(items, f = {}) {
@@ -321,9 +360,10 @@ export function filterWishlist(items, f = {}) {
     const { book, marks } = item;
     if (!inShelf(item, f.shelf)) return false;
     if (f.shelf === 'purchased' && !matchesReading(item, f.reading)) return false;
-    const hay = normalizeText(`${book.title} ${book.asin}`);
+    const hay = normalizeText(`${book.title} ${book.asin} ${book.publisher ?? ''}`);
     if (!words.every((w) => hay.includes(w))) return false;
     if (f.ku && !book.ku) return false;
+    if (f.label && book.label !== f.label) return false;
     if (!matchesTag(marks.tag, f.tag || 'all')) return false;
     if (kind !== 'all' && marks.kind !== kind) return false;
     if (!Number.isNaN(min) && (book.price === null || book.price < min)) return false;

@@ -1,7 +1,7 @@
 // 画面のルート表と、画面ごとに描き直し方を決める表。DOM に触れないので Node のテストからも import できる
 import { homeAlertBlock } from './ui.js';
 import { book, books, home, search } from './views/library.js';
-import { autoStatusBlock, historyView, isolatedView, knowledge, lineView, planeView } from './views/knowledge.js';
+import { autoStatusBlock, historyView, isolatedView, knowledge, lineView, pendingView, planeView } from './views/knowledge.js';
 import { linesView, planesView, solidView } from './views/layers.js';
 import { starsView } from './views/stars.js';
 import { discoveriesView, discoveryView } from './views/discoveries.js';
@@ -36,6 +36,8 @@ export const ROUTES = [
   [/^\/knowledge\/line\/(?<id>[\w-]+)$/, lineView, 'knowledge'],
   [/^\/knowledge\/plane\/(?<id>[\w-]+)$/, planeView, 'knowledge'],
   [/^\/knowledge\/isolated$/, isolatedView, 'knowledge'],
+  // 前回の分析のあとに増えた点（知識の画面・ホームの「増えた点 N 件」から）
+  [/^\/knowledge\/pending$/, pendingView, 'knowledge'],
   // 遠いつながり（別の本・別の面の点の組を AI が読み、共通する考えがあったもの）
   [/^\/knowledge\/far$/, farView, 'knowledge'],
   // 永久ノート（1 ノート = 1 アイデア）と、点 1 つ（それを根拠にしている永久ノート）

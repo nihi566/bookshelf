@@ -30,8 +30,9 @@ const NOT_LOADED = 'まだ端末のデータを読み込んでいます。少し
  * @param {(file: File|null) => Promise<string>} deps.coverDataUrl 選んだ表紙の画像を縮めた data URL にする
  * @param {() => { writeText(text: string): Promise<void> }|undefined} deps.clipboard 使えない画面では undefined
  * @param {(id: string) => Promise<object>} deps.restoreHistory PC の過去の分析をいまの分析に戻す
+ * @param {(id: string, pinned: boolean) => Promise<unknown>} deps.pinHistory PC の過去の分析に「この回を残す」の印を付け外しする
  */
-export function appActions({ state, openSheet, toast, persist, saveAnalysis, sync, render, refreshThoughts, go, confirm, coverDataUrl, clipboard, restoreHistory }) {
+export function appActions({ state, openSheet, toast, persist, saveAnalysis, sync, render, refreshThoughts, go, confirm, coverDataUrl, clipboard, restoreHistory, pinHistory }) {
   const notLoaded = () => {
     if (state.loaded) return false;
     toast(NOT_LOADED);
@@ -122,6 +123,16 @@ export function appActions({ state, openSheet, toast, persist, saveAnalysis, syn
       if (typeof original !== 'string' || !field) return;
       field.value = original;
       field.focus();
+    },
+    // 編集を開かずに 1 回で消す（編集シートの「この点を削除」と同じ処理。押し間違えてもトーストから戻せる）
+    async delete(el) {
+      const id = el.dataset.id;
+      if (!state.library.highlights[id]) return;
+      updateHighlight(state.library, id, { deleted: true });
+      await persist();
+      toast('削除しました', 6000, { label: '元に戻す', run: () => undoDeleteHighlight(id) });
+      render({ keepScroll: true });
+      sync();
     },
     async copy(el) {
       const h = pointById(state.library, el.dataset.id);
@@ -234,6 +245,19 @@ export function appActions({ state, openSheet, toast, persist, saveAnalysis, syn
       }
       toast('この分析に戻しました');
       go('#/knowledge');
+    },
+    // 履歴の回に「この回を残す」の印を付け外しする（NIH-102。PC の履歴の一覧に印を持つ）
+    async 'pin-history'(el) {
+      const pinned = el.dataset.pinned !== 'true';
+      el.disabled = true;
+      try {
+        await pinHistory(el.dataset.id, pinned);
+      } catch (e) {
+        el.disabled = false;
+        return toast(e.message);
+      }
+      toast(pinned ? 'この回を残します。直近 12 回を過ぎても消えません' : '残すのをやめました。直近 12 回を過ぎると消えます');
+      render({ keepScroll: true });
     },
     async 'rec-feedback'(el) {
       const r = state.analysis?.recommendations?.[Number(el.dataset.i)];

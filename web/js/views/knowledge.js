@@ -6,7 +6,8 @@ import { layerNav } from './layers.js';
 import { TFIDF_HINT } from '../../core/analysis/pipeline.js';
 import { hasChanges } from '../../core/analysis/changes.js';
 import { RELATED_MAX } from '../../core/analysis/neighbors.js';
-import { analysisPointById, isThought } from '../../core/points.js';
+import { analysisPointById, analysisPoints, isThought } from '../../core/points.js';
+import { pendingPointList } from '../../core/auto-analysis.js';
 import { assignedThoughtIds } from '../../core/line-assignments.js';
 import { isLineStarred } from '../../core/line-stars.js';
 import { lineIndex, pendingNudge, pointCard } from '../ui.js';
@@ -65,12 +66,13 @@ export function autoStatusBlock(state) {
   if (state.settings.ai.mode !== 'companion') return html`<p class="small muted">自動の分析は、PC のコンパニオン（bh serve）を使うときに動きます。</p>`;
   const au = state.pcInfo?.autoAnalysis;
   if (!au) return '';
-  const rule = `前回の分析のあとに点が ${au.minPoints} 件増えるか、${au.maxHours} 時間たって 1 件以上増えると、PC が分析し直します`;
+  const rule = `前回の分析のあとに点が ${au.minPoints} 件増えるか、${au.maxHours} 時間たって点が 1 件以上増えるか永久ノートを書いた・直したとき、PC が分析し直します`;
   // bh analyze で分析したときは PC の記録が無いので、手元の分析結果の時刻（最後に成功した分析）で補う
   const okAt = au.lastSuccessAt || state.analysis?.createdAt;
   const cancelled = au.lastCancelledAt && (!au.lastSuccessAt || au.lastCancelledAt > au.lastSuccessAt);
   return html`<p class="small">自動の分析: ${au.enabled ? html`<b>オン</b> — ${rule}` : html`<b>オフ</b>（PC で <span class="code">bh config auto on</span> で入れられます）`}</p>
     <p class="small muted">最後に成功: ${when(okAt)}${au.lastTrigger === 'auto' && au.lastSuccessAt && !au.lastError && !cancelled ? '（自動）' : ''}</p>
+    ${au.enabled && au.notesChanged ? html`<p class="small muted">前回の分析のあとに書いた・直した永久ノートがあります。次の分析で面・立体に入ります。</p>` : ''}
     ${cancelled ? html`<p class="small muted">${when(au.lastCancelledAt)} に分析を中止しました。少し時間をおいてから、PC が自動で始め直します。</p>` : ''}
     ${au.lastError ? html`<p class="notice err">${when(au.lastErrorAt)} の分析に失敗しました: ${au.lastError}。前回の結果はそのまま残っています。次の機会に PC がもう一度試します。</p>` : ''}`;
 }
@@ -78,6 +80,7 @@ export function autoStatusBlock(state) {
 const REBUILT = {
   full: '「最初から作り直す」で、すべて作り直しました',
   grew: '前回作り直したときから点が大きく増えたので、最初から作り直しました',
+  unraveled: '点が減って前回の線がすべてほどけたので、最初から作り直しました',
   format: '今回は最初から作り直しました',
 };
 
@@ -166,7 +169,7 @@ export const knowledge = {
         <p class="help">どの線(グループ)にも入らなかった点です。読書を重ねると、いつか線になるかもしれません。</p>
         <a class="btn small" href="#/knowledge/isolated">見る</a>` : ''}
 
-      ${pcConfigured(state) ? html`<div class="section"><h2>分析の履歴</h2><span class="small muted">PC に直近 12 回分</span></div><div id="analysis-history"><p class="small muted">PC に問い合わせています…</p></div>` : ''}`;
+      ${pcConfigured(state) ? html`<div class="section"><h2>分析の履歴</h2><span class="small muted">PC に直近 12 回分（「残す」の回は消えない）</span></div><div id="analysis-history"><p class="small muted">PC に問い合わせています…</p></div>` : ''}`;
   },
   mount(root, ctx) {
     if (ctx?.state && pcConfigured(ctx.state)) renderHistoryList(root.querySelector('#analysis-history'), ctx.state);
@@ -208,9 +211,10 @@ export function changeSummary(c, restoredFrom = null) {
 /** PC（コンパニオン）を使う設定で、PC の場所が分かっているか（GitHub Pages で開いただけなら localhost に問い合わせない） */
 const pcConfigured = (state) => state.settings.ai.mode === 'companion' && Boolean(state.servedByCompanion || state.settings.ai.companionUrl);
 
-function historyListHtml(items, state) {
+/** 履歴の一覧（「この回を残す」の印が付いた回には「残す」と出す。NIH-102） */
+export function historyListHtml(items, state) {
   return items.length
-    ? html`<ul class="card plain history-list">${items.map((h) => html`<li><a href="#/knowledge/history/${h.id}">${when(h.createdAt)}</a> <span class="small muted"><span class="nowrap">点 ${h.stats?.points ?? '–'}</span>・<span class="nowrap">線 ${h.stats?.lines ?? '–'}</span>・<span class="nowrap">面 ${h.stats?.planes ?? '–'}</span>${h.createdAt === state?.analysis?.createdAt ? '（いま表示している分析）' : ''}</span><br><span class="small">${changeSummary(h.changes, h.restoredFrom).split('・').map((part, i) => html`${i ? '・' : ''}<span class="nowrap">${part}</span>`)}</span></li>`)}</ul>`
+    ? html`<ul class="card plain history-list">${items.map((h) => html`<li><a href="#/knowledge/history/${h.id}">${when(h.createdAt)}</a> ${h.pinned === true ? html`<span class="pin-mark">残す</span> ` : ''}<span class="small muted"><span class="nowrap">点 ${h.stats?.points ?? '–'}</span>・<span class="nowrap">線 ${h.stats?.lines ?? '–'}</span>・<span class="nowrap">面 ${h.stats?.planes ?? '–'}</span>${h.createdAt === state?.analysis?.createdAt ? '（いま表示している分析）' : ''}</span><br><span class="small">${changeSummary(h.changes, h.restoredFrom).split('・').map((part, i) => html`${i ? '・' : ''}<span class="nowrap">${part}</span>`)}</span></li>`)}</ul>`
     : html`<p class="small muted">まだ履歴がありません（PC で分析すると残ります）。</p>`;
 }
 
@@ -240,12 +244,17 @@ const historyIdOf = (a) => String(a?.createdAt || '').replace(/[^0-9TZ]/g, '');
 
 /**
  * 過去の分析 1 回分の中身。線・面の画面は今の分析のものなので、リンクは張らない。
- * current: いま表示している分析か（そうでなければ「この分析に戻す」を出す）
+ * current: いま表示している分析か（そうでなければ「この分析に戻す」を出す）。
+ * pinned: 「この回を残す」の印が付いているか（NIH-102。PC の一覧が読めず分からないときは undefined で、付け外しを出さない）
  */
-export function historyBody(a, { current }) {
+export function historyBody(a, { current, pinned }) {
+  const id = historyIdOf(a);
   return html`<section class="card stack">${current
       ? html`<p class="small muted">いま表示している分析です。</p>`
-      : html`<div class="row"><button type="button" class="btn small primary" data-action="restore-analysis" data-id="${historyIdOf(a)}">この分析に戻す</button><span class="small muted">知識の画面の線(グループ)・面・立体がこの回のものになり、次の分析はこの回から引き継ぎます</span></div>`}</section>
+      : html`<div class="row"><button type="button" class="btn small primary" data-action="restore-analysis" data-id="${id}">この分析に戻す</button><span class="small muted">知識の画面の線(グループ)・面・立体がこの回のものになり、次の分析はこの回から引き継ぎます</span></div>`}
+      ${typeof pinned === 'boolean'
+        ? html`<div class="row"><button type="button" class="btn small" data-action="pin-history" data-id="${id}" data-pinned="${String(pinned)}" aria-pressed="${String(pinned)}">${pinned ? '残すのをやめる' : 'この回を残す'}</button><span class="small muted">${pinned ? html`<span class="pin-mark">残す</span> 印が付いています。直近 12 回を過ぎても消えません` : '履歴は直近 12 回分だけ残ります。印を付けた回は、それを過ぎても消えません'}</span></div>`
+        : ''}</section>
     ${changesBlock(a, { links: false })}
     <div class="section"><h2>立体</h2></div>
     <section class="card solid-card stack">
@@ -268,11 +277,16 @@ export const historyView = {
   mount(root, { params, state }) {
     const body = root.querySelector('#history-body');
     const sub = root.querySelector('#history-sub');
-    companion.historyEntry(params.id).then(
-      (a) => {
+    // 印（「この回を残す」）は一覧にだけある。一覧が読めなくても、中身は出す
+    const pinOf = companion.history().then(
+      (items) => items.find((h) => h.id === params.id)?.pinned === true,
+      () => undefined,
+    );
+    Promise.all([companion.historyEntry(params.id), pinOf]).then(
+      ([a, pinned]) => {
         if (!body.isConnected) return;
         sub.textContent = `${when(a.createdAt)}・${a.model?.chat || ''}${a.model?.embed ? ' / ' + a.model.embed : ''}・点 ${a.stats?.points ?? '–'} → 線 ${a.lines.length} → 面 ${a.planes.length}`;
-        body.innerHTML = String(historyBody(a, { current: a.createdAt === state?.analysis?.createdAt }));
+        body.innerHTML = String(historyBody(a, { current: a.createdAt === state?.analysis?.createdAt, pinned }));
       },
       (e) => {
         if (body.isConnected) body.innerHTML = String(html`<p class="notice err">過去の分析を読めませんでした: ${e.message}</p>`);
@@ -381,6 +395,19 @@ export const isolatedView = {
   render({ state }) {
     const hs = (state.analysis?.isolated || []).map((id) => analysisPointById(state.library, id)).filter(Boolean);
     return html`<a class="back" href="#/knowledge">‹ 知識</a><div class="page-head"><h1>まだつながっていない点</h1></div>
+      ${hs.map((h) => pointCard(h, { library: state.library }))}`;
+  },
+};
+
+/** 前回の分析のあとに増えた点（知識の画面・ホームの「増えた点 N 件」から。数え方は pendingPoints と同じ） */
+export const pendingView = {
+  render({ state }) {
+    const head = html`<a class="back" href="#/knowledge">‹ 知識</a><div class="page-head"><h1>前回の分析のあとに増えた点</h1></div>`;
+    if (!state.analysis) return html`${head}<p class="card small muted">まだ分析していません。</p>`;
+    const hs = pendingPointList(analysisPoints(state.library), state.analysis);
+    if (!hs.length) return html`${head}<p class="card small muted">前回の分析のあとに増えた点はありません。</p>`;
+    return html`${head}
+      <p class="help">${hs.length} 件。まだどの線(グループ)にも入っていません。分析し直す前に、自分のメモ・タグ・★を付けておくと、次の分析の線に反映されます。</p>
       ${hs.map((h) => pointCard(h, { library: state.library }))}`;
   },
 };

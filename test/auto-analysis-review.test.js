@@ -194,6 +194,33 @@ test('前回作り直したときから点が 1.5 倍（かつ 40 件以上）�
   assert.equal(grown.pointsAtFull, 49);
 });
 
+test('前回の線がすべてほどけても（点が減って各線 1 点）、点が 4 件以上あれば作り直して線を引く（NIH-81）', async () => {
+  const lib = emptyLibrary();
+  mergeParsed(lib, [{ title: '一冊', source: 'kindle', highlights: ['注意は希少な資源である', '注意という資源を守る', '習慣は小さな行動の積み重ね', '小さな習慣が行動を変える'].map((text) => ({ text })) }]);
+  const ids = Object.keys(lib.highlights).sort();
+  assert.equal(ids.length, 4);
+  const llm = { chatModel: 'stub', chatJson: async (p) => (p.name === 'line' ? { name: '線', summary: '', insight: '', keywords: [] } : p.name === 'plane' ? { name: '面', summary: '' } : { title: '核', core: '', relations: [], principles: [], questions: [] }) };
+  // 前回: 線 2 本（各 2 点）とまだつながらない点 2 件。各線の 1 点（hgone1 / hgone2）は本の整理で消えた
+  const previous = {
+    version: 2,
+    createdAt: '2026-10-01T00:00:00.000Z',
+    model: { chat: 'stub', embed: 'tfidf' },
+    pointsAtFull: 6,
+    stats: { points: 6, lines: 2, planes: 1, isolated: 2 },
+    lines: [{ id: 'l1', name: '線1', highlightIds: [ids[0], 'hgone1'] }, { id: 'l2', name: '線2', highlightIds: [ids[2], 'hgone2'] }],
+    planes: [{ id: 'p1', name: '面1', lineIds: ['l1', 'l2'] }],
+    solid: { title: '核', core: '' },
+    isolated: [ids[1], ids[3]],
+    recommendations: [],
+  };
+  assert.equal(analysisShapeError(previous), '');
+  const { analysis } = await analyzeLibrary({ library: lib, llm, previous, options: { recommend: false } });
+  assert.ok(analysis.lines.length >= 1);
+  assert.equal(analysis.incremental, false);
+  assert.equal(analysis.changes.reason, 'unraveled');
+  assert.equal(analysis.pointsAtFull, 4);
+});
+
 test('自動の分析の設定: 空・null・真偽値は既定値に戻し、"false" や 0 は「オフ」と読む。未来の失敗時刻では待ち続けない', () => {
   assert.deepEqual(autoConfig({ maxHours: null, minPoints: '' }), { enabled: true, minPoints: 10, maxHours: 24 });
   assert.equal(autoConfig({ maxHours: false }).maxHours, 24);
