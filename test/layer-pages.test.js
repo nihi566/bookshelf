@@ -1,13 +1,9 @@
 // 点・線・面・立体の専用ページ（#64）、面は短く・押すと全文（#65）、全ての点の一覧への入口（#70）
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { emptyLibrary, mergeParsed } from '../web/core/model.js';
 import { SAMPLE_BOOKS } from '../web/core/sample.js';
 
-const WEB = join(dirname(fileURLToPath(import.meta.url)), '..', 'web');
 const LONG = '線が束になったテーマの長い説明。'.repeat(20);
 
 function sample() {
@@ -42,16 +38,20 @@ function st(library, analysis) {
   return { library, analysis, settings: { ai: { mode: 'direct', companionUrl: '', chatModel: '' } }, servedByCompanion: false, pcInfo: null, job: null };
 }
 
-const app = () => readFileSync(join(WEB, 'js/app.js'), 'utf8');
-
-test('#64: 点・線・面・立体の専用ページの URL がある（点は既存の #/search）', () => {
-  const src = app();
-  for (const route of ["[/^\\/lines$/, linesView, '", "[/^\\/planes$/, planesView, '", "[/^\\/solid$/, solidView, '", "[/^\\/search$/, search, '"]) {
-    assert.ok(src.includes(route), route);
+test('#64: 点・線・面・立体の専用ページの URL がある（点は既存の #/search）', async () => {
+  const { matchRoute } = await import('../web/js/routes.js');
+  const { linesView, planesView, solidView } = await import('../web/js/views/layers.js');
+  const { search } = await import('../web/js/views/library.js');
+  const { lineView, planeView } = await import('../web/js/views/knowledge.js');
+  const { pointView } = await import('../web/js/views/point.js');
+  for (const [path, view] of [['/lines', linesView], ['/planes', planesView], ['/solid', solidView], ['/search', search]]) {
+    assert.equal(matchRoute(path).view, view, path);
   }
   // 1 件の詳細ページ（URL を開き直しても同じ詳細）
-  for (const route of ["[/^\\/knowledge\\/line\\/(?<id>[\\w-]+)$/, lineView", "[/^\\/knowledge\\/plane\\/(?<id>[\\w-]+)$/, planeView", "[/^\\/point\\/(?<id>[\\w-]+)$/, pointView"]) {
-    assert.ok(src.includes(route), route);
+  for (const [path, view] of [['/knowledge/line/l1', lineView], ['/knowledge/plane/p1', planeView], ['/point/h-1', pointView]]) {
+    const m = matchRoute(path);
+    assert.equal(m.view, view, path);
+    assert.equal(m.params.id, path.split('/').pop());
   }
 });
 

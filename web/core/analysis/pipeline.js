@@ -13,6 +13,7 @@
 import { feedbackByStatus } from '../model.js';
 import { analysisPoints, currentPointId, embedText, isThought, legacyEmbedText, pointLabel } from '../points.js';
 import { notesForAnalysis } from '../notes.js';
+import { lineAssignmentOf, lineAssignmentsOf } from '../line-assignments.js';
 import { notesKey } from '../auto-analysis.js';
 import { bookKey, hash, maskSecrets, truncate } from '../text.js';
 import { PROMPT_VERSION, RECOMMEND_KINDS, RELATION_TYPES, farPrompt, humanLine, linePrompt, pickPrompt, planePrompt, recommendPrompt, searchPrompt, solidPrompt } from './prompts.js';
@@ -76,6 +77,24 @@ export function lineSample(ordered, isFavorite, max = LINE_SAMPLE_SIZE) {
   const rest = ordered.filter((i) => !isFavorite(i)).slice(0, max - fav.length);
   const chosen = new Set([...fav, ...rest]);
   return ordered.filter((i) => chosen.has(i));
+}
+
+/**
+ * 自分で入れた思いつきを、入れた線へ移す（ほかの線・つながっていない点からは外す）。
+ * 入れた線が今回の線に無ければ（最初から作り直した・線が消えた）動かさない。点が 1 つになった線はほどく
+ * @param {{ id: string|null, members: number[] }[]} groups  carryLines の線
+ * @param {number[]} isolated                                 carryLines のつながっていない点
+ * @param {Map<number, string>} pinned                        点の番号 → 自分で入れた線の ID
+ */
+export function placeAssigned(groups, isolated, pinned) {
+  const target = new Map(groups.map((g, gi) => [g.id, gi]).filter(([id]) => id));
+  const moves = new Map([...pinned].filter(([, lineId]) => target.has(lineId)).map(([i, lineId]) => [i, target.get(lineId)]));
+  if (!moves.size) return { groups, isolated };
+  const targets = new Set(moves.values());
+  const moved = groups.map((g, gi) => ({ ...g, members: [...g.members.filter((i) => !moves.has(i)), ...[...moves].filter(([, t]) => t === gi).map(([i]) => i)] }));
+  const kept = moved.filter((g, gi) => targets.has(gi) || g.members.length >= 2);
+  const loose = moved.filter((g, gi) => !targets.has(gi) && g.members.length < 2).flatMap((g) => g.members);
+  return { groups: kept, isolated: [...isolated.filter((i) => !moves.has(i)), ...loose].sort((a, b) => a - b) };
 }
 
 /** AI に渡す点の形（prompts.js の pointLine） */
@@ -155,7 +174,11 @@ export async function analyzeLibrary({ library, llm: rawLlm, cache = emptyCache(
   let base = !full && !grew && previous?.version === ANALYSIS_VERSION && previous.model?.embed === embedMethod ? previous : null;
 
   // 2. 点 → 線（前回の線を引き継ぎ、増えた点は近い線に加える）
-  const carry = (from) => carryLines({ ids: points.map((p) => p.id), vectors, previousLines: from?.lines || [], previousIsolated: from?.isolated || [], targetSize: granularity, maxSize: lineMaxSize(granularity), maxGroups: maxLines });
+  // 自分で線から外した思いつきは、前回の線から抜いて増えた点と同じく近い線を選び直す（入れた線に残り続けない。NIH-84）
+  const assignments = lineAssignmentsOf(library);
+  const released = new Set(points.filter((p) => Object.hasOwn(assignments, p.id) && assignments[p.id]?.lineId === '').map((p) => p.id));
+  const keep = (ids = []) => ids.filter((id) => !released.has(id));
+  const carry = (from) => carryLines({ ids: points.map((p) => p.id), vectors, previousLines: (from?.lines || []).map((l) => ({ ...l, highlightIds: keep(l.highlightIds) })), previousIsolated: keep(from?.isolated), targetSize: granularity, maxSize: lineMaxSize(granularity), maxGroups: maxLines });
   let carried = carry(base);
   // 点が減って前回の線がすべてほどけると、引き継ぎでは新しい線を作らない（増えた点が無い）。最初から束ね直す
   const unraveled = Boolean(base) && !carried.lines.length;
@@ -163,7 +186,9 @@ export async function analyzeLibrary({ library, llm: rawLlm, cache = emptyCache(
     base = null;
     carried = carry(null);
   }
-  const { lines: groups, isolated } = carried;
+  // 自分で入れた思いつきは、入れた線の点にする（線を作る AI に見せ、指紋にも入る。NIH-84）
+  const pinned = new Map(points.map((p, i) => [i, lineAssignmentOf(library, p.id)?.lineId]).filter(([, lineId]) => lineId));
+  const { groups, isolated } = placeAssigned(carried.lines, carried.isolated, pinned);
   const prevLines = new Map((base?.lines || []).map((l) => [l.id, l]));
   const prevPlanes = new Map((base?.planes || []).map((p) => [p.id, p]));
   const lines = [];
@@ -172,9 +197,9 @@ export async function analyzeLibrary({ library, llm: rawLlm, cache = emptyCache(
     check();
     const { members } = groups[gi];
     const c = centroid(members.map((i) => vectors[i]));
-    // プロンプトには中心に近い点から最大 12 件（お気に入りの点は優先して入れる）
+    // プロンプトには中心に近い点から最大 12 件（お気に入りの点と、自分でこの線に入れた思いつきは優先して入れる）
     const ordered = [...members].sort((a, b) => dot(vectors[b], c) - dot(vectors[a], c));
-    const chosen = lineSample(ordered, (i) => Boolean(points[i].favorite));
+    const chosen = lineSample(ordered, (i) => Boolean(points[i].favorite) || (Boolean(groups[gi].id) && pinned.get(i) === groups[gi].id));
     const ids = ordered.map((i) => points[i].id);
     // 指紋: 点の顔ぶれと文（自分のメモ・タグを含む）・AI に見せる点（★を付け替えたなど）・モデル・プロンプトの版
     // 見せた点は並べ替えてから入れる（文字 n-gram では点が増えるたびに中心への近さの順が少し入れ替わるため）

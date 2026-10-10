@@ -61,6 +61,6 @@ test('#68: 本に引いた線（ハイライト）の意味の「線」は変え
   assert.match(out, /線を引いた文を足す/);
   assert.doesNotMatch(out, /線\(グループ\)を引/);
   const app = readFileSync(join(WEB, 'js/app.js'), 'utf8');
-  const all = ['js/views/settings.js', 'js/views/wishlist.js', 'js/views/library.js', 'js/app.js'].map((f) => readFileSync(join(WEB, f), 'utf8')).join('\n') + app;
+  const all = ['js/views/settings.js', 'js/views/wishlist.js', 'js/views/library.js', 'js/app.js', 'js/app-actions.js'].map((f) => readFileSync(join(WEB, f), 'utf8')).join('\n') + app;
   assert.doesNotMatch(all, /線\(グループ\)を引|引いた線\(グループ\)|線\(グループ\)を足す|まだ線\(グループ\)/);
 });

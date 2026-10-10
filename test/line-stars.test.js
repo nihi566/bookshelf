@@ -1,14 +1,10 @@
 // #73 線(グループ)にも★をつけ外しでき、★の点と線(グループ)を見返す専用ページがある
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { emptyLibrary, mergeLibraries, mergeParsed, updateHighlight } from '../web/core/model.js';
 import { SAMPLE_BOOKS } from '../web/core/sample.js';
 import { isLineStarred, starredLines, toggleLineStar } from '../web/core/line-stars.js';
 
-const WEB = join(dirname(fileURLToPath(import.meta.url)), '..', 'web');
 const T1 = '2026-10-01T00:00:00.000Z';
 const T2 = '2026-10-02T00:00:00.000Z';
 const T3 = '2026-10-03T00:00:00.000Z';
@@ -138,8 +134,17 @@ test('#73: ★のページへホームから移れる。ルートと操作があ
   const { home } = await import('../web/js/views/library.js');
   const lib = sample();
   assert.match(String(home.render({ state: st(lib, analysisOf(lib)), shuffle: 0 })), /<a href="#\/stars">★ \d+<\/a>/);
-  const app = readFileSync(join(WEB, 'js/app.js'), 'utf8');
-  assert.ok(app.includes("[/^\\/stars$/, starsView, '"));
-  const action = app.match(/async 'line-star'\(el\) \{([\s\S]*?)\n  \},/)[1];
-  assert.match(action, /toggleLineStar\(state\.library,[\s\S]*?await persistLibrary\(\);[\s\S]*?autoSyncAfterChange\(\);/);
+  const { matchRoute } = await import('../web/js/routes.js');
+  const { starsView } = await import('../web/js/views/stars.js');
+  assert.equal(matchRoute('/stars').view, starsView);
+  const { fakeApp, button } = await import('./helpers/app-actions.js');
+  const app = fakeApp({ library: lib, analysis: analysisOf(lib), loaded: true });
+  await app.actions['line-star'](button({ id: 'l1' }));
+  assert.ok(isLineStarred(lib, 'l1'));
+  assert.equal(lib.lineStars.l1.name, '仕組みの線', '分析にある線は、その名前で★をつける');
+  assert.deepEqual(app.log, ['persist', 'toast', 'render', 'sync']);
+  // 分析に無い線(グループ)（★のページの「無くなった線」）も外せる
+  toggleLineStar(lib, { id: 'lgone', name: '消えた線' }, T1);
+  await app.actions['line-star'](button({ id: 'lgone' }));
+  assert.ok(!isLineStarred(lib, 'lgone'));
 });

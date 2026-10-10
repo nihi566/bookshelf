@@ -1,5 +1,5 @@
 // 定期的に Kindle ノートブックを確認し、新しいハイライトを PC の bh serve へ送る
-import { DEFAULTS, chunk, importBody, isReachableCompanionUrl, pickBooksToFetch, statusReport } from './sync-core.js';
+import { DEFAULTS, chunk, importBody, isReachableCompanionUrl, pickBooksToFetch, statusReport, syncOutcome } from './sync-core.js';
 
 const ALARM = 'kindle-sync';
 const BATCH = 20; // この冊数ごとに送る（途中で止まっても、送り終えた分は次回に読み直さない）
@@ -75,6 +75,7 @@ async function runSync() {
   const at = new Date().toISOString();
   let added = 0;
   let fetched = 0;
+  let withHighlights = 0;
   const failed = [];
   try {
     if (!isReachableCompanionUrl(s.companionUrl)) throw new Error('PC の URL は http://localhost:… か https://….ts.net にしてください。');
@@ -96,11 +97,13 @@ async function runSync() {
       }
       if (done.some((b) => b.highlights.length)) added += (await postToCompanion(s, done)).added || 0;
       fetched += done.length;
+      withHighlights += done.filter((b) => b.highlights.length).length;
       await markKnown(done);
     }
-    if (!failed.length) await chrome.storage.local.set({ lastTopDate: books[0]?.lastAnnotated || '' });
-    const error = failed.length ? `${failed.length} 冊を読み取れませんでした（${failed.slice(0, 3).join('、')}${failed.length > 3 ? ' ほか' : ''}）。次回もう一度読みます。` : '';
-    const status = { ok: !failed.length, at, added, fetched, books: books.length, error };
+    const { ok, error } = syncOutcome({ failed, fetched, withHighlights });
+    // 異常のときは前回の日付を進めない（次回もいちばん新しい日の本を読み直し、直るまで異常が続く）
+    if (ok) await chrome.storage.local.set({ lastTopDate: books[0]?.lastAnnotated || '' });
+    const status = { ok, at, added, fetched, books: books.length, error };
     await setStatus(status);
     await reportStatus(s, status);
   } catch (e) {
