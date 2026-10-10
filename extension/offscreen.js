@@ -1,7 +1,7 @@
 // Kindle ノートブック（read.amazon.co.jp/notebook）の HTML を読む係。
 // Service Worker には DOMParser が無いので、画面に出ない offscreen ドキュメントで動かす。
 // ブラウザのログイン状態（Cookie）をそのまま使うので、Amazon のパスワードや Cookie は保存しない。
-// 読み取りのセレクタは web/bookmarklet/kindle-notebook.js と同じ。Amazon の画面が変わったら両方を直す。
+// 読み取りのセレクタは web/bookmarklet/kindle-notebook.js と同じ。Amazon の画面が変わったら両方を直す（ずれると test/kindle-notebook-selectors.test.js が落ちる）。
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const txt = (el) => (el?.textContent || '').replace(/\s+/g, ' ').trim();

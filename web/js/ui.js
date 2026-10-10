@@ -6,6 +6,7 @@ import { kindleSyncState } from '../core/kindle-status.js';
 import { bookCoverUrl } from '../core/covers.js';
 import { analysisPoints, isThought } from '../core/points.js';
 import { pendingPoints } from '../core/auto-analysis.js';
+import { serveVersionCheck } from '../core/serve-version.js';
 import { THOUGHT_LABEL, THOUGHT_STATUS, isThoughtUnsynced } from '../core/thoughts.js';
 
 export const COLOR_VAR = {
@@ -293,6 +294,18 @@ function timeText(iso) {
   return `${d.getMonth() + 1}/${d.getDate()} ${d.toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' })}`;
 }
 
+/**
+ * 設定 → 接続を確認 に出す、PC の bh serve の起動時刻と版（古いコードで動いていれば警告も）
+ * @param {{ startedAt?: string, version?: string, diskVersion?: string } | undefined} server /api/info の server
+ * @param {string} appVersion この画面の sw.js の版（読めなければ空）
+ */
+export function serveVersionBlock(server, appVersion) {
+  const { startedAt, version, warning } = serveVersionCheck({ appVersion, server });
+  const started = startedAt && !Number.isNaN(Date.parse(startedAt)) ? timeText(startedAt) : '不明';
+  return html`<p class="small muted">PC の bh serve: 起動 ${started}・版 ${version || '不明'}${appVersion ? `（この画面の版 ${appVersion}）` : ''}</p>
+    ${warning ? html`<p class="notice err">${warning}</p>` : ''}`;
+}
+
 /** 経過時間を短く（例: 50 分 / 2 時間 30 分 / 3 日） */
 function elapsedText(fromIso, nowIso) {
   const min = Math.max(0, Math.floor((new Date(nowIso) - new Date(fromIso)) / 60000));
@@ -386,8 +399,9 @@ export function pendingNudge(state, { toKnowledge = false } = {}) {
   const a = state.analysis;
   if (!a) return '';
   const n = pendingPoints(analysisPoints(state.library), a);
-  const head = html`前回の分析のあとに増えた点 <b>${n}</b> 件`;
-  if (!n) return toKnowledge ? '' : html`<p class="small">${head}</p>`;
+  if (!n) return toKnowledge ? '' : html`<p class="small">前回の分析のあとに増えた点 <b>0</b> 件</p>`;
+  // 件数を押すと、数えた点そのものの一覧へ（分析し直す前にメモ・タグ・★を付けられるように）
+  const head = html`前回の分析のあとに増えた点 <a href="#/knowledge/pending" title="増えた点を見る"><b>${n}</b> 件</a>`;
   const lead = toKnowledge ? html` — <a href="#/knowledge">分析し直す</a>` : '。「分析し直す」で、変わったところだけ作り直します';
   return html`<p class="small pending-nudge" style="${toKnowledge ? 'margin-top:8px' : ''}">${head}（まだ線につながっていません）${lead}</p>`;
 }

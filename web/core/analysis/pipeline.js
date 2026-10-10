@@ -13,6 +13,7 @@
 import { feedbackByStatus } from '../model.js';
 import { analysisPoints, currentPointId, embedText, isThought, legacyEmbedText, pointLabel } from '../points.js';
 import { notesForAnalysis } from '../notes.js';
+import { notesKey } from '../auto-analysis.js';
 import { bookKey, hash, maskSecrets, truncate } from '../text.js';
 import { PROMPT_VERSION, RECOMMEND_KINDS, RELATION_TYPES, farPrompt, humanLine, linePrompt, pickPrompt, planePrompt, recommendPrompt, searchPrompt, solidPrompt } from './prompts.js';
 import { centroid, dot, l2normalize, tfidfEmbed } from './vectors.js';
@@ -151,12 +152,20 @@ export async function analyzeLibrary({ library, llm: rawLlm, cache = emptyCache(
   // 前回最初から作り直したときから点が 1.5 倍（かつ 40 件以上）に増えていたら作り直す（小さいうちの形に縛られ続けない）
   const pointsAtFull = Number.isFinite(previous?.pointsAtFull) ? previous.pointsAtFull : previous?.stats?.points || 0;
   const grew = points.length >= Math.max(pointsAtFull * REBUILD_GROWTH, pointsAtFull + REBUILD_MIN_ADDED);
-  const base = !full && !grew && previous?.version === ANALYSIS_VERSION && previous.model?.embed === embedMethod ? previous : null;
-  const prevLines = new Map((base?.lines || []).map((l) => [l.id, l]));
-  const prevPlanes = new Map((base?.planes || []).map((p) => [p.id, p]));
+  let base = !full && !grew && previous?.version === ANALYSIS_VERSION && previous.model?.embed === embedMethod ? previous : null;
 
   // 2. 点 → 線（前回の線を引き継ぎ、増えた点は近い線に加える）
-  const { lines: groups, isolated } = carryLines({ ids: points.map((p) => p.id), vectors, previousLines: base?.lines || [], previousIsolated: base?.isolated || [], targetSize: granularity, maxSize: lineMaxSize(granularity), maxGroups: maxLines });
+  const carry = (from) => carryLines({ ids: points.map((p) => p.id), vectors, previousLines: from?.lines || [], previousIsolated: from?.isolated || [], targetSize: granularity, maxSize: lineMaxSize(granularity), maxGroups: maxLines });
+  let carried = carry(base);
+  // 点が減って前回の線がすべてほどけると、引き継ぎでは新しい線を作らない（増えた点が無い）。最初から束ね直す
+  const unraveled = Boolean(base) && !carried.lines.length;
+  if (unraveled) {
+    base = null;
+    carried = carry(null);
+  }
+  const { lines: groups, isolated } = carried;
+  const prevLines = new Map((base?.lines || []).map((l) => [l.id, l]));
+  const prevPlanes = new Map((base?.planes || []).map((p) => [p.id, p]));
   const lines = [];
   const used = new Set();
   for (let gi = 0; gi < groups.length; gi++) {
@@ -286,6 +295,8 @@ export async function analyzeLibrary({ library, llm: rawLlm, cache = emptyCache(
     incremental: Boolean(base),
     // 最後に最初から作り直したときの点の数（ここから 1.5 倍に増えたら作り直す）
     pointsAtFull: base ? pointsAtFull : points.length,
+    // 面・立体に渡した永久ノートの指紋（ノートだけを直したときも、自動の分析が始まるように。NIH-83）
+    notesKey: notesKey(notes),
     stats: { points: points.length, thoughts: points.filter(isThought).length, lines: lines.length, planes: planes.length, isolated: isolated.length, calls },
     lines: lines.map(({ vector, ...l }) => l),
     planes,
@@ -296,8 +307,8 @@ export async function analyzeLibrary({ library, llm: rawLlm, cache = emptyCache(
   // 前回から何が変わったか（最初から作り直したときは、線の ID が変わるので一覧ではなく「作り直した」と出す）
   const formerIdsOf = formerIdsIn(library);
   const changes = diffAnalyses(previous, analysis, formerIdsOf);
-  // rebuilt の理由: full（作り直しを指定）/ grew（点が大きく増えた）/ format（前回と分析の版・埋め込みの方法が違う）
-  if (changes) analysis.changes = base ? changes : { previousAt: changes.previousAt, rebuilt: true, reason: full ? 'full' : grew ? 'grew' : 'format', addedLines: [], grownLines: [], removedLines: [], connectedPoints: [] };
+  // rebuilt の理由: full（作り直しを指定）/ grew（点が大きく増えた）/ unraveled（点が減って前回の線がすべてほどけた）/ format（前回と分析の版・埋め込みの方法が違う）
+  if (changes) analysis.changes = base ? changes : { previousAt: changes.previousAt, rebuilt: true, reason: full ? 'full' : grew ? 'grew' : unraveled ? 'unraveled' : 'format', addedLines: [], grownLines: [], removedLines: [], connectedPoints: [] };
   const indexOf = new Map(points.map((p, i) => [p.id, i]));
   const alive = (id) => indexOf.has(id);
   // 点の出どころ（本の ID。思いつきは 1 つずつ別の出どころ）

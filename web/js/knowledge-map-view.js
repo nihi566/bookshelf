@@ -16,6 +16,13 @@ const ISOLATED_PX = 3;
 // 札を出したノードにつながる辺は、全体を見たときも目で追える太さにする
 const PEEK_EDGE_PX = 2.5;
 const RESIZE_DELAY_MS = 120;
+// 札から相手へ移るときの倍率の下限（点が見える大きさ）と、図を動かす時間
+const PEER_MIN_ZOOM = 1;
+// 札に並べる相手の数の上限（リンクを数百本張った点でも、札が重くならないように）
+const PEEK_PEERS_MAX = 30;
+const PEER_MOVE_MS = 300;
+const PEER_KIND = { far: '遠いつながり', link: 'リンク' };
+const WHY_LABEL = { far: '共通する考え', link: 'リンクの理由' };
 
 let cy = null;
 
@@ -115,6 +122,26 @@ function draw(cytoscape, wrap, analysis, library) {
     // 外した辺のうち橋だったものは、橋の太さに戻す
     resize();
   };
+  // 点につながる橋（遠いつながり・リンク）の辺の中身
+  const bridgesOf = (node) => node.connectedEdges('[kind = "far"], [kind = "link"]').map((e) => e.data());
+  const peekOf = (node, via = null) => mapPeek(node.data(), library, { bridges: bridgesOf(node), via });
+  // 札の下に見えるように、相手の点を札より下の真ん中へ寄せる（小さすぎて見えない倍率なら拡大する）
+  // 札の高さを測るので、showPeek で札を出した後に呼ぶ
+  const moveTo = (node) => {
+    const zoom = Math.max(inst.zoom(), PEER_MIN_ZOOM);
+    const below = peekCard ? peekCard.getBoundingClientRect().bottom - canvas.getBoundingClientRect().top : 0;
+    const y = Math.min(Math.max(inst.height() / 2, (below + inst.height()) / 2), inst.height() - 16);
+    const p = node.position();
+    inst.stop();
+    inst.animate({ zoom, pan: { x: inst.width() / 2 - p.x * zoom, y: y - p.y * zoom } }, { duration: PEER_MOVE_MS });
+  };
+  const peersHtml = (info) => {
+    if (!info.peers?.length) return '';
+    const counts = Object.entries(info.counts).filter(([, n]) => n).map(([k, n]) => `${PEER_KIND[k]} ${n}`).join('・');
+    // 相手が多いときは、札の中だけを縦に動かして見る（札が図を覆いすぎないように、高さは CSS で抑える）。並べるのは PEEK_PEERS_MAX 件まで
+    const rest = info.peers.length - PEEK_PEERS_MAX;
+    return html`<div class="map-peek-peers"><span>${counts}</span><div>${info.peers.slice(0, PEEK_PEERS_MAX).map((p, i) => html`<button type="button" class="map-peek-peer" data-peer="${i}"><i>${PEER_KIND[p.kind]}</i>${p.title}</button>`)}${rest > 0 ? html`<span>ほか ${rest} 件</span>` : ''}</div></div>`;
+  };
   const showPeek = (node, info) => {
     hidePeek();
     peeked = { node, edges: node.connectedEdges() };
@@ -124,8 +151,20 @@ function draw(cytoscape, wrap, analysis, library) {
     if (!peekCard) return;
     const href = ROUTE[node.data('kind')](node.data('ref'));
     const open = info.kind === 'line' ? '線(グループ)を開く' : '点を開く';
-    peekCard.innerHTML = String(html`<a class="map-peek-go" href="${href}">${info.title ? html`<b>${info.title}</b>` : ''}<span>${info.sub}</span><em>${open} ›</em></a><button type="button" class="map-peek-close" aria-label="閉じる">×</button>`);
+    const why = info.why ? html`<p class="map-peek-why"><i>${WHY_LABEL[info.why.kind]}</i>${info.why.text}</p>` : '';
+    peekCard.innerHTML = String(html`<a class="map-peek-go" href="${href}">${info.title ? html`<b>${info.title}</b>` : ''}<span>${info.sub}</span><em>${open} ›</em></a><button type="button" class="map-peek-close" aria-label="閉じる">×</button>${why}${peersHtml(info)}`);
     peekCard.querySelector('.map-peek-close').onclick = hidePeek;
+    // 相手を押すと、その点に札を移し、たどった辺の言葉を添える（NIH-88）
+    for (const b of peekCard.querySelectorAll('.map-peek-peer')) {
+      b.onclick = () => {
+        const peer = info.peers[Number(b.dataset.peer)];
+        const target = inst.$id(peer.id);
+        if (!target.nonempty()) return;
+        showPeek(target, peekOf(target, inst.$id(peer.edge).data()));
+        moveTo(target);
+        peekCard.querySelector('.map-peek-go')?.focus({ preventScroll: true });
+      };
+    }
     peekCard.hidden = false;
   };
   // 面は 1 回でその画面へ。点・線は 1 回目で札を出し、同じものをもう 1 回押すか札を押すとその画面へ
@@ -133,7 +172,7 @@ function draw(cytoscape, wrap, analysis, library) {
     const node = e.target;
     const go = ROUTE[node.data('kind')];
     if (!go) return;
-    const info = mapPeek(node.data(), library);
+    const info = peekOf(node);
     if (!info || peeked?.node.same(node)) location.hash = go(node.data('ref'));
     else showPeek(node, info);
   });
@@ -143,9 +182,15 @@ function draw(cytoscape, wrap, analysis, library) {
   for (const b of wrap.querySelectorAll('[data-map="zoom"]')) {
     b.onclick = () => {
       const level = cy.zoom() * (b.dataset.dir === '1' ? 1.4 : 1 / 1.4);
+      // 札から相手へ寄せている途中なら止める（押した拡大・縮小を上書きしないように）
+      cy.stop();
       cy.zoom({ level, renderedPosition: { x: cy.width() / 2, y: cy.height() / 2 } });
     };
   }
   const fit = wrap.querySelector('[data-map="fit"]');
-  if (fit) fit.onclick = () => cy.fit(undefined, 16);
+  if (fit)
+    fit.onclick = () => {
+      cy.stop();
+      cy.fit(undefined, 16);
+    };
 }

@@ -45,8 +45,12 @@ test('G5-3: 知識の画面に、自動の分析の失敗の理由と最後に�
   const lib = sample();
   const pcInfo = { autoAnalysis: { enabled: true, minPoints: 10, maxHours: 24, pending: 12, lastSuccessAt: '2026-10-04T01:02:00.000Z', lastError: 'LLM サーバに接続できません <script>', lastErrorAt: '2026-10-04T03:04:00.000Z', lastTrigger: 'auto' } };
   const out = String(autoStatusBlock(st(lib, null, { pcInfo })));
-  assert.match(out, /自動の分析: <b>オン<\/b> — 前回の分析のあとに点が 10 件増えるか、24 時間たって 1 件以上増えると、PC が分析し直します/);
+  assert.match(out, /自動の分析: <b>オン<\/b> — 前回の分析のあとに点が 10 件増えるか、24 時間たって点が 1 件以上増えるか永久ノートを書いた・直したとき、PC が分析し直します/);
   assert.match(out, /最後に成功: 10\/4 /);
+  // 永久ノートだけを直したときは、次の分析で面・立体に入ると伝える（NIH-83）
+  assert.doesNotMatch(out, /書いた・直した永久ノートがあります/);
+  const noted = String(autoStatusBlock(st(lib, null, { pcInfo: { autoAnalysis: { ...pcInfo.autoAnalysis, notesChanged: true } } })));
+  assert.match(noted, /前回の分析のあとに書いた・直した永久ノートがあります。次の分析で面・立体に入ります。/);
   assert.match(out, /の分析に失敗しました: LLM サーバに接続できません &lt;script&gt;。前回の結果はそのまま残っています。次の機会に PC がもう一度試します。/);
   const off = String(autoStatusBlock(st(lib, null, { pcInfo: { autoAnalysis: { ...pcInfo.autoAnalysis, enabled: false, lastError: '' } } })));
   assert.match(off, /<b>オフ<\/b>/);
@@ -67,7 +71,7 @@ test('G5-4: 知識の画面で「前回から増えた線・大きくなった�
   assert.match(out, /消えた線\(グループ\) 1<\/h3><p class="small muted">消えた&lt;線&gt;<\/p>/);
   assert.match(out, /新しくつながった点 1[\s\S]*?href="#\/knowledge\/line\/l1">仕組みの線に (<span class="nowrap">)?1 点/);
   assert.match(out, /<h2>分析の履歴<\/h2>[\s\S]*?id="analysis-history"/);
-  assert.match(out, /前回の分析のあとに増えた点 <b>44<\/b> 件（まだ線につながっていません）/);
+  assert.match(out, /前回の分析のあとに増えた点 <a [^>]*><b>44<\/b> 件<\/a>（まだ線につながっていません）/);
   const rebuilt = String(knowledge.render({ state: st(lib, analysisOf(lib, { changes: { previousAt: 'x', rebuilt: true, addedLines: [], grownLines: [], removedLines: [], connectedPoints: [] } })) }));
   assert.match(rebuilt, /今回は最初から作り直しました/);
   // 過去の分析を開く画面（PC から 1 回分を取りに行く）

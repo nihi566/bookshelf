@@ -74,8 +74,10 @@ export function parseWishlist(data) {
       priceReason: price === null && b?.ku !== true && Object.hasOwn(PRICE_REASON_LABELS, b?.price_reason) ? b.price_reason : '',
       // 読書メーターの本 ID（kindle_system が一覧から取る。数字だけ）
       bookmeterId: isBookmeterId(b?.bookmeter_id) ? b.bookmeter_id : '',
-      // 書名の末尾の括弧にあるレーベル（光文社新書・岩波ジュニア新書など）。出版社で絞り込むのに使う
-      label: wishlistLabel(b?.title),
+      // 出版社（kindle_system が商品ページの登録情報から読む。まだ読めていない本は空）
+      publisher: parsePublisher(b?.publisher),
+      // 出版社の絞り込みに使う名前。出版社があればそれ、無ければ書名の末尾の括弧にあるレーベル（光文社新書など）
+      label: parsePublisher(b?.publisher) || wishlistLabel(b?.title),
       index,
     };
   });
@@ -105,6 +107,10 @@ export function wishlistLabel(title) {
   }
   return '';
 }
+
+// 出版社の名前の上限（kindle_system の crawler.MAX_PUBLISHER_LENGTH と同じ）
+const MAX_PUBLISHER_LENGTH = 100;
+const parsePublisher = (v) => (typeof v === 'string' ? v.trim().slice(0, MAX_PUBLISHER_LENGTH) : '');
 
 /** レーベルごとの冊数 [[レーベル, 冊数]]。多い順、同数は名前順。レーベルの無い本は数えない。items: [{ book }] */
 export function labelCounts(items) {
@@ -354,7 +360,7 @@ export function filterWishlist(items, f = {}) {
     const { book, marks } = item;
     if (!inShelf(item, f.shelf)) return false;
     if (f.shelf === 'purchased' && !matchesReading(item, f.reading)) return false;
-    const hay = normalizeText(`${book.title} ${book.asin}`);
+    const hay = normalizeText(`${book.title} ${book.asin} ${book.publisher ?? ''}`);
     if (!words.every((w) => hay.includes(w))) return false;
     if (f.ku && !book.ku) return false;
     if (f.label && book.label !== f.label) return false;
