@@ -706,6 +706,16 @@ const actions = {
     field.value = original;
     field.focus();
   },
+  // 編集を開かずに 1 回で消す（編集シートの「この点を削除」と同じ処理。押し間違えてもトーストから戻せる）
+  async delete(el) {
+    const id = el.dataset.id;
+    if (!state.library.highlights[id]) return;
+    updateHighlight(state.library, id, { deleted: true });
+    await persistLibrary();
+    toast('削除しました', 6000, { label: '元に戻す', run: () => undoDeleteHighlight(id) });
+    render({ keepScroll: true });
+    autoSyncAfterChange();
+  },
   async copy(el) {
     const h = pointById(state.library, el.dataset.id);
     if (!h) return;
