@@ -12,7 +12,6 @@ import { lineIndex, pointCard } from '../ui.js';
 import { amazonKindleUrl, findWishlistBook, formatPrice } from '../../core/wishlist.js';
 import { loadWishlist } from '../wishlist-data.js';
 import { companion } from '../services.js';
-import { answerBlock } from './thoughts.js';
 import { farBlock } from './far.js';
 import { citingNotesBlock, notesSummaryBlock } from './notes.js';
 import { outlinesSummaryBlock } from './outlines.js';
@@ -131,7 +130,7 @@ export const knowledge = {
           <li><b style="color:var(--layer-point)">点</b> — ハイライトを埋め込みベクトルにします（埋め込みモデルが無ければ文字の特徴で代用）。</li>
           <li><b style="color:var(--layer-line)">線</b> — 意味の近い点を束ね、LLM が共通する考えを一段抽象化した「概念」にします。本をまたいだつながりが見つかります。</li>
           <li><b style="color:var(--layer-plane)">面</b> — 近い線を束ね、LLM がテーマとしてまとめます。</li>
-          <li><b style="color:var(--layer-solid)">立体</b> — 面どうしの関係から、知識の核・行動の原則・まだ答えの無い問いを組み立てます。</li>
+          <li><b style="color:var(--layer-solid)">立体</b> — 面どうしの関係から、知識の核・行動の原則を組み立てます。</li>
           <li><b>本</b> — 立体と「問い」から次に読む本を選び、書誌データベースで実在を確認します。</li>
         </ol>
         ${notesSummaryBlock(state)}
@@ -146,7 +145,6 @@ export const knowledge = {
         <h2>${a.solid.title}</h2>
         <p class="core">${a.solid.core}</p>
         ${a.solid.principles?.length ? html`<div><h3 class="small">行動の原則</h3><ul class="plain">${a.solid.principles.map((p) => html`<li>${p}</li>`)}</ul></div>` : ''}
-        ${a.solid.questions?.length ? html`<div><h3 class="small">これからの問い（知識の空白）</h3><p class="small muted">答え（考えたこと・やってみたこと）は思いつきとして、次の分析から点になります。</p><ul class="plain questions">${a.solid.questions.map((q) => html`<li>${q}${answerBlock(state.library, { question: q, kind: 'solid' })}</li>`)}</ul></div>` : ''}
       </section>
 
       ${notesSummaryBlock(state)}
@@ -262,7 +260,6 @@ export const historyView = {
             <h2>${a.solid?.title || ''}</h2>
             <p class="core">${a.solid?.core || ''}</p>
             ${a.solid?.principles?.length ? html`<div><h3 class="small">行動の原則</h3><ul class="plain">${a.solid.principles.map((p) => html`<li>${p}</li>`)}</ul></div>` : ''}
-            ${a.solid?.questions?.length ? html`<div><h3 class="small">問い</h3><ul class="plain">${a.solid.questions.map((q) => html`<li>${q}</li>`)}</ul></div>` : ''}
           </section>
           <div class="section"><h2>面と線</h2></div>
           ${a.planes.map((p) => html`<section class="card plane-card"><div class="layer-label plane">面</div><h3>${p.name}</h3><p class="small">${p.summary}</p>
@@ -390,7 +387,6 @@ export const lineView = {
       <h1 style="margin:4px 0 12px">${l.name}</h1>
       <section class="card stack">
         <p style="font-family:var(--serif);line-height:1.9">${l.summary}</p>
-        ${l.insight ? html`<p class="notice ok">問い: ${l.insight}</p>${answerBlock(state.library, { question: l.insight, kind: 'line', ref: l.id })}` : ''}
         ${l.keywords?.length ? html`<div class="chips">${l.keywords.map((k) => html`<a class="chip" href="#/search?q=${encodeURIComponent(k)}">${k}</a>`)}</div>` : ''}
         <div class="row"><button type="button" class="btn small primary" data-action="line-to-note" data-id="${l.id}">この線を永久ノートにする</button><span class="small muted">AI の線を下書きにして、自分の言葉に直せます</span></div>
         <div class="row"><a class="btn small" href="#/outline/new?line=${l.id}">文章の骨組みを作る</a></div>

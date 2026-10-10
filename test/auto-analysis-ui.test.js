@@ -1,4 +1,4 @@
-// G5 の画面: 自動の分析の状態（失敗の理由・最後に成功した時刻）・前回からの変化・履歴・問いに答える
+// G5 の画面: 自動の分析の状態（失敗の理由・最後に成功した時刻）・前回からの変化・履歴（問いに答える欄は #67 で外した）
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -75,25 +75,28 @@ test('G5-4: 知識の画面で「前回から増えた線・大きくなった�
   assert.match(readFileSync(join(WEB, 'js/app.js'), 'utf8'), /\[\/\^\\\/knowledge\\\/history\\\/\(\?<id>\[0-9TZ\]\+\)\$\/, historyView, 'knowledge'\]/);
 });
 
-test('G5-5: 立体の問いと線の問いから、その場で答えを書ける。答えはどの問いへの答えかを持ち、次の分析で点になる', async () => {
-  const { knowledge, lineView } = await import('../web/js/views/knowledge.js');
+test('#67: 立体の「これからの問い」・線の問い・「答えを書く」は出さない。これまでに書いた答えは消えず、点のまま残る', async () => {
+  const { knowledge, lineView, historyView } = await import('../web/js/views/knowledge.js');
   const lib = sample();
   const a = analysisOf(lib);
-  const out = String(knowledge.render({ state: st(lib, a) }));
-  assert.match(out, /<li>どうすれば続くのか？<div class="answers">\s*<button type="button" class="btn small" data-action="answer" data-kind="solid" data-ref="" data-question="どうすれば続くのか？">答えを書く<\/button>/);
-  const line = String(lineView.render({ state: st(lib, a), params: { id: 'l1' } }));
-  assert.match(line, /data-action="answer" data-kind="line" data-ref="l1" data-question="&lt;b&gt;どう続けるか&lt;\/b&gt;？">答えを書く/);
-  // 書いた答えは問いの下に出る
   const t = addThought(lib, { text: '毎朝 5 分だけやると決めた', answerTo: { kind: 'solid', question: 'どうすれば続くのか？' } });
-  assert.match(String(knowledge.render({ state: st(lib, a) })), /<ul class="plain answer-list"><li>毎朝 5 分だけやると決めた<\/li><\/ul>/);
-  // 答えも思いつきとして点になる（次の分析の材料）
+  const out = String(knowledge.render({ state: st(lib, a) }));
+  assert.doesNotMatch(out, /これからの問い|知識の空白|どうすれば続くのか|答えを書く|data-action="answer"|class="answers"|answer-list/);
+  const line = String(lineView.render({ state: st(lib, a), params: { id: 'l1' } }));
+  assert.doesNotMatch(line, /問い: |どう続けるか|答えを書く|data-action="answer"/);
+  assert.ok(historyView, '過去の分析の画面は残る');
+  // 答えを書く処理と、それ専用の部品・文言・CSS は残さない
+  const app = readFileSync(join(WEB, 'js/app.js'), 'utf8');
+  assert.doesNotMatch(app, /\n  answer\(el\)|newThoughtSheet\(\{ question/);
+  const thoughtsJs = readFileSync(join(WEB, 'js/views/thoughts.js'), 'utf8');
+  assert.doesNotMatch(thoughtsJs, /answerBlock|answersTo|問いに答える/);
+  assert.doesNotMatch(readFileSync(join(WEB, 'css/app.css'), 'utf8'), /\.answers|\.answer-list|ul\.questions/);
+  // これまでに書いた答えは消えない（メモとして残り、分析の点にもなる）
+  assert.ok(lib.thoughts[t.id] && !lib.thoughts[t.id].deleted);
   assert.ok(analysisPoints(lib).some((p) => p.id === t.id));
+  const { thoughtsView } = await import('../web/js/views/thoughts.js');
+  assert.match(String(thoughtsView.render({ state: st(lib, a), query: new URLSearchParams() })), /毎朝 5 分だけやると決めた/);
   const llm = { chatModel: 'stub', embed: null, chatJson: async (p) => (p.name === 'line' ? { name: '線', summary: '', insight: '', keywords: [] } : p.name === 'plane' ? { name: '面', summary: '' } : { title: '核', core: '', relations: [], principles: [], questions: [] }) };
   const { analysis } = await analyzeLibrary({ library: lib, llm, options: { recommend: false } });
   assert.ok([...analysis.lines.flatMap((l) => l.highlightIds), ...analysis.isolated].includes(t.id), '分析の点に入った');
-  // 「答えを書く」は思いつきのシートを開き、answerTo 付きで書く
-  const app = readFileSync(join(WEB, 'js/app.js'), 'utf8');
-  const action = app.match(/\n  answer\(el\) \{([\s\S]*?)\n  \},/)[1];
-  assert.match(action, /openSheet\(newThoughtSheet\(\{ question \}\)/);
-  assert.match(action, /addThought\(state\.library, \{ text: data\.get\('text'\), answerTo \}/);
 });
