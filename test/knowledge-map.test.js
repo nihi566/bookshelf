@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mapElements, mapPositions, mapStyle } from '../web/core/knowledge-map.js';
+import { mapElements, mapPeek, mapPositions, mapStyle } from '../web/core/knowledge-map.js';
 import { farId } from '../web/core/analysis/far.js';
 import { addLink, removeLink, linkId } from '../web/core/links.js';
 import cytoscape from '../web/vendor/cytoscape.esm.min.js';
@@ -170,4 +170,49 @@ test('知識マップ: 同梱した Cytoscape.js に座標ごと渡すと、そ�
   const n = cy.$id('pt:h0');
   assert.deepEqual(n.position(), pos['pt:h0']);
   cy.destroy();
+});
+
+test('mapPeek: 点は文の冒頭と書名、線は名前と点の数を返す。面は札を出さない（NIH-68）', () => {
+  const library = {
+    books: { b1: { id: 'b1', title: '本の名前' } },
+    highlights: {
+      ha: { id: 'ha', bookId: 'b1', text: '  一行目\n\n二行目  ' },
+      hb: { id: 'hb', bookId: 'b1', text: 'あ'.repeat(200) },
+      hc: { id: 'hc', deleted: true, supersededBy: 'hc2' },
+      hc2: { id: 'hc2', bookId: 'b1', text: '伸ばした線' },
+      hd: { id: 'hd', deleted: true },
+    },
+    thoughts: { t1: { id: 't1', text: '思いついたこと' } },
+  };
+  const { nodes } = mapElements(analysis());
+  const node = (id) => nodes.find((n) => n.id === id);
+  assert.deepEqual(mapPeek({ kind: 'point', ref: 'ha' }, library), { kind: 'point', title: '一行目 二行目', sub: '本の名前' }, '空白・改行は 1 つの空白にまとめる');
+  const cut = mapPeek({ kind: 'point', ref: 'hb' }, library);
+  assert.ok(cut.title.endsWith('…') && [...cut.title].length <= 81, '長い文は冒頭だけ');
+  assert.deepEqual(mapPeek({ kind: 'point', ref: 'hc' }, library), { kind: 'point', title: '伸ばした線', sub: '本の名前' }, '置き換わった点は今の点を見せる');
+  assert.deepEqual(mapPeek({ kind: 'point', ref: 't1' }, library), { kind: 'point', title: '思いついたこと', sub: '思いつき' });
+  assert.equal(mapPeek({ kind: 'point', ref: 'hd' }, library).sub, '消えた点');
+  assert.equal(mapPeek({ kind: 'point', ref: 'hzz' }, library).sub, 'この端末にまだ届いていない点');
+  assert.deepEqual(mapPeek(node('l:l1'), library), { kind: 'line', title: '線1', sub: '点 2 件' });
+  assert.equal(mapPeek(mapElements(analysis(), { isStarred: () => true }).nodes.find((n) => n.id === 'l:l1'), library).title, '★ 線1');
+  assert.equal(mapPeek(node('p:p1'), library), null);
+  assert.equal(mapPeek(null, library), null);
+});
+
+test('mapStyle: 札を出したノードとつながる辺に印（peek）を付けると強まる（NIH-68）', () => {
+  const colors = { solid: '#7a4bb0', plane: '#b0781a', line: '#1f6f5c', ink: '#23211d', point: '#8b877d', surface: '#fffdf8', font: 'sans-serif' };
+  const els = mapElements(analysis());
+  const cy = cytoscape({ headless: true, styleEnabled: true, elements: [...els.nodes.map((data) => ({ group: 'nodes', data })), ...els.edges.map((data) => ({ group: 'edges', data }))], style: mapStyle(colors) });
+  try {
+    const e = cy.$id('member:l:l1|pt:ha');
+    const before = e.numericStyle('opacity');
+    e.addClass('peek');
+    assert.ok(e.numericStyle('opacity') > before);
+    const n = cy.$id('pt:ha');
+    assert.equal(n.numericStyle('border-width'), 0);
+    n.addClass('peek');
+    assert.ok(n.numericStyle('border-width') > 0);
+  } finally {
+    cy.destroy();
+  }
 });

@@ -67,7 +67,7 @@ export const solidView = {
         <p class="core">${a.solid.core}</p>
         ${a.solid.principles?.length ? html`<div><h3 class="small">行動の原則</h3><ul class="plain">${a.solid.principles.map((p) => html`<li>${p}</li>`)}</ul></div>` : ''}
       </section>
-      <div class="section"><h2>知識マップ</h2><span class="small muted">面・線・点を押すと、その画面へ</span></div>
+      <div class="section"><h2>知識マップ</h2><span class="small muted">面を押すとその画面へ。点・線は押すと中身が出て、もう 1 回（または出た札）でその画面へ</span></div>
       ${mapFrame()}`;
   },
   mount(root, { state }) {
@@ -91,7 +91,8 @@ function mapFrame() {
       <button type="button" data-map="zoom" data-dir="1" aria-label="拡大">＋</button><button type="button" data-map="zoom" data-dir="-1" aria-label="縮小">－</button>
       <button type="button" class="map-fit" data-map="fit">全体</button>
     </div>
-    <div id="knowledge-map" class="map-canvas" role="img" aria-label="知識マップ。面を中心に、線(グループ)と点が塊になって並びます。面・線・点を押すと、その画面へ移ります。キーボードでは上の「面」「線(グループ)」「全ての点」から一覧を開けます"></div>
+    <div id="knowledge-map" class="map-canvas" role="img" aria-label="知識マップ。面を中心に、線(グループ)と点が塊になって並びます。面を押すとその画面へ移ります。点・線を押すと中身が札で出て、もう 1 回押すかその札を押すとその画面へ移ります。キーボードでは上の「面」「線(グループ)」「全ての点」から一覧を開けます"></div>
+    <div class="map-peek" aria-live="polite" hidden></div>
   </div>
   <p class="small muted map-legend">塊の中心が面、中くらいの点が線(グループ)、小さな点が点です。<span style="color:var(--layer-solid)">紫の線</span>は遠いつながり、濃い線は自分のリンク、点線は関わる点。周りに散らばる灰色の点は、まだつながらない点です。</p>`;
 }

@@ -6,6 +6,7 @@
 import { currentPointId } from './point-ids.js';
 import { liveLinks } from './links.js';
 import { visibleFarConnections } from './far-reactions.js';
+import { pointArrived, pointById, pointLabel } from './points.js';
 
 const pointNode = (id) => `pt:${id}`;
 
@@ -73,6 +74,30 @@ export function mapElements(analysis, { library = null, isStarred = () => false 
   const planeIds = new Set(planes.map((p) => p.id));
   for (const r of analysis?.solid?.relations || []) if (planeIds.has(r.from) && planeIds.has(r.to)) edge('relation', `p:${r.from}`, `p:${r.to}`, r.type || '');
   return { nodes, edges };
+}
+
+// ---- 押したときの札 ----
+
+// 札に出す点の文の長さ（冒頭だけ）
+const PEEK_TEXT_CHARS = 80;
+
+const headOf = (text) => {
+  const chars = [...String(text ?? '').replace(/\s+/g, ' ').trim()];
+  return chars.length > PEEK_TEXT_CHARS ? chars.slice(0, PEEK_TEXT_CHARS).join('') + '…' : chars.join('');
+};
+
+/**
+ * 点・線を押したときに、移る前に図の上に出す札の中身。面（とそれ以外）は札を出さずにすぐ移るので null
+ * 点: 文の冒頭と書名（思いつきは「思いつき」）。線: 名前と点の数。点は分析したときの ID なので、今の ID で引く
+ * @returns {{ kind: 'point'|'line', title: string, sub: string } | null}
+ */
+export function mapPeek(node, library) {
+  if (node?.kind === 'line') return { kind: 'line', title: node.label || '', sub: `点 ${node.weight || 0} 件` };
+  if (node?.kind !== 'point') return null;
+  const id = currentPointId(library, node.ref);
+  const p = pointById(library, id);
+  if (!p) return { kind: 'point', title: '', sub: pointArrived(library, id) ? '消えた点' : 'この端末にまだ届いていない点' };
+  return { kind: 'point', title: headOf(p.text), sub: pointLabel(library, p) };
 }
 
 // ---- 座標 ----
@@ -229,5 +254,8 @@ export function mapStyle(colors) {
         'min-zoomed-font-size': 8,
       },
     },
+    // 札を出したノードと、それにつながる辺（太さは拡大率に合わせて画面側で決める）
+    { selector: 'node.peek', style: { 'border-width': 2, 'border-color': colors.ink, 'z-index': 9 } },
+    { selector: 'edge.peek', style: { opacity: 1, 'z-index': 9 } },
   ];
 }
