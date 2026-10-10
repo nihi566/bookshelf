@@ -168,15 +168,15 @@ export function mergeParsed(library, parsedBooks, { now = new Date().toISOString
       // 読書メモは Kindle・Play ブックスの線を写したものが多い。既にある線に含まれる文は増やさない
       // 短い文（「習慣」など）はどの線にも含まれがちなので、含む判定はある程度の長さの文だけにする
       const c = compact(ph.text);
-      if (pb.source === 'memo' && existing.some((h) => (c.length >= MEMO_CONTAINED_MIN ? compact(h.text).includes(c) : compact(h.text) === c))) {
+      if (pb.source === 'memo' && existing.some((h) => (c.length >= MEMO_CONTAINED_MIN ? compact(importedText(h)).includes(c) : compact(importedText(h)) === c))) {
         stats.unchanged++;
         continue;
       }
       // Kindle はハイライトを伸ばすと古い短い版も残るので、包含関係で置き換える
       const norm = normalizeText(ph.text);
       const sameSpot = (h) => extendable && h.source === pb.source && locationsOverlap(h, ph);
-      const shorter = existing.find((h) => sameSpot(h) && !h.deleted && h.text.length < ph.text.length && norm.includes(normalizeText(h.text)));
-      if (existing.some((h) => sameSpot(h) && h.text.length > ph.text.length && normalizeText(h.text).includes(norm))) {
+      const shorter = existing.find((h) => sameSpot(h) && !h.deleted && importedText(h).length < ph.text.length && norm.includes(normalizeText(importedText(h))));
+      if (existing.some((h) => sameSpot(h) && importedText(h).length > ph.text.length && normalizeText(importedText(h)).includes(norm))) {
         stats.unchanged++;
         continue;
       }
@@ -207,6 +207,8 @@ export function mergeParsed(library, parsedBooks, { now = new Date().toISOString
         hl.importedAt = shorter.importedAt;
         keepUserStamp(shorter);
         if (shorter.userUpdatedAt) hl.userUpdatedAt = shorter.userUpdatedAt;
+        // 直した文も引き継ぐ（取り込みは利用者の編集を変えない）。伸ばした文は取り込んだときの文として残す
+        if (shorter.textEditedAt) Object.assign(hl, { text: shorter.text, originalText: ph.text, textEditedAt: shorter.textEditedAt });
         shorter.deleted = true;
         shorter.supersededBy = id;
         shorter.updatedAt = now;
@@ -222,6 +224,11 @@ export function mergeParsed(library, parsedBooks, { now = new Date().toISOString
 }
 
 const MEMO_CONTAINED_MIN = 12;
+
+/** 取り込んだときの文（利用者が直した点は直す前の文）。再取り込みの重複・伸ばしたハイライトの判定に使う */
+function importedText(h) {
+  return h.originalText ?? h.text;
+}
 
 /** 空白・改行の違いを無視して比べるための形 */
 function compact(text) {
@@ -339,8 +346,23 @@ function mergeItem(a, b, userFields) {
   return out;
 }
 
+const editedText = (h) => (h.textEditedAt && typeof h.text === 'string' && cleanText(h.text) ? h.textEditedAt : '');
+
 function mergeHighlight(a, b) {
   const out = mergeItem(a, b, USER_FIELDS);
+  // 直した文は、★・タグとは別に直した時刻が新しい方を採る（別の端末でタグを直しても、文の編集が負けないように）
+  // 外から来た直した文が空・文字列でなければ採らない
+  const ta = editedText(a);
+  const tb = editedText(b);
+  if (ta || tb) {
+    const [, winner] = order(a, b, ta, tb);
+    out.text = winner.text;
+    out.textEditedAt = winner.textEditedAt;
+    out.originalText = a.originalText ?? b.originalText ?? (ta ? b.text : a.text);
+  } else {
+    for (const k of ['textEditedAt', 'originalText']) delete out[k];
+    if (typeof out.text !== 'string' || !cleanText(out.text)) out.text = [a.text, b.text].find((t) => typeof t === 'string' && cleanText(t)) ?? out.text;
+  }
   // 伸ばしたハイライトに置き換わった古い点は、どちらの端末から来ても消えたまま
   const supersededBy = [a.supersededBy, b.supersededBy].filter(Boolean).sort()[0];
   if (supersededBy) Object.assign(out, { deleted: true, supersededBy });
@@ -484,6 +506,16 @@ export function updateHighlight(library, id, patch, now = new Date().toISOString
   const h = library.highlights[id];
   if (!h) return null;
   const allowed = ['favorite', 'tags', 'userNote', 'deleted'];
+  if ('text' in patch) {
+    const text = cleanText(patch.text);
+    if (!text) throw new Error('点の文を入力してください');
+    if (text !== h.text) {
+      // ID は取り込んだ文から決まるが、変えない（リンク・永久ノートの根拠・分析の結果が切れないように）
+      if (!('originalText' in h)) h.originalText = h.text;
+      h.text = text;
+      h.textEditedAt = now;
+    }
+  }
   for (const k of allowed) if (k in patch) h[k] = patch[k];
   if (Array.isArray(h.tags)) h.tags = [...new Set(h.tags.map((t) => String(t).replace(/^#/, '').trim()).filter(Boolean))];
   if (patch.deleted === false) delete h.deletedWithBook;
