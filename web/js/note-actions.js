@@ -90,7 +90,7 @@ export function noteActions({ state, openSheet, toast, persist, sync, render, go
       // 古い分析に残る、消えた点は根拠に写さない
       const n = addNote(state.library, noteDraftFromLine(line, (id) => Boolean(pointById(state.library, id))));
       await persist();
-      toast('線を下書きにした永久ノートを作りました。自分の言葉に直しましょう', 4000);
+      toast('線(グループ)を下書きにした永久ノートを作りました。自分の言葉に直しましょう', 4000);
       go(`#/note/${n.id}`);
       sync();
     }),

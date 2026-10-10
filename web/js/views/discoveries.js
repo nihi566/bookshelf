@@ -10,7 +10,7 @@ import { farCard } from './far.js';
 // ホームに並べる未読の発見の数（残りは「すべての発見」で見る）
 const ON_HOME = 3;
 
-const KIND_LABEL = { cross: '本をまたいだつながり', line: '新しい線', isolated: 'つながった点', far: '遠いつながり' };
+const KIND_LABEL = { cross: '本をまたいだつながり', line: '新しい線(グループ)', isolated: 'つながった点', far: '遠いつながり' };
 
 /** 「ちがう」とした遠いつながりの発見は出さない */
 const shown = (state) => {
@@ -28,7 +28,7 @@ function discoveryRow(state, d) {
   return html`<li><a class="disc-item ${d.kind === 'far' ? 'far' : ''}" href="#/discovery/${d.id}">
     <span class="disc-kind">${KIND_LABEL[d.kind] || '発見'}${isRead(state.library, d.id) ? '' : html` <span class="badge new">未読</span>`}</span>
     <span class="disc-pair">${quote(a)} ⇄ ${quote(b)}</span>
-    <span class="disc-why">${d.kind === 'far' ? '共通する考え' : '線'}「${d.lineName || ''}」</span>
+    <span class="disc-why">${d.kind === 'far' ? '共通する考え' : '線(グループ)'}「${d.lineName || ''}」</span>
   </a></li>`;
 }
 
@@ -69,7 +69,7 @@ export function partnerBlock(state, p, idx) {
   const m = partnerOf(state, p, idx);
   if (!m) return '';
   return html`<div class="partner">
-    <span class="partner-label">つながる別の本の点 ・ <a href="#/knowledge/line/${m.line.id}">線「${m.line.name}」</a></span>
+    <span class="partner-label">つながる別の本の点 ・ <a href="#/knowledge/line/${m.line.id}">線(グループ)「${m.line.name}」</a></span>
     <p class="partner-text">${truncate(m.point.text.replace(/\s+/g, ' '), 140)}</p>
     <span class="small muted">${pointLabel(state.library, m.point)}</span>
   </div>`;
@@ -96,7 +96,7 @@ export const discoveryView = {
       <div class="page-head"><div><h1>${KIND_LABEL[d.kind] || '発見'}</h1><div class="sub">${isoDate(d.foundAt)} の分析で見つかりました</div></div></div>
       <section class="card stack">
         <h2 class="small">なぜつながったか</h2>
-        <p>同じ線${line ? html`「<a href="#/knowledge/line/${line.id}">${line.name}</a>」` : `「${d.lineName || ''}」`}に入りました。${line?.summary || d.reason || ''}</p>
+        <p>同じ線(グループ)${line ? html`「<a href="#/knowledge/line/${line.id}">${line.name}</a>」` : `「${d.lineName || ''}」`}に入りました。${line?.summary || d.reason || ''}</p>
       </section>
       <div class="section"><h2>つながった点</h2></div>
       ${points.map((p) => (p ? pointCard(p, { library: state.library, lines: idx.get(p.id) }) : html`<p class="card small muted">この点は消えました。</p>`))}`;
@@ -113,7 +113,7 @@ export const discoveriesView = {
     const unread = unreadDiscoveries(state.analysis, state.library).filter(shown(state)).length;
     return html`<a class="back" href="#/">‹ ホーム</a>
       <div class="page-head"><div><h1>すべての発見</h1><div class="sub">${all.length} 件（未読 ${unread} 件）</div></div></div>
-      <p class="help">分析のたびに、前回からの差で見つかったつながり（本をまたいだつながり・新しい線・つながった点・遠いつながり）です。</p>
+      <p class="help">分析のたびに、前回からの差で見つかったつながり（本をまたいだつながり・新しい線(グループ)・つながった点・遠いつながり）です。</p>
       ${all.length ? html`<ul class="disc-list">${all.map((d) => discoveryRow(state, d))}</ul>` : html`<p class="empty">まだ発見はありません。点が増えて分析し直すと見つかります。</p>`}`;
   },
 };

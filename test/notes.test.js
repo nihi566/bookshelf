@@ -410,7 +410,7 @@ test('G3-1 / C8: ノートの一覧・ノートの画面・書くシート・検
   assert.match(String(notesView.render({ state, query: new URLSearchParams('q=別の') })), /1 件/);
   const page = String(noteView.render({ state, params: { id: 'nui1' } }));
   assert.match(page, /<h1 class="note-h1">&lt;b&gt;題&lt;\/b&gt;<\/h1>/);
-  assert.match(page, /<a href="#\/knowledge\/line\/l1">線「仕組みの線」<\/a>から作成/);
+  assert.match(page, /<a href="#\/knowledge\/line\/l1">線\(グループ\)「仕組みの線」<\/a>から作成/);
   assert.match(page, /data-action="edit-note" data-id="nui1"/);
   assert.equal((page.match(/<article class="hl"/g) || []).length, 1, '根拠の点のカード');
   assert.match(String(noteView.render({ state, params: { id: 'nnothing' } })), /このノートは見つかりません/);

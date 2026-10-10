@@ -401,7 +401,7 @@ test('G6-1 / C8: 知識の画面に「遠いつながり」が、共通する考
   assert.match(out, /<h3>共通&lt;b&gt;0&lt;\/b&gt;<\/h3>/);
   assert.doesNotMatch(out, /<img src=x/);
   assert.ok(out.includes(a.text.slice(0, 20)) && out.includes(b.text.slice(0, 20)), '両側の点');
-  assert.match(out, /線「仕組みの線」/);
+  assert.match(out, /線\(グループ\)「仕組みの線」/);
   assert.match(out, /まだつながっていない点/);
   // 反応のボタン: キーボードで押せる button・押した状態を読み上げる aria-pressed・ボタンの名前
   assert.match(out, /<div class="chips far-react" role="group" aria-label="「共通&lt;b&gt;0&lt;\/b&gt;」への反応">/, '反応のまとまりの名前は、カードごとに共通する考えで分かる');

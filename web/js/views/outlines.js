@@ -9,7 +9,7 @@ import { semanticAvailability } from './ask.js';
 
 // 知識の画面に並べる数（残りは一覧で見る）
 const ON_KNOWLEDGE = 3;
-const KIND_LABEL = { plane: '面', line: '線', note: '永久ノート' };
+const KIND_LABEL = { plane: '面', line: '線(グループ)', note: '永久ノート' };
 
 /** 材料（面・線・永久ノート）の名前。今の分析・ノートにあればリンクにする */
 function sourceLabel(state, s) {
@@ -34,16 +34,16 @@ export function outlinesSummaryBlock(state) {
   return html`<div class="section"><h2>文章の骨組み</h2>${list.length ? html`<a class="small" href="#/outlines">すべて見る（${list.length}）</a>` : html`<a class="small" href="#/outline/new">骨組みを作る</a>`}</div>
     ${list.length
       ? html`<ul class="note-list">${list.slice(0, ON_KNOWLEDGE).map(outlineRow)}</ul>`
-      : html`<p class="card small muted">面・線・永久ノートを選ぶと、PC の AI が、人に読ませる文章の見出し・各節の要点・使う引用を作ります。引用は点の文そのままです。直して Markdown でコピーできます。</p>`}`;
+      : html`<p class="card small muted">面・線(グループ)・永久ノートを選ぶと、PC の AI が、人に読ませる文章の見出し・各節の要点・使う引用を作ります。引用は点の文そのままです。直して Markdown でコピーできます。</p>`}`;
 }
 
 export const outlinesView = {
   render({ state }) {
     const list = liveOutlines(state.library);
     return html`<a class="back" href="#/knowledge">‹ 知識</a>
-      <div class="page-head"><div><h1>文章の骨組み</h1><div class="sub">面・線・永久ノートから、人に読ませる文章の見出し・要点・引用を作ります</div></div><a class="btn small primary" href="#/outline/new">＋ 作る</a></div>
+      <div class="page-head"><div><h1>文章の骨組み</h1><div class="sub">面・線(グループ)・永久ノートから、人に読ませる文章の見出し・要点・引用を作ります</div></div><a class="btn small primary" href="#/outline/new">＋ 作る</a></div>
       <p class="small muted" style="margin-top:8px">${list.length} 件</p>
-      ${list.length ? html`<ul class="note-list">${list.map(outlineRow)}</ul>` : html`<p class="empty">まだ骨組みはありません。「＋ 作る」か、面・線・永久ノートの画面の「文章の骨組みを作る」から作れます。</p>`}`;
+      ${list.length ? html`<ul class="note-list">${list.map(outlineRow)}</ul>` : html`<p class="empty">まだ骨組みはありません。「＋ 作る」か、面・線(グループ)・永久ノートの画面の「文章の骨組みを作る」から作れます。</p>`}`;
   },
 };
 
@@ -71,7 +71,7 @@ export const outlineNewView = {
       ${why === 'ok' ? '' : html`<p class="notice">骨組みを作るのは、PC（bh serve）とつながっているときです（PC の AI を使うため）。</p>`}
       <form class="stack" data-form="outline-new">
         ${a?.planes.length
-          ? html`<fieldset class="stack"><legend>面と線</legend>
+          ? html`<fieldset class="stack"><legend>面と線(グループ)</legend>
               ${a.planes.map((p) => {
                 const ls = p.lineIds.map((id) => lines.get(id)).filter(Boolean);
                 const open = ls.some((l) => chosen.line.has(l.id));
@@ -81,7 +81,7 @@ export const outlineNewView = {
                   </details></div>`;
               })}
             </fieldset>`
-          : html`<p class="small muted">面と線は、分析すると選べます（知識の画面の「分析し直す」）。</p>`}
+          : html`<p class="small muted">面と線(グループ)は、分析すると選べます（知識の画面の「分析し直す」）。</p>`}
         ${notes.length
           ? html`<fieldset><legend>永久ノート</legend><details ${chosen.note.size ? 'open' : ''}><summary class="small">ノートから選ぶ（${notes.length}）</summary>
               ${notes.map((n) => check('note', n.id, n.title || '（題なし）', chosen.note.has(n.id), `根拠の点 ${n.pointIds.length}`))}

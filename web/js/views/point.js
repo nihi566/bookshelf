@@ -25,8 +25,8 @@ export const pointView = {
       <div class="page-head"><div><h1>点</h1><div class="sub">${pointLabel(state.library, p)}</div></div></div>
       ${pointCard(p, { library: state.library, lines: idx.get(id) || [] })}
       ${related.length
-        ? html`<div class="section"><h2>関わる線</h2><span class="small muted">${related.length}</span></div>
-          <p class="help">入っている線のほかに、近い線です（その線の点と同じくらい、線の中心に近い）。</p>
+        ? html`<div class="section"><h2>関わる線(グループ)</h2><span class="small muted">${related.length}</span></div>
+          <p class="help">入っている線(グループ)のほかに、近い線です（その線の点と同じくらい、線の中心に近い）。</p>
           <div class="hl-lines">${related.map((l) => html`<a class="line-chip" href="#/knowledge/line/${l.id}">${l.name}</a>`)}</div>`
         : ''}
       ${linksBlock(state, id)}

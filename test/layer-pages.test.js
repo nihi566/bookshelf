@@ -59,7 +59,7 @@ test('#64: 線のページは線の一覧だけ。1 件を押すとその線の�
   const { linesView } = await import('../web/js/views/layers.js');
   const lib = sample();
   const out = String(linesView.render({ state: st(lib, analysisOf(lib)) }));
-  assert.match(out, /<h1>線<\/h1>/);
+  assert.match(out, /<h1>線\(グループ\)<\/h1>/);
   for (const id of ['l1', 'l2', 'l3']) assert.match(out, new RegExp(`href="#/knowledge/line/${id}"`));
   assert.doesNotMatch(out, /plane-card|solid-card|knowledge-map|<article class="hl/, 'ほかの階層の一覧が混ざらない');
   // 点の多い順

@@ -53,7 +53,7 @@ export function outlineActions({ state, generate, openSheet, toast, persist, syn
       // 選べるのは 8 つまで（黙って先頭だけで作らない）
       if (Array.isArray(rawPicks) && rawPicks.length > PICKS_MAX) return toast(`材料は ${PICKS_MAX} つまで選べます（いま ${rawPicks.length} つ）`);
       const picks = cleanPicks(rawPicks);
-      if (!picks.length) return toast('面・線・永久ノートを 1 つ以上選んでください');
+      if (!picks.length) return toast('面・線(グループ)・永久ノートを 1 つ以上選んでください');
       if (!state.loaded) return toast('まだ端末のデータを読み込んでいます。少し待ってから押してください');
       if (state.outlineDraft?.status === 'pending') return;
       const mine = { status: 'pending' };
@@ -106,7 +106,7 @@ export function outlineActions({ state, generate, openSheet, toast, persist, syn
     },
     async 'outline-delete'(el) {
       const o = live(el.dataset.id);
-      if (!o || !confirm('この骨組みを削除しますか？（材料の面・線・ノート・点は消えません）')) return;
+      if (!o || !confirm('この骨組みを削除しますか？（材料の面・線(グループ)・ノート・点は消えません）')) return;
       deleteOutline(state.library, o.id);
       await persist();
       toast('骨組みを削除しました');

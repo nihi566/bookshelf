@@ -347,7 +347,7 @@ test('G4-2・G4-3: 分析すると、どの点にも別の本の意味の近い�
     const { pointView } = await import('../web/js/views/point.js');
     const page = String(pointView.render({ state: { library: lib, analysis: second, loaded: true }, params: { id: 'tmixabc' } }));
     assert.match(page, new RegExp(`<a class="line-chip" href="#/knowledge/line/${own[0].id}">`));
-    assert.match(page, new RegExp(`<h2>関わる線</h2>[\\s\\S]*<a class="line-chip" href="#/knowledge/line/${relatedTo[0].id}">`));
+    assert.match(page, new RegExp(`<h2>関わる線\\(グループ\\)</h2>[\\s\\S]*<a class="line-chip" href="#/knowledge/line/${relatedTo[0].id}">`));
     // 同じデータなら同じ結果
     const again = await run();
     assert.deepEqual(again.neighbors, second.neighbors);
@@ -447,7 +447,7 @@ test('G4-3: 「十分近い」の基準: 自分の線を除いていちばん近
   assert.deepEqual(big.related.get('l2'), Array.from({ length: 12 }, (_, j) => `hm${String(14 - j).padStart(2, '0')}`));
 });
 
-test('G4-3: 関わる点は、その線の画面に「関わる点（ほかの線から）」として出て、点の画面には入っている線と関わる線の両方が出る', async () => {
+test('G4-3: 関わる点は、その線の画面に「関わる点（ほかの線(グループ)から）」として出て、点の画面には入っている線と関わる線の両方が出る', async () => {
   const { lineView } = await import('../web/js/views/knowledge.js');
   const { pointView } = await import('../web/js/views/point.js');
   const lib = sampleLibrary();
@@ -459,13 +459,13 @@ test('G4-3: 関わる点は、その線の画面に「関わる点（ほかの�
   assert.equal(analysisShapeError(analysis), '');
   const state = { library: lib, analysis, loaded: true };
   const line = String(lineView.render({ state, params: { id: 'l2' } }));
-  assert.match(line, /<h2>関わる点（ほかの線から）<\/h2><span class="small muted">1<\/span>/, '消えた点は出さない');
+  assert.match(line, /<h2>関わる点（ほかの線\(グループ\)から）<\/h2><span class="small muted">1<\/span>/, '消えた点は出さない');
   assert.match(line, new RegExp(`data-hl="${h1.id}"`));
   assert.match(line, /href="#\/knowledge\/line\/l1">線A<\/a>/, '関わる点がどの線に入っているかも出る');
-  assert.doesNotMatch(String(lineView.render({ state, params: { id: 'l1' } })), /関わる点（ほかの線から）/);
+  assert.doesNotMatch(String(lineView.render({ state, params: { id: 'l1' } })), /関わる点（ほかの線\(グループ\)から）/);
   const point = String(pointView.render({ state, params: { id: h1.id } }));
   assert.match(point, /<a class="line-chip" href="#\/knowledge\/line\/l1">線A<\/a>/, '入っている線');
-  assert.match(point, /<h2>関わる線<\/h2>[\s\S]*<a class="line-chip" href="#\/knowledge\/line\/l2">線B<\/a>/, '関わる線');
+  assert.match(point, /<h2>関わる線\(グループ\)<\/h2>[\s\S]*<a class="line-chip" href="#\/knowledge\/line\/l2">線B<\/a>/, '関わる線');
   assert.doesNotMatch(String(pointView.render({ state, params: { id: h3.id } })), /関わる線/);
 });
 
@@ -592,7 +592,7 @@ test('G4: リンクが多いときは、1 つの画面に新しい順に 50 件�
     { id: 'l2', name: '線B', highlightIds: others, relatedIds: [...others, ...others] },
   ]);
   const line = String(lineView.render({ state: { ...state, analysis }, params: { id: 'l2' } }));
-  assert.match(line, /<h2>関わる点（ほかの線から）<\/h2><span class="small muted">12<\/span>/);
+  assert.match(line, /<h2>関わる点（ほかの線\(グループ\)から）<\/h2><span class="small muted">12<\/span>/);
 });
 
 test('G4: 利用者の文（ノートの題・理由）はリンクの画面でそのまま文字として出る（HTML として動かない）。壊れた意味の近い点・関わる点の分析は受け入れない', async () => {

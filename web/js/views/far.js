@@ -22,7 +22,7 @@ function farSide(state, id, idx, mark) {
   const line = (idx.get(id) || [])[0];
   return html`<div class="far-side">
     <p class="far-text">${truncate(p.text.replace(/\s+/g, ' '), 140)}</p>
-    <span class="small muted">${mark} ・ ${pointLabel(state.library, p)} ・ ${line ? html`<a href="#/knowledge/line/${line.id}">線「${line.name}」</a>` : 'まだつながっていない点'}</span>
+    <span class="small muted">${mark} ・ ${pointLabel(state.library, p)} ・ ${line ? html`<a href="#/knowledge/line/${line.id}">線(グループ)「${line.name}」</a>` : 'まだつながっていない点'}</span>
   </div>`;
 }
 

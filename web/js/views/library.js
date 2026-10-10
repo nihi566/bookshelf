@@ -16,7 +16,7 @@ import { companion } from '../services.js';
 
 const flow = html`<div class="flow" aria-label="点から立体へ">
   <div class="f-point"><b>点</b>線を引いた一文</div>
-  <div class="f-line"><b>線</b>点をつなぐ概念</div>
+  <div class="f-line"><b>線(グループ)</b>点をつなぐ概念</div>
   <div class="f-plane"><b>面</b>線を束ねたテーマ</div>
   <div class="f-solid"><b>立体</b>知識の全体像</div>
 </div>`;
@@ -34,7 +34,7 @@ export const home = {
     if (!s.highlights && !s.technical && !liveThoughts(lib).length) {
       return html`${alert}<section class="card hero">
           <h1>本に引いた線を、<br>知識の立体へ。</h1>
-          <p class="help">Kindle と Play ブックスのハイライトを 1 か所に集めます。PC のローカル LLM が「点」をつないで「線」「面」「立体」に組み立て、次に読む本も提案します。</p>
+          <p class="help">Kindle と Play ブックスのハイライトを 1 か所に集めます。PC のローカル LLM が「点」をつないで「線(グループ)」「面」「立体」に組み立て、次に読む本も提案します。</p>
           ${flow}
           <div class="row">
             <a class="btn primary" href="#/import">ハイライトを取り込む</a>
@@ -44,7 +44,7 @@ export const home = {
         <div class="section"><h2>使い方</h2></div>
         <ol class="card stack help" style="padding-left:2em">
           <li><b>取り込む</b> — Kindle（端末の My Clippings.txt・アプリのノートブック）と Play ブックス（ドライブのメモ）、読書メモ（Markdown）に対応。紙の本は「読んだ本」から登録して、線を引いた文を入力できます。</li>
-          <li><b>AI で立体にする</b> — PC のローカル LLM（Ollama など）が点を線・面・立体に組み立て、おすすめの本を選びます。</li>
+          <li><b>AI で立体にする</b> — PC のローカル LLM（Ollama など）が点を線(グループ)・面・立体に組み立て、おすすめの本を選びます。</li>
         </ol>`;
     }
     const picks = dailyPicks(lib, HOME_PICKS, new Date(), shuffle);
@@ -54,7 +54,7 @@ export const home = {
     return html`${alert}
       <div class="stats">
         <a class="stat point" href="#/search"><b>${s.points}</b><span>点</span></a>
-        <a class="stat line" href="#/lines"><b>${a ? a.lines.length : '–'}</b><span>線</span></a>
+        <a class="stat line" href="#/lines"><b>${a ? a.lines.length : '–'}</b><span>線(グループ)</span></a>
         <a class="stat plane" href="#/planes"><b>${a ? a.planes.length : '–'}</b><span>面</span></a>
         <a class="stat solid" href="#/solid"><b>${a ? 1 : '–'}</b><span>立体</span></a>
       </div>
@@ -77,7 +77,7 @@ export const home = {
               <p class="core">${a.solid.core}</p>
             </a>`
         : html`<div class="section"><h2>AI 分析</h2></div>
-            <div class="card"><p>点が ${s.points} 件たまりました。ローカル LLM で点をつないで、線・面・立体にしてみましょう。</p>
+            <div class="card"><p>点が ${s.points} 件たまりました。ローカル LLM で点をつないで、線(グループ)・面・立体にしてみましょう。</p>
             <a class="btn primary" href="#/knowledge">分析する</a></div>`}
 
       <div id="home-wishlist"></div>
@@ -182,7 +182,7 @@ export const book = {
       </div>
       ${addForm}
       ${b.sources.includes('paper') && !hs.length ? html`<p class="empty">まだ線を引いた文がありません。上の欄から足せます。</p>` : ''}
-      ${linesHere.length ? html`<div class="section"><h2>この本から伸びる線</h2></div><div class="hl-lines">${linesHere.map((l) => html`<a class="line-chip" href="#/knowledge/line/${l.id}">${l.name}</a>`)}</div>` : ''}
+      ${linesHere.length ? html`<div class="section"><h2>この本から伸びる線(グループ)</h2></div><div class="hl-lines">${linesHere.map((l) => html`<a class="line-chip" href="#/knowledge/line/${l.id}">${l.name}</a>`)}</div>` : ''}
       <div style="margin-top:16px">${items}</div>`;
   },
 };
