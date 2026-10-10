@@ -230,6 +230,18 @@ export function summarizeYear(records, year) {
   return { ...totals(items), months };
 }
 
+/** 手で付けた記録と、線から自動で付けた記録を合わせたもの（手で付けた記録が優先）。読んだ日が分からない本は undated */
+export function mergedRecords(library, file) {
+  const auto = autoRecords(library, file);
+  return { records: { ...auto.dated, ...file.records }, undated: auto.undated };
+}
+
+/** その月の冊数・ページ数（手で付けた記録と自動の記録を合わせて数える。ホームの 1 行に使う） */
+export function monthReading(library, file, year, month) {
+  const { count, pages, unknownCount } = summarizeMonth(mergedRecords(library, file).records, year, month);
+  return { year, month, count, pages, unknownCount };
+}
+
 export function addMonths(year, month, delta) {
   const index = year * 12 + (month - 1) + delta;
   return { year: Math.floor(index / 12), month: (index % 12) + 1 };

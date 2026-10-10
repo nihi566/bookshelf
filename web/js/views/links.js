@@ -49,8 +49,10 @@ export function linksBlock(state, id) {
   const far = isNoteId(id) ? [] : farLinksFor(state.analysis, state.library, id).filter((f) => analysisPointById(state.library, f.other) && !links.some((l) => l.other === f.other));
   const rows = [
     ...links.map(({ link, other }) => () => {
-      const title = endView(state.library, other).title;
-      return endRow(state.library, other, { reason: link.reason, actions: html`<button type="button" class="btn small" data-action="link-reason" data-id="${link.id}" aria-label="「${title}」へのリンクの理由を書く">理由</button><button type="button" class="btn small" data-action="link-remove" data-id="${link.id}" aria-label="「${title}」へのリンクを外す">外す</button>` });
+      const { title, gone } = endView(state.library, other);
+      // 点どうし・点とメモのリンクは、両端の点を根拠にした永久ノートの種にできる（ノートに張ったリンクは対象外）
+      const toNote = !gone && !isNoteId(id) && !isNoteId(other) ? html`<button type="button" class="btn small" data-action="link-to-note" data-id="${link.id}" aria-label="「${title}」とのリンクを永久ノートにする">ノートにする</button>` : '';
+      return endRow(state.library, other, { reason: link.reason, actions: html`${toNote}<button type="button" class="btn small" data-action="link-reason" data-id="${link.id}" aria-label="「${title}」へのリンクの理由を書く">理由</button><button type="button" class="btn small" data-action="link-remove" data-id="${link.id}" aria-label="「${title}」へのリンクを外す">外す</button>` });
     }),
     ...far.map((f) => () => endRow(state.library, f.other, { reason: `遠いつながり（面白い）・${f.reason}` })),
   ];

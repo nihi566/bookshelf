@@ -367,6 +367,8 @@ a.wl-main:hover .title { text-decoration: underline; }
 .wl-history th { color: var(--ink-2); font-weight: 600; }
 .wl-export { margin-top: 16px; }
 .wishlist-hits, .home-wishlist { margin-bottom: 12px; }
+#home-records { margin-top: 4px; }
+#home-records:empty { display: none; }
 .badge.wish { background: var(--accent-soft); color: var(--accent); }
 .badge.wish.similar { background: var(--surface-2); color: var(--ink-2); font-weight: 400; white-space: normal; }
 .rec-wish:not(:empty) { margin: 2px 0 4px; }
@@ -477,6 +479,7 @@ ul.plain li { margin: 4px 0; }
 html:has(dialog[open]) { overflow: hidden; } /* シートを開いている間は後ろの画面をスクロールさせない */
 .sheet { overscroll-behavior: contain; }
 .sheet::backdrop { background: rgba(0, 0, 0, 0.35); }
+.sheet:focus { outline: none; } /* 開いたときはシート自体にフォーカスを置く（NIH-90）。枠は中の欄に移ってから出す */
 .sheet form { padding: 16px 16px calc(16px + env(safe-area-inset-bottom)); }
 .sheet h2 { margin-bottom: 8px; }
 /* 保存・やめるの並びは、シートが画面より高いとき（横向き・キーボード）も下に見せておく */
@@ -512,6 +515,9 @@ a.mb:hover { text-decoration: none; background: var(--surface-2); }
 /* トースト */
 #toast { position: fixed; left: 50%; width: max-content; bottom: calc(var(--tabbar-h) + 16px + env(safe-area-inset-bottom)); transform: translateX(-50%) translateY(20px); z-index: 30; max-width: min(560px, calc(100vw - 32px)); padding: 10px 16px; border-radius: 12px; background: var(--ink); color: var(--bg); font-size: 0.9rem; opacity: 0; pointer-events: none; transition: opacity 0.2s, transform 0.2s; }
 #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+#toast.show.has-action { pointer-events: auto; } /* 「元に戻す」などのボタンがある通知だけ押せるようにする */
+.toast-action { min-height: 36px; margin: -8px -8px -8px 8px; padding: 4px 8px; border: none; border-radius: 8px; background: transparent; color: inherit; font-weight: 700; text-decoration: underline; cursor: pointer; }
+.toast-action:focus-visible { outline-color: currentColor; } /* 通知の濃い地の上でも枠が見えるように */
 
 @media (prefers-reduced-motion: reduce) {
   * { transition: none !important; animation: none !important; }
