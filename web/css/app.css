@@ -410,6 +410,20 @@ dl.kv dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
 .layer-label.solid { color: var(--layer-solid); }
 .layer-label.plane { color: var(--layer-plane-ink, var(--layer-plane)); }
 .layer-label.line { color: var(--layer-line); }
+/* 面の一覧（名前と短い要約。全文は面の詳細ページ） */
+.plane-list { display: flex; flex-direction: column; gap: 8px; }
+.plane-row { display: flex; flex-wrap: wrap; gap: 2px 8px; align-items: baseline; padding: 12px 14px; border-radius: 12px; background: var(--surface); border: 1px solid var(--line); border-left: 4px solid var(--layer-plane); color: var(--ink); }
+.plane-row:hover { text-decoration: none; filter: brightness(0.98); }
+.plane-row b { color: var(--layer-plane); flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; }
+.plane-row span { order: 3; flex-basis: 100%; font-size: 0.88rem; color: var(--ink-2); overflow-wrap: anywhere; }
+.plane-row em { font-style: normal; font-size: 0.75rem; color: var(--ink-3); flex: none; margin-left: auto; }
+/* 知識の画面・各ページの、点・線・面・立体への入口 */
+.layer-nav { margin-bottom: 12px; }
+.layer-nav .stat { color: inherit; }
+.layer-nav .stat[aria-current] { border-color: currentColor; }
+.solid-link { display: block; margin-top: 8px; padding: 12px 14px; border-radius: 12px; background: var(--surface); border: 1px solid var(--line); color: var(--ink); overflow-wrap: anywhere; }
+.solid-link:hover { text-decoration: none; filter: brightness(0.98); }
+.solid-link b { display: block; margin-top: 2px; }
 .lines-of-plane { display: flex; flex-direction: column; gap: 6px; margin-top: 10px; }
 .line-row { display: flex; flex-wrap: wrap; gap: 2px 8px; align-items: baseline; padding: 8px 10px; border-radius: 10px; background: var(--surface-2); color: var(--ink); }
 .line-row:hover { text-decoration: none; filter: brightness(0.98); }

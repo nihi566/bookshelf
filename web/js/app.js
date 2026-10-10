@@ -6,6 +6,7 @@ import { buildBookmarklet, companion, detectServedByCompanion, download, syncWit
 import { kindleAlertBlock, openSheet, toast } from './ui.js';
 import { book, books, home, search } from './views/library.js';
 import { autoStatusBlock, historyView, isolatedView, knowledge, lineView, planeView } from './views/knowledge.js';
+import { linesView, planesView, solidView } from './views/layers.js';
 import { discoveriesView, discoveryView } from './views/discoveries.js';
 import { farView } from './views/far.js';
 import { noteView, notesView } from './views/notes.js';
@@ -43,12 +44,16 @@ const ROUTES = [
   [/^\/books$/, books, 'books'],
   [/^\/book\/(?<id>[\w-]+)$/, book, 'books'],
   [/^\/wishlist$/, wishlist, 'price'],
-  // ハイライトの検索は「読んだ本」の中の画面（タブは持たない）
+  // 全ての点の一覧（点の専用ページ。言葉・意味で探せる）。入口はホームの点の数・読んだ本・知識の画面
   [/^\/search$/, search, 'books'],
   [/^\/records$/, records, 'records'],
   // 思いつき（フリートノート）の一覧。受け箱はホームにあるので、タブはホーム
   [/^\/thoughts$/, thoughtsView, 'home'],
   [/^\/knowledge$/, knowledge, 'knowledge'],
+  // 線・面・立体の専用ページ（一覧。点の一覧は全ての点 = #/search）
+  [/^\/lines$/, linesView, 'knowledge'],
+  [/^\/planes$/, planesView, 'knowledge'],
+  [/^\/solid$/, solidView, 'knowledge'],
   [/^\/knowledge\/line\/(?<id>[\w-]+)$/, lineView, 'knowledge'],
   [/^\/knowledge\/plane\/(?<id>[\w-]+)$/, planeView, 'knowledge'],
   [/^\/knowledge\/isolated$/, isolatedView, 'knowledge'],
@@ -251,8 +256,11 @@ function setJob(patch) {
         panel.replaceWith(tmp.firstElementChild);
       });
     } else render({ keepScroll: true });
-  }
+  } else if (LAYER_PATHS.includes(path) && !state.job.running) render({ keepScroll: true });
 }
+
+// 分析の結果を出す線・面・立体のページ（分析が終わったら描き直す）
+const LAYER_PATHS = ['/lines', '/planes', '/solid'];
 
 let abort = null;
 
