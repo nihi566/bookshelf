@@ -10,6 +10,8 @@ const MAX_FIT_ZOOM = 1.5;
 const PLANE_LABEL_PX = 13;
 const PLANE_LABEL_MAX_WIDTH_PX = 140;
 const BRIDGE_PX = 1.5;
+const ISOLATED_PX = 3;
+const RESIZE_DELAY_MS = 120;
 
 let cy = null;
 
@@ -48,7 +50,7 @@ function draw(cytoscape, wrap, analysis, library) {
   const colors = { solid: css('--layer-solid'), plane: css('--layer-plane'), line: css('--layer-line'), point: css('--layer-point'), ink: css('--ink'), surface: css('--surface'), font: css('--font') };
   const els = mapElements(analysis, { library });
   const pos = mapPositions(els);
-  cy = cytoscape({
+  const inst = cytoscape({
     container: canvas,
     style: mapStyle(colors),
     elements: [...els.nodes.map((data) => ({ group: 'nodes', data, position: pos[data.id] })), ...els.edges.map((data) => ({ group: 'edges', data }))],
@@ -60,23 +62,29 @@ function draw(cytoscape, wrap, analysis, library) {
     // 点が多いので、指で動かしている間は辺を描かない（スマホでも引っかからずに動かせるように）
     hideEdgesOnViewport: true,
   });
+  cy = inst;
   if (cy.zoom() > MAX_FIT_ZOOM) cy.zoom(MAX_FIT_ZOOM).center();
   const planes = cy.nodes('[kind = "plane"]');
   const bridges = cy.edges('[kind = "far"], [kind = "link"]');
-  let pending = false;
-  const sizePlaneLabels = () => {
-    pending = false;
-    if (!cy) return;
-    const z = cy.zoom();
+  const isolated = cy.nodes('[?isolated]');
+  let timer = 0;
+  const resize = () => {
+    timer = 0;
+    // 描き直したあとに、前の図の予約が残っていても触らない
+    if (inst !== cy) return;
+    const z = inst.zoom();
     planes.style({ 'font-size': Math.max(16, PLANE_LABEL_PX / z), 'text-max-width': Math.max(160, PLANE_LABEL_MAX_WIDTH_PX / z), 'text-outline-width': Math.max(3, 3 / z) });
-    // 塊どうしの橋は、全体を見たときも見える太さにする（数が少ないので 1 本ずつ変えても軽い）
+    // 塊どうしの橋は、全体を見たときも見える太さにする
     bridges.style('width', Math.max(1, BRIDGE_PX / z));
+    // まだつながらない点も、全体を見たときに散らばっているのが見える大きさにする
+    const size = Math.max(6, ISOLATED_PX / z);
+    isolated.style({ width: size, height: size });
   };
-  sizePlaneLabels();
-  cy.on('zoom', () => {
-    if (pending) return;
-    pending = true;
-    requestAnimationFrame(sizePlaneLabels);
+  resize();
+  // リンクは数千本になり得るので、拡大・縮小の途中では書き換えず、止まってから 1 回だけ直す
+  inst.on('zoom', () => {
+    clearTimeout(timer);
+    timer = setTimeout(resize, RESIZE_DELAY_MS);
   });
   cy.on('tap', 'node', (e) => {
     const go = ROUTE[e.target.data('kind')];

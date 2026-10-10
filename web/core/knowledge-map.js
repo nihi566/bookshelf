@@ -101,7 +101,8 @@ function packCircles(radii, { reserved = 0, gap = 0 } = {}) {
   const out = new Array(radii.length);
   const fits = (x, y, r) => Math.hypot(x, y) >= (reserved ? reserved + r + gap : 0) && placed.every((p) => Math.hypot(p.x - x, p.y - y) >= p.r + r + gap);
   for (const i of order) {
-    const r = radii[i];
+    // 数でない半径は 0 として扱う（NaN だと空いた場所が見つからず、下の輪の探索が止まらない）
+    const r = Number.isFinite(radii[i]) ? radii[i] : 0;
     let at = null;
     if (!reserved && !placed.length) at = { x: 0, y: 0 };
     // 半径を少しずつ広げた輪の上を回り、最初に空いていた場所に置く
