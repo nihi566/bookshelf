@@ -166,7 +166,7 @@ export const knowledge = {
         <p class="help">どの線(グループ)にも入らなかった点です。読書を重ねると、いつか線になるかもしれません。</p>
         <a class="btn small" href="#/knowledge/isolated">見る</a>` : ''}
 
-      ${pcConfigured(state) ? html`<div class="section"><h2>分析の履歴</h2><span class="small muted">PC に直近 12 回分</span></div><div id="analysis-history"><p class="small muted">PC に問い合わせています…</p></div>` : ''}`;
+      ${pcConfigured(state) ? html`<div class="section"><h2>分析の履歴</h2><span class="small muted">PC に直近 12 回分（「残す」の回は消えない）</span></div><div id="analysis-history"><p class="small muted">PC に問い合わせています…</p></div>` : ''}`;
   },
   mount(root, ctx) {
     if (ctx?.state && pcConfigured(ctx.state)) renderHistoryList(root.querySelector('#analysis-history'), ctx.state);
@@ -208,9 +208,10 @@ export function changeSummary(c, restoredFrom = null) {
 /** PC（コンパニオン）を使う設定で、PC の場所が分かっているか（GitHub Pages で開いただけなら localhost に問い合わせない） */
 const pcConfigured = (state) => state.settings.ai.mode === 'companion' && Boolean(state.servedByCompanion || state.settings.ai.companionUrl);
 
-function historyListHtml(items, state) {
+/** 履歴の一覧（「この回を残す」の印が付いた回には「残す」と出す。NIH-102） */
+export function historyListHtml(items, state) {
   return items.length
-    ? html`<ul class="card plain history-list">${items.map((h) => html`<li><a href="#/knowledge/history/${h.id}">${when(h.createdAt)}</a> <span class="small muted"><span class="nowrap">点 ${h.stats?.points ?? '–'}</span>・<span class="nowrap">線 ${h.stats?.lines ?? '–'}</span>・<span class="nowrap">面 ${h.stats?.planes ?? '–'}</span>${h.createdAt === state?.analysis?.createdAt ? '（いま表示している分析）' : ''}</span><br><span class="small">${changeSummary(h.changes, h.restoredFrom).split('・').map((part, i) => html`${i ? '・' : ''}<span class="nowrap">${part}</span>`)}</span></li>`)}</ul>`
+    ? html`<ul class="card plain history-list">${items.map((h) => html`<li><a href="#/knowledge/history/${h.id}">${when(h.createdAt)}</a> ${h.pinned === true ? html`<span class="pin-mark">残す</span> ` : ''}<span class="small muted"><span class="nowrap">点 ${h.stats?.points ?? '–'}</span>・<span class="nowrap">線 ${h.stats?.lines ?? '–'}</span>・<span class="nowrap">面 ${h.stats?.planes ?? '–'}</span>${h.createdAt === state?.analysis?.createdAt ? '（いま表示している分析）' : ''}</span><br><span class="small">${changeSummary(h.changes, h.restoredFrom).split('・').map((part, i) => html`${i ? '・' : ''}<span class="nowrap">${part}</span>`)}</span></li>`)}</ul>`
     : html`<p class="small muted">まだ履歴がありません（PC で分析すると残ります）。</p>`;
 }
 
@@ -240,12 +241,17 @@ const historyIdOf = (a) => String(a?.createdAt || '').replace(/[^0-9TZ]/g, '');
 
 /**
  * 過去の分析 1 回分の中身。線・面の画面は今の分析のものなので、リンクは張らない。
- * current: いま表示している分析か（そうでなければ「この分析に戻す」を出す）
+ * current: いま表示している分析か（そうでなければ「この分析に戻す」を出す）。
+ * pinned: 「この回を残す」の印が付いているか（NIH-102。PC の一覧が読めず分からないときは undefined で、付け外しを出さない）
  */
-export function historyBody(a, { current }) {
+export function historyBody(a, { current, pinned }) {
+  const id = historyIdOf(a);
   return html`<section class="card stack">${current
       ? html`<p class="small muted">いま表示している分析です。</p>`
-      : html`<div class="row"><button type="button" class="btn small primary" data-action="restore-analysis" data-id="${historyIdOf(a)}">この分析に戻す</button><span class="small muted">知識の画面の線(グループ)・面・立体がこの回のものになり、次の分析はこの回から引き継ぎます</span></div>`}</section>
+      : html`<div class="row"><button type="button" class="btn small primary" data-action="restore-analysis" data-id="${id}">この分析に戻す</button><span class="small muted">知識の画面の線(グループ)・面・立体がこの回のものになり、次の分析はこの回から引き継ぎます</span></div>`}
+      ${typeof pinned === 'boolean'
+        ? html`<div class="row"><button type="button" class="btn small" data-action="pin-history" data-id="${id}" data-pinned="${String(pinned)}" aria-pressed="${String(pinned)}">${pinned ? '残すのをやめる' : 'この回を残す'}</button><span class="small muted">${pinned ? html`<span class="pin-mark">残す</span> 印が付いています。直近 12 回を過ぎても消えません` : '履歴は直近 12 回分だけ残ります。印を付けた回は、それを過ぎても消えません'}</span></div>`
+        : ''}</section>
     ${changesBlock(a, { links: false })}
     <div class="section"><h2>立体</h2></div>
     <section class="card solid-card stack">
@@ -268,11 +274,16 @@ export const historyView = {
   mount(root, { params, state }) {
     const body = root.querySelector('#history-body');
     const sub = root.querySelector('#history-sub');
-    companion.historyEntry(params.id).then(
-      (a) => {
+    // 印（「この回を残す」）は一覧にだけある。一覧が読めなくても、中身は出す
+    const pinOf = companion.history().then(
+      (items) => items.find((h) => h.id === params.id)?.pinned === true,
+      () => undefined,
+    );
+    Promise.all([companion.historyEntry(params.id), pinOf]).then(
+      ([a, pinned]) => {
         if (!body.isConnected) return;
         sub.textContent = `${when(a.createdAt)}・${a.model?.chat || ''}${a.model?.embed ? ' / ' + a.model.embed : ''}・点 ${a.stats?.points ?? '–'} → 線 ${a.lines.length} → 面 ${a.planes.length}`;
-        body.innerHTML = String(historyBody(a, { current: a.createdAt === state?.analysis?.createdAt }));
+        body.innerHTML = String(historyBody(a, { current: a.createdAt === state?.analysis?.createdAt, pinned }));
       },
       (e) => {
         if (body.isConnected) body.innerHTML = String(html`<p class="notice err">過去の分析を読めませんでした: ${e.message}</p>`);

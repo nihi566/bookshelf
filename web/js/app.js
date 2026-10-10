@@ -842,6 +842,19 @@ const actions = {
     toast('この分析に戻しました');
     location.hash = '#/knowledge';
   },
+  // 履歴の回に「この回を残す」の印を付け外しする（NIH-102。PC の履歴の一覧に印を持つ）
+  async 'pin-history'(el) {
+    const pinned = el.dataset.pinned !== 'true';
+    el.disabled = true;
+    try {
+      await companion.pinHistory(el.dataset.id, pinned);
+    } catch (e) {
+      el.disabled = false;
+      return toast(e.message);
+    }
+    toast(pinned ? 'この回を残します。直近 12 回を過ぎても消えません' : '残すのをやめました。直近 12 回を過ぎると消えます');
+    render({ keepScroll: true });
+  },
   async 'rec-feedback'(el) {
     const r = state.analysis?.recommendations?.[Number(el.dataset.i)];
     if (!r) return;

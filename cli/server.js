@@ -9,7 +9,7 @@
 import { createServer } from 'node:http';
 import { readFile, stat } from 'node:fs/promises';
 import path from 'node:path';
-import { REPO_ROOT } from './store.js';
+import { HISTORY_PIN_MAX, REPO_ROOT } from './store.js';
 import { libraryStats, mergeLibraries } from '../web/core/model.js';
 import { analysisPoints } from '../web/core/points.js';
 import { analysisStamp, applyImport } from '../web/core/importing.js';
@@ -177,6 +177,16 @@ export function createCompanionServer({ store, log = console.log, catalogFetch, 
         return { status: 200, body: restored };
       });
       return out ? send(res, out.status, out.body) : busy();
+    }
+    // 履歴の回に「この回を残す」の印を付け外しする（NIH-102。印の付いた回は直近 12 回を過ぎても消さない）
+    const pin = req.method === 'POST' && url.pathname.match(/^\/api\/history\/([0-9TZ]{8,40})\/pin$/);
+    if (pin) {
+      const { pinned } = await readBody(req);
+      if (typeof pinned !== 'boolean') return send(res, 400, { error: 'pinned は true か false で送ってください' });
+      const r = await store.setHistoryPin(pin[1], pinned);
+      if (r.ok) return send(res, 200, r.item);
+      if (r.reason === 'limit') return send(res, 409, { error: `残せるのは ${HISTORY_PIN_MAX} 回までです。ほかの回の「残すのをやめる」を押してから、もう一度押してください。` });
+      return send(res, 404, { error: 'その分析は履歴にありません' });
     }
     switch (route) {
       case 'GET /api/info': {
