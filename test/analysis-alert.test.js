@@ -2,7 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
-import { mkdtempSync, readFileSync } from 'node:fs';
+import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { promisify } from 'node:util';
@@ -14,7 +14,6 @@ import { startFakeLlm } from './helpers/fake-llm.js';
 
 const run = promisify(execFile);
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
-const WEB = join(ROOT, 'web');
 
 const failing = {
   enabled: true,
@@ -77,7 +76,9 @@ test('NIH-53: ホームの先頭に警告欄があり、PC の情報を取り直
   assert.match(out, /^\s*<div id="home-alert"><a class="notice err" href="#\/knowledge"/);
   const empty = String(home.render({ state: st(failing) }));
   assert.match(empty, /^\s*<div id="home-alert"><a class="notice err" href="#\/knowledge"/, '本が 0 冊のときも出す');
-  assert.match(readFileSync(join(WEB, 'js/app.js'), 'utf8'), /'\/': \[\['#home-alert', homeAlertBlock\]\]/);
+  const { PC_INFO_BOXES } = await import('../web/js/routes.js');
+  const { homeAlertBlock } = await import('../web/js/ui.js');
+  assert.deepEqual(PC_INFO_BOXES['/'], [['#home-alert', homeAlertBlock]]);
 });
 
 test('NIH-53: bh analyze で成功したときも、続けて失敗した回数を 0 に戻す（次の失敗を「4 回続けて」と数えない）', async () => {
