@@ -70,7 +70,7 @@ node cli/bh.js config embed bge-m3
 node cli/bh.js serve                               # → http://localhost:8787
 ```
 
-`npm link` すれば `bh` だけで呼べます。LM Studio や llama.cpp server も `bh config url http://localhost:1234` のように OpenAI 互換 API の URL を指定すれば使えます。
+main を更新したあと、常駐の `bh serve` を新しいコードに入れ替えるには `node cli/bh.js update`（データを退避 → main を取り込む → 起動し直す → 新しい版か確かめる。[docs/setup.md](docs/setup.md)）。`npm link` すれば `bh` だけで呼べます。LM Studio や llama.cpp server も `bh config url http://localhost:1234` のように OpenAI 互換 API の URL を指定すれば使えます。
 
 ### 3. スマホからつなぐ
 

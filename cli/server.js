@@ -54,6 +54,8 @@ const AI_CONCURRENCY = 2;
 // auto: { intervalMs } を渡すと、その間隔で自動の分析を始めるかを確かめる（bh serve。テストでは渡さず checkAutoAnalyze を呼ぶ）
 export function createCompanionServer({ store, log = console.log, catalogFetch, drive = null, auto = null }) {
   // trigger: 'manual'（画面のボタン・bh）/ 'auto'（点が増えたので PC が自分で始めた）
+  // bh update が「止めた後に起動したプロセス（= 新しいコード）か」を確かめるのに使う
+  const serverStartedAt = new Date().toISOString();
   const job = { running: false, stage: '', message: '', done: 0, total: 0, error: '', startedAt: null, finishedAt: null, trigger: '', controller: null };
   // 取り込みの最中は自動の分析を始めない（取り込み途中の点で分析しない）
   let activeImports = 0;
@@ -161,6 +163,7 @@ export function createCompanionServer({ store, log = console.log, catalogFetch, 
         const st = await store.state();
         return send(res, 200, {
           app: 'book-highlights',
+          server: { startedAt: serverStartedAt },
           stats: libraryStats(lib),
           // Web アプリはこれが自分の持つものより新しいときだけ同期する
           updatedAt: lib.updatedAt,

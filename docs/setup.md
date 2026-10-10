@@ -49,12 +49,25 @@ node cli/bh.js serve
 | `bh analyze [--no-recommend]` | 点→線→面→立体の分析とおすすめ |
 | `bh recommend` | おすすめだけ選び直す |
 | `bh serve [--port 8787] [--host 127.0.0.1]` | コンパニオンサーバ（Google にログイン済みなら Play ブックスを自動取り込み。3.5 節） |
+| `bh update` | マージした main を常駐の `bh serve` に反映する（下の「新しいコードに入れ替える」） |
 | `bh list` / `bh search <語>` | 一覧・検索 |
 | `bh config` | 設定の表示（`data/config.json`） |
 
 データは既定でリポジトリの `data/`（`.gitignore` 済み）に保存されます。`BH_DATA=/path` で変更できます。
 
 常駐させたい場合は、macOS なら launchd、Windows ならタスク スケジューラ、Linux なら systemd のユーザーサービスで `node /path/to/cli/bh.js serve` を起動します。
+
+### 新しいコードに入れ替える（`bh update`）
+
+常駐の `bh serve` は、main をマージしても起動し直すまで古いコードのまま動きます。リポジトリ（main を開いているフォルダ）で `node cli/bh.js update` を実行すると、次を 1 回で行います。
+
+1. `data/` の `library.json`・`analysis.json` を `library.backup-<日時>-before-update.json` のような名前で退避する（コピー。元は変えない）
+2. `git pull --ff-only origin main` で main を取り込む。main 以外のブランチにいる・取り込めないときは、ここで止まり、`bh serve` は止めない
+3. 設定のポート（既定 8787）で動いている `bh serve` を止める。そのポートを `bh serve` 以外が使っていたら、何も止めずに終わる
+4. 起動し直す。Windows でタスク スケジューラに「book-highlights bh serve」というタスクがあればそれを起動し、無ければ `node cli/bh.js serve` を切り離して起動する（出力は `data/serve.log`）
+5. 止めた後に起動したサーバが 30 秒以内に応答し、配っている `sw.js` の版がディスクの `web/sw.js` と同じかを確かめる
+
+退避したファイル名・取り込んだコミット・新しい版が表示されます。launchd・systemd で常駐させている場合は、それらが止めた `bh serve` を起動し直すことがあるので、`bh update` ではなく各サービスの再起動を使ってください。
 
 ## 3.5 Play ブックスの自動取り込み（Google ドライブ）
 

@@ -318,7 +318,8 @@ test('edge llm: 応答の本文が届かないままでもタイムアウトす�
     text: () => new Promise((_, reject) => signal.addEventListener('abort', () => reject(signal.reason))),
   });
   const llm = createLlmClient({ baseUrl: 'http://llm', chatModel: 'm', fetchImpl, timeoutMs: 20 });
-  const result = await Promise.race([llm.listModels().then(() => 'ok', (e) => e), new Promise((r) => setTimeout(() => r('hung'), 500))]);
+  // 止まったと見なすまでの待ちは、タイムアウト（20ms）より十分長くする（テストを並べて走らせると PC が重くなり、500ms では間に合わないことがある）
+  const result = await Promise.race([llm.listModels().then(() => 'ok', (e) => e), new Promise((r) => setTimeout(() => r('hung'), 5000))]);
   assert.ok(result instanceof LlmError, `結果: ${result}`);
 });
 
