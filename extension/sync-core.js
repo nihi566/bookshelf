@@ -61,6 +61,18 @@ export function statusReport(status, settings) {
   };
 }
 
+/**
+ * 1 回の確認の結果から、成功か・利用者に見せる理由を決める。
+ * ノートブックの一覧に出るのは注釈のある本だけなので、読み直した本がすべて 0 件なら
+ * 読み取りのほうがおかしい（Amazon の画面の形が変わった）とみなす。
+ */
+export function syncOutcome({ failed = [], fetched = 0, withHighlights = 0 }) {
+  const errors = [];
+  if (failed.length) errors.push(`${failed.length} 冊を読み取れませんでした（${failed.slice(0, 3).join('、')}${failed.length > 3 ? ' ほか' : ''}）。次回もう一度読みます。`);
+  if (fetched > 0 && withHighlights === 0) errors.push(`読み直した ${fetched} 冊のハイライトがすべて 0 件でした。Amazon のノートブックの画面の形が変わった可能性があります。拡張機能を直したら、設定画面の「全ての本を取り込み直す」を押してください。`);
+  return { ok: !errors.length, error: errors.join(' ') };
+}
+
 export function chunk(list, size) {
   const out = [];
   for (let i = 0; i < list.length; i += size) out.push(list.slice(i, i + size));
