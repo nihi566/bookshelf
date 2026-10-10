@@ -650,8 +650,33 @@ export function addHighlight(library, bookId, { text, page = '', chapter = '', n
 export function dailyPicks(library, count = 3, date = new Date(), seed = '') {
   const hs = [...pointHighlights(library), ...pointThoughts(library)].sort((a, b) => a.id.localeCompare(b.id));
   if (!hs.length) return [];
-  const key = seed ? `seed:${seed}` : `${date.getFullYear()}-${date.getMonth() + 1}-${date.getDate()}`;
+  const key = seed ? `seed:${seed}` : dayKey(date);
   const scored = hs.map((h) => ({ h, s: hash(key + h.id) }));
   scored.sort((a, b) => a.s.localeCompare(b.s));
   return scored.slice(0, Math.max(0, count)).map((x) => x.h);
+}
+
+const dayKey = (date) => `${date.getFullYear()}-${date.getMonth() + 1}-${date.getDate()}`;
+
+/**
+ * 「別の点」で選び直した種を、選んだ日つきで端末に残す形（NIH-89: 開き直しても最初の点に戻らないように）
+ * @param {Date} date @param {string} seed @returns {{ day: string, seed: string }}
+ */
+export function shuffleRecord(date, seed) {
+  return { day: dayKey(date), seed };
+}
+
+/** 端末に残した文字列を読む。無い・壊れているときは null */
+export function parseShuffleRecord(text) {
+  try {
+    const r = JSON.parse(text);
+    return r && typeof r.day === 'string' && typeof r.seed === 'string' ? { day: r.day, seed: r.seed } : null;
+  } catch {
+    return null;
+  }
+}
+
+/** その日に選び直した種（別の日に選んだものは使わず、日付の今日の点に戻す）。無ければ '' */
+export function shuffleSeedFor(record, date) {
+  return record && record.day === dayKey(date) ? record.seed : '';
 }

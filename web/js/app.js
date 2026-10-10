@@ -27,7 +27,7 @@ import { wishlist } from './views/wishlist.js';
 import { records } from './views/records.js';
 import { editThoughtSheet, lineSheet, newThoughtSheet, thoughtsView } from './views/thoughts.js';
 import { assignThoughtToLine, lineAssignmentOf, unassignThought } from '../core/line-assignments.js';
-import { FEEDBACK_LABELS, addHighlight, deleteBook, emptyLibrary, guessTechnical, listBooks, mergeParsed, registerBook, setFeedback, updateBook, updateHighlight } from '../core/model.js';
+import { FEEDBACK_LABELS, addHighlight, deleteBook, emptyLibrary, guessTechnical, listBooks, mergeParsed, parseShuffleRecord, registerBook, setFeedback, shuffleRecord, shuffleSeedFor, updateBook, updateHighlight } from '../core/model.js';
 import { THOUGHT_STATUS, addThought, deleteThought, thoughtsOf, updateThought } from '../core/thoughts.js';
 import { isThought, pointById } from '../core/points.js';
 import { randomId } from '../core/text.js';
@@ -86,7 +86,17 @@ const ROUTES = [
 ];
 
 const view = document.getElementById('view');
-let shuffle = 0;
+// 今日の点の「別の点」で選び直した種。この端末に残し、その日のうちは開き直しても同じ組を出す（NIH-89）
+const SHUFFLE_KEY = 'today-shuffle';
+// 起動時に呼ぶので、サイトデータをブロックしたブラウザ（localStorage を見ただけで例外）でも起動を止めない
+const shuffleStore = (() => {
+  try {
+    return browserStore();
+  } catch {
+    return { get: () => null, set() {} };
+  }
+})();
+let shuffle = parseShuffleRecord(shuffleStore.get(SHUFFLE_KEY));
 let currentPath = null;
 let currentHash = null;
 
@@ -108,7 +118,7 @@ function render({ keepScroll = false } = {}) {
   }
   if (!match) match = { view: home, tab: 'home', params: {} };
   // refresh: 同じ画面の描き直し（同期・編集のあと）。別の画面から来たとき・リンクを押したときは false
-  const ctx = { state, params: match.params, query, shuffle, refresh: location.hash === currentHash, markDiscoveryRead: readDiscovery };
+  const ctx = { state, params: match.params, query, shuffle: shuffleSeedFor(shuffle, new Date()), refresh: location.hash === currentHash, markDiscoveryRead: readDiscovery };
   currentHash = location.hash;
   // 取り込みの結果は、画面を離れたら（別の画面から来たら）忘れる
   if (!ctx.refresh) state.lastImport = null;
@@ -799,7 +809,8 @@ const actions = {
   },
   shuffle() {
     // 押すたびに新しい種で選び直す（開き直すたびに同じ並びが出ないよう、回数ではなく乱数にする）
-    shuffle = Math.random().toString(36).slice(2);
+    shuffle = shuffleRecord(new Date(), Math.random().toString(36).slice(2));
+    shuffleStore.set(SHUFFLE_KEY, JSON.stringify(shuffle));
     render({ keepScroll: true });
   },
   'run-analysis': () => runAnalysis('analyze'),
