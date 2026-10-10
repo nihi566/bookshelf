@@ -3,7 +3,7 @@ import { isUneditedLineDraft, notesForAnalysis, notesOf } from './notes.js';
 import { humanLine } from './analysis/prompts.js';
 import { hash } from './text.js';
 
-// 既定: 前回の分析のあとに点が 10 件増えるか、24 時間たって 1 件以上増えたら分析する
+// 既定: 前回の分析のあとに点が 10 件増える・減るか、24 時間たって 1 件以上増えた・減ったら分析する
 export const AUTO_DEFAULTS = { enabled: true, minPoints: 10, maxHours: 24 };
 // 自動の分析が失敗したあと、次に試すまで待つ時間（LLM が止まっているときに試し続けない）
 export const AUTO_RETRY_MS = 30 * 60 * 1000;
@@ -13,14 +13,29 @@ const MIN_POINTS = 4;
 /** 前回の分析に入っていない点（どの線にも「まだつながらない点」にも無い点）。前回が無ければすべて（形の壊れた分析も無いものとして扱う） */
 export function pendingPointList(points, analysis) {
   if (!analysis || !Array.isArray(analysis.lines)) return points;
-  const ids = (xs) => (Array.isArray(xs) ? xs.filter((x) => typeof x === 'string') : []);
-  const seen = new Set([...analysis.lines.flatMap((l) => ids(l?.highlightIds)), ...ids(analysis.isolated)]);
+  const seen = analyzedIds(analysis);
   return points.filter((p) => !seen.has(p.id));
 }
 
 /** 前回の分析に入っていない点の数（pendingPointList の件数） */
 export function pendingPoints(points, analysis) {
   return pendingPointList(points, analysis).length;
+}
+
+/** 前回の分析に入っていた点の ID（どの線か「まだつながらない点」にある点） */
+function analyzedIds(analysis) {
+  const ids = (xs) => (Array.isArray(xs) ? xs.filter((x) => typeof x === 'string') : []);
+  return new Set([...analysis.lines.flatMap((l) => ids(l?.highlightIds)), ...ids(analysis.isolated)]);
+}
+
+/**
+ * 前回の分析に入っていて、今は分析の点に無い点の数（本を技術書にした・消した・思いつきを捨てた。NIH-107）。
+ * 前回が無ければ 0。分析し直すと消えた点は線からも外れるので、分析のあとは 0 に戻る
+ */
+export function removedPoints(points, analysis) {
+  if (!analysis || !Array.isArray(analysis.lines)) return 0;
+  const now = new Set(points.map((p) => p.id));
+  return [...analyzedIds(analysis)].filter((id) => !now.has(id)).length;
 }
 
 /**
@@ -67,30 +82,36 @@ function elapsed(now, iso) {
 
 /**
  * 自動の分析を始めるか。
- * - 前回の分析のあとに点が minPoints 件以上増えた / 前回から maxHours 時間以上たって、点が 1 件以上増えたか永久ノートを書いた・直した
+ * - 前回の分析のあとに点が minPoints 件以上増えた・減った / 前回から maxHours 時間以上たって、点が 1 件以上増えた・減ったか永久ノートを書いた・直した
+ *   （増えた点と消えた点は合わせて数える。NIH-107）
  * - 前回の分析が失敗してから AUTO_RETRY_MS たっていなければ待つ（次の機会に試し直す）
  * - 利用者が分析を中止してから AUTO_RETRY_MS たっていなければ待つ（止めた直後に始め直さない）
  * @param {{ points: {id:string}[], analysis: object|null, config?: object, now?: Date, lastFailureAt?: string|null, lastCancelledAt?: string|null, notesChanged?: boolean }} p
  *   notesChanged: 前回の分析のあとに永久ノートを書いた・直したか（notesChanged() の結果）
- * @returns {{ due: boolean, pending: number, reason: string }}
+ * @returns {{ due: boolean, pending: number, removed: number, reason: string }}
  */
 export function autoAnalyzeDue({ points, analysis, config, now = new Date(), lastFailureAt = null, lastCancelledAt = null, notesChanged: notes = false }) {
   const c = autoConfig(config);
   const pending = pendingPoints(points, analysis);
+  const removed = removedPoints(points, analysis);
+  const changed = pending + removed;
   const at = now.valueOf();
-  if (!c.enabled) return { due: false, pending, reason: '自動の分析は切ってあります' };
-  if (points.length < MIN_POINTS) return { due: false, pending, reason: `点が ${MIN_POINTS} 件未満です` };
-  if (!pending && !notes) return { due: false, pending, reason: '前回の分析のあとに増えた点も、書いた・直した永久ノートもありません' };
-  if (elapsed(at, lastFailureAt) < AUTO_RETRY_MS) return { due: false, pending, reason: '前回の分析が失敗したので、少し待ってから試し直します' };
-  if (elapsed(at, lastCancelledAt) < AUTO_RETRY_MS) return { due: false, pending, reason: '分析を中止したので、少し待ってから始めます' };
+  const result = (due, reason) => ({ due, pending, removed, reason });
+  if (!c.enabled) return result(false, '自動の分析は切ってあります');
+  if (points.length < MIN_POINTS) return result(false, `点が ${MIN_POINTS} 件未満です`);
+  if (!changed && !notes) return result(false, '前回の分析のあとに増えた点・減った点も、書いた・直した永久ノートもありません');
+  if (elapsed(at, lastFailureAt) < AUTO_RETRY_MS) return result(false, '前回の分析が失敗したので、少し待ってから試し直します');
+  if (elapsed(at, lastCancelledAt) < AUTO_RETRY_MS) return result(false, '分析を中止したので、少し待ってから始めます');
   const since = elapsed(at, analysis?.createdAt);
   const hours = since === Infinity ? Infinity : since / 3_600_000;
-  if (pending >= c.minPoints) return { due: true, pending, reason: `前回の分析のあとに点が ${pending} 件増えました` };
+  const counts = [pending ? `${pending} 件増え` : '', removed ? `${removed} 件減り` : ''].filter(Boolean).join('、');
+  const pointsText = counts ? `点が ${counts}ました` : '';
+  if (changed >= c.minPoints) return result(true, `前回の分析のあとに${pointsText}`);
   if (hours >= c.maxHours) {
-    const what = [pending ? `点が ${pending} 件増えました` : '', notes ? '永久ノートを書いた・直しました' : ''].filter(Boolean).join('。');
-    return { due: true, pending, reason: `前回の分析から ${Number.isFinite(hours) ? Math.floor(hours) : '–'} 時間たち、${what}` };
+    const what = [pointsText, notes ? '永久ノートを書いた・直しました' : ''].filter(Boolean).join('。');
+    return result(true, `前回の分析から ${Number.isFinite(hours) ? Math.floor(hours) : '–'} 時間たち、${what}`);
   }
   // 永久ノートは、書いている途中で分析が始まらないように、前回から maxHours たつまで待つ（点の数の条件には数えない）
-  if (!pending) return { due: false, pending, reason: `書いた・直した永久ノートは、前回から ${c.maxHours} 時間たつと分析に入れます` };
-  return { due: false, pending, reason: `点が ${c.minPoints} 件増えるか、前回から ${c.maxHours} 時間たつと分析します` };
+  if (!changed) return result(false, `書いた・直した永久ノートは、前回から ${c.maxHours} 時間たつと分析に入れます`);
+  return result(false, `点が ${c.minPoints} 件増える・減るか、前回から ${c.maxHours} 時間たつと分析します`);
 }
