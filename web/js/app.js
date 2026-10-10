@@ -28,7 +28,7 @@ import { wishlist } from './views/wishlist.js';
 import { records } from './views/records.js';
 import { editThoughtSheet, lineSheet, newThoughtSheet, thoughtsView } from './views/thoughts.js';
 import { assignThoughtToLine, lineAssignmentOf, unassignThought } from '../core/line-assignments.js';
-import { FEEDBACK_LABELS, addHighlight, deleteBook, emptyLibrary, guessTechnical, listBooks, mergeParsed, parseShuffleRecord, registerBook, setFeedback, shuffleRecord, shuffleSeedFor, updateBook, updateHighlight } from '../core/model.js';
+import { FEEDBACK_LABELS, addHighlight, deleteBook, emptyLibrary, guessTechnical, listBooks, mergeParsed, parseSeenPicks, parseShuffleRecord, recentPickIds, recordSeenPicks, registerBook, setFeedback, shuffleRecord, shuffleSeedFor, updateBook, updateHighlight } from '../core/model.js';
 import { THOUGHT_STATUS, addThought, deleteThought, thoughtsOf, updateThought } from '../core/thoughts.js';
 import { isThought, pointById } from '../core/points.js';
 import { randomId } from '../core/text.js';
@@ -100,6 +100,16 @@ const shuffleStore = (() => {
   }
 })();
 let shuffle = parseShuffleRecord(shuffleStore.get(SHUFFLE_KEY));
+// 今日の点で見せた点の、日付つきの履歴（数日分）。次の日からはこれを後ろへ回す（NIH-99）
+const SEEN_KEY = 'today-seen';
+let seenPicks = parseSeenPicks(shuffleStore.get(SEEN_KEY));
+
+function markPicksSeen(ids) {
+  const next = recordSeenPicks(seenPicks, new Date(), ids);
+  if (next === seenPicks) return;
+  seenPicks = next;
+  shuffleStore.set(SEEN_KEY, JSON.stringify(seenPicks));
+}
 let currentPath = null;
 let currentHash = null;
 
@@ -121,7 +131,7 @@ function render({ keepScroll = false } = {}) {
   }
   if (!match) match = { view: home, tab: 'home', params: {} };
   // refresh: 同じ画面の描き直し（同期・編集のあと）。別の画面から来たとき・リンクを押したときは false
-  const ctx = { state, params: match.params, query, shuffle: shuffleSeedFor(shuffle, new Date()), refresh: location.hash === currentHash, markDiscoveryRead: readDiscovery };
+  const ctx = { state, params: match.params, query, shuffle: shuffleSeedFor(shuffle, new Date()), recentPicks: recentPickIds(seenPicks, new Date()), markPicksSeen, refresh: location.hash === currentHash, markDiscoveryRead: readDiscovery };
   currentHash = location.hash;
   // 取り込みの結果は、画面を離れたら（別の画面から来たら）忘れる
   if (!ctx.refresh) state.lastImport = null;
