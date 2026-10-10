@@ -65,7 +65,7 @@ test('findIsbn: 書名と著者が一致する本の ISBN を返す。長い書�
   assert.equal(await findIsbn({ title: 'プロジェクトマネジメントの基本が全部わかる本 交渉・タスクマネジメント', author: '橋本 将功' }, { fetchImpl: ndl.fetchImpl }), '9784798160832');
   // 著者が合わない本は採らない
   assert.equal(await findIsbn({ title: '別の人の働く理由', author: '戸田智弘' }, { fetchImpl: ndl.fetchImpl }), '');
-  // 著者で絞って探す（姓だけ）
+  // 著者で絞って探す（空白・読点で区切られていれば最初の語）
   assert.equal(ndl.calls[0].creator, '戸田智弘');
   assert.equal(ndl.calls[0].mediatype, 'books');
 });
@@ -78,6 +78,18 @@ test('findIsbn: ISBN の無い・ISBN-10 にできない版は飛ばす。通信
   ]);
   assert.equal(await findIsbn({ title: '夜と霧', author: 'フランクル' }, { fetchImpl: ndl.fetchImpl }), '4622039702');
   await assert.rejects(findIsbn({ title: '夜と霧', author: '' }, { fetchImpl: fakeNdl([], { status: 503 }).fetchImpl }), /HTTP 503/);
+});
+
+test('findIsbn: 著者が分からない本は、書名を短くして探さない（書名の一部だけで別の本に当たるため）', async () => {
+  const ndl = fakeNdl([{ title: 'プロジェクトマネジメントの基本が全部わかる本', creator: '橋本, 将功', isbn: '9784798160832' }]);
+  assert.equal(await findIsbn({ title: 'プロジェクトマネジメントの基本が全部わかる本 交渉・タスクマネジメント', author: '' }, { fetchImpl: ndl.fetchImpl }), '');
+  assert.equal(await findIsbn({ title: 'プロジェクトマネジメントの基本が全部わかる本 (技術評論社)', author: '' }, { fetchImpl: ndl.fetchImpl }), '9784798160832');
+});
+
+test('findIsbn: 問い合わせに時間制限を付ける', async () => {
+  let signal;
+  await findIsbn({ title: '本', author: '' }, { fetchImpl: async (url, init) => ((signal = init.signal), new Response('<rss></rss>')) });
+  assert.ok(signal instanceof AbortSignal);
 });
 
 function libraryWith(books) {
@@ -127,6 +139,15 @@ test('fillMissingIsbns: 見つかった ISBN を本に付け、探した本は�
   const calls = ndl.calls.length;
   assert.deepEqual(await fillMissingIsbns({ store, fetchImpl: ndl.fetchImpl }), { checked: 0, found: 0 });
   assert.equal(ndl.calls.length, calls, '探した本はもう探さない');
+});
+
+test('fillMissingIsbns: 4xx で断られた本は探したことにして先へ進む（その本で毎回止まらない）', async () => {
+  const store = createStore(mkdtempSync(path.join(tmpdir(), 'bh-cover-')));
+  await store.saveLibrary(libraryWith([{ id: 'b1', title: '断られる本' }, { id: 'b2', title: '夜と霧', author: 'フランクル' }]));
+  const ok = fakeNdl([{ title: '夜と霧', creator: 'フランクル', isbn: '4622039702' }]);
+  const fetchImpl = async (url, init) => (new URL(url).searchParams.get('title') === '断られる本' ? new Response('bad', { status: 400 }) : ok.fetchImpl(url, init));
+  assert.deepEqual(await fillMissingIsbns({ store, fetchImpl }), { checked: 2, found: 1 });
+  assert.deepEqual(Object.keys((await store.state()).coverLookup.tried).sort(), ['b1', 'b2']);
 });
 
 test('fillMissingIsbns: 1 回に探すのは max 冊まで（残りは次の確認で）', async () => {

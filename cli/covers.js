@@ -12,15 +12,19 @@ const NDL = 'https://ndlsearch.ndl.go.jp/api/opensearch';
 export const LOOKUP_INTERVAL_MS = 10 * 60_000;
 // 1 回の確認で探す冊数（国立国会図書館サーチへの問い合わせをまとめて送りすぎない。残りは次の確認で）
 const PER_RUN = 20;
+// 応答が無いまま待ち続けると、次の確認も始まらなくなる
+const REQUEST_TIMEOUT_MS = 15_000;
 
 /**
  * 探す書名の候補。書名そのまま → 括弧（叢書名など）を除く → 副題を除く → 空白で区切った最も長い語。
  * Play ブックスの書名は副題や叢書名まで 1 行に入っていて、そのままでは見つからないことが多い
+ * shorten: false なら括弧を除くところまで（副題・語に縮めない）
  * @param {string} title @returns {string[]}
  */
-export function titleCandidates(title) {
+export function titleCandidates(title, { shorten = true } = {}) {
   const full = String(title || '').trim();
   const noBrackets = full.replace(/[（(【［[][^）)】］\]]*[）)】］\]]/g, ' ').replace(/\s+/g, ' ').trim();
+  if (!shorten) return [...new Set([full, noBrackets].filter(Boolean))];
   const noSubtitle = noBrackets.split(/[:：―～]/)[0].trim();
   const longest = noSubtitle.split(/\s+/).reduce((a, b) => ([...b].length > [...a].length ? b : a), '');
   return [...new Set([full, noBrackets, noSubtitle, longest].filter(Boolean))];
@@ -32,11 +36,12 @@ export function titleCandidates(title) {
  */
 export async function findIsbn(book, { fetchImpl = fetch, signal } = {}) {
   const creator = String(book.author || '').split(/[、,，\s]/)[0];
-  for (const title of titleCandidates(book.title)) {
+  // 著者が分からない本は、書名を短くして探さない（書名の一部だけで別の本に当たり、その表紙が出続けるため）
+  for (const title of titleCandidates(book.title, { shorten: Boolean(creator) })) {
     const params = new URLSearchParams({ title, mediatype: 'books', cnt: '10' });
     if (creator) params.set('creator', creator);
-    const res = await fetchImpl(`${NDL}?${params}`, { signal });
-    if (!res.ok) throw new Error(`国立国会図書館サーチ: HTTP ${res.status}`);
+    const res = await fetchImpl(`${NDL}?${params}`, { signal: signal || AbortSignal.timeout(REQUEST_TIMEOUT_MS) });
+    if (!res.ok) throw Object.assign(new Error(`国立国会図書館サーチ: HTTP ${res.status}`), { status: res.status });
     const items = parseNdlRss(await res.text()).filter((it) => isbn10(it.isbn));
     const hit = matchVolume(items, { title, author: book.author || '' });
     if (hit) return hit.isbn;
@@ -66,8 +71,13 @@ export async function fillMissingIsbns({ store, fetchImpl = fetch, signal, max =
       const isbn = await findIsbn(b, { fetchImpl, signal });
       if (isbn) found[b.id] = isbn;
       checked.push(b.id);
-    } catch {
-      // 通信できない間は続けても失敗するだけなので、次の確認まで待つ
+    } catch (e) {
+      // その本の問い合わせだけが断られた（4xx。混みあっている 429 を除く）なら、探したことにして先へ進む（毎回その本で止まらない）
+      if (e.status >= 400 && e.status < 500 && e.status !== 429) {
+        checked.push(b.id);
+        continue;
+      }
+      // 通信できない・混みあっている間は続けても失敗するだけなので、次の確認まで待つ
       break;
     }
   }
