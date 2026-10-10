@@ -17,7 +17,7 @@ import { analysisStamp, applyImport } from '../web/core/importing.js';
 import { mergeKindleSync, normalizeKindleReport } from '../web/core/kindle-status.js';
 import { createLlmClient, normalizeBaseUrl } from '../web/core/analysis/llm.js';
 import { analyzeLibrary, recommendBooks, recommendationNote } from '../web/core/analysis/pipeline.js';
-import { autoAnalyzeDue, autoConfig, pendingPoints } from '../web/core/auto-analysis.js';
+import { autoAnalyzeDue, autoConfig, notesChanged, pendingPoints } from '../web/core/auto-analysis.js';
 import { analysisShapeError } from '../web/core/analysis/shape.js';
 import { swVersion } from '../web/core/serve-version.js';
 import { restoreAnalysis } from '../web/core/analysis/restore.js';
@@ -214,9 +214,9 @@ export function createCompanionServer({ store, log = console.log, catalogFetch, 
           kindleSync: st.kindleSync || null,
           analysis: analysis ? { createdAt: analysis.createdAt, recommendedAt: analysis.recommendedAt, ...analysis.stats } : null,
           job: publicJob(),
-          google: drive ? publicDrive(drive.status) : null,
+          google: drive ? { ...publicDrive(drive.status), lastNew: st.playbooksSync?.lastNew || null } : null,
           // 自動の分析の設定と、最後に成功した時刻・失敗の理由（知識の画面に出す）
-          autoAnalysis: { ...autoConfig(cfg.autoAnalyze), running: Boolean(auto), pending: pendingPoints(analysisPoints(lib), analysis), ...publicAutoState(st.autoAnalysis) },
+          autoAnalysis: { ...autoConfig(cfg.autoAnalyze), running: Boolean(auto), pending: pendingPoints(analysisPoints(lib), analysis), notesChanged: notesChanged(lib, analysis), ...publicAutoState(st.autoAnalysis) },
         });
       }
       case 'GET /api/history':
@@ -468,6 +468,7 @@ export function createCompanionServer({ store, log = console.log, catalogFetch, 
       now,
       lastFailureAt: later(st.autoAnalysis?.lastErrorAt, lastStop.failure),
       lastCancelledAt: later(st.autoAnalysis?.lastCancelledAt, lastStop.cancel),
+      notesChanged: notesChanged(library, analysis),
     });
     if (!r.due || job.running) return { started: false, ...r };
     log(`[auto] ${r.reason}。分析を始めます`);

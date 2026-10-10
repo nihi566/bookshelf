@@ -507,11 +507,11 @@ export function listBooks(library, { includeEmpty = false } = {}) {
     .sort((a, b) => b.lastHighlightedAt.localeCompare(a.lastHighlightedAt) || a.title.localeCompare(b.title, 'ja'));
 }
 
-/** 全文検索。空白区切りの AND 検索、タグ（#tag）・ソース・お気に入りで絞り込み */
-export function searchHighlights(library, query = '', { source = '', favorite = false, bookId = '' } = {}) {
+/** 全文検索。空白区切りの AND 検索、タグ（#tag）・ソース・お気に入り・文を直した点で絞り込み */
+export function searchHighlights(library, query = '', { source = '', favorite = false, edited = false, bookId = '' } = {}) {
   const terms = normalizeText(query).split(' ').filter(Boolean);
   return liveHighlights(library)
-    .filter((h) => (!source || h.source === source) && (!favorite || h.favorite) && (!bookId || h.bookId === bookId))
+    .filter((h) => (!source || h.source === source) && (!favorite || h.favorite) && (!edited || isTextEdited(h)) && (!bookId || h.bookId === bookId))
     .filter((h) => {
       if (!terms.length) return true;
       const book = library.books[h.bookId];

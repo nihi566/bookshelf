@@ -184,3 +184,64 @@ test('NIH-66: 「この文に戻す」は文の欄に取り込んだときの文
   assert.doesNotMatch(action, /updateHighlight|persistLibrary|autoSyncAfterChange/);
   assert.match(app, /openSheet\(\s*highlightEditSheet\(h\)/);
 });
+
+// NIH-69: 検索で「文を直した点」だけに絞る
+function twoBooks() {
+  const lib = emptyLibrary();
+  mergeParsed(lib, [
+    { title: '本', source: 'kindle', highlights: [{ text: '習慣の文', location: 1 }, { text: '集中の文', location: 2 }] },
+    { title: '紙の本', source: 'paper', highlights: [{ text: '習慣の紙', location: 1 }] },
+  ], { now: T1 });
+  const id = (title, text) => highlightIdFor(bookIdFor(title), text);
+  return { lib, a: id('本', '習慣の文'), b: id('本', '集中の文'), c: id('紙の本', '習慣の紙') };
+}
+
+test('searchHighlights: edited で文を直した点だけを返し、ほかの条件と組み合わせられる', () => {
+  const { lib, a, b, c } = twoBooks();
+  updateHighlight(lib, a, { text: '習慣の文（直した）' }, T2);
+  updateHighlight(lib, c, { text: '習慣の紙（直した）', favorite: true }, T2);
+  // 直してから元に戻した点は数えない
+  updateHighlight(lib, b, { text: '集中の文を直した' }, T2);
+  updateHighlight(lib, b, { text: '集中の文' }, T3);
+  const ids = (opts, q = '') => searchHighlights(lib, q, opts).map((h) => h.id).sort();
+  assert.deepEqual(ids({ edited: true }), [a, c].sort());
+  assert.deepEqual(ids({ edited: true, source: 'kindle' }), [a]);
+  assert.deepEqual(ids({ edited: true, favorite: true }), [c]);
+  assert.deepEqual(ids({ edited: true }, '紙'), [c]);
+  assert.equal(searchHighlights(lib, '').length, 3, 'edited を付けなければ絞らない');
+});
+
+test('searchPoints: edited のときは思いつき（取り込んだときの文を持たない）を出さない', async () => {
+  const { searchPoints } = await import('../web/core/points.js');
+  const { addThought } = await import('../web/core/thoughts.js');
+  const { lib, a } = twoBooks();
+  addThought(lib, { text: '習慣の思いつき' }, T2);
+  updateHighlight(lib, a, { text: '習慣の文（直した）' }, T2);
+  assert.equal(searchPoints(lib, '習慣').length, 3);
+  assert.deepEqual(searchPoints(lib, '習慣', { edited: true }).map((p) => p.id), [a]);
+});
+
+test('検索の画面: 「直した文」のチップで edited=1 を切り替え、選ぶと直した点だけが出る', async () => {
+  const { search } = await import('../web/js/views/library.js');
+  const { lib, a } = twoBooks();
+  updateHighlight(lib, a, { text: '習慣の文（直した）' }, T2);
+  const mount = (qs) => {
+    const boxes = {};
+    const root = {
+      querySelector(sel) {
+        if (sel === 'input[name="q"]') return { value: '', addEventListener() {} };
+        boxes[sel] ||= { innerHTML: '', isConnected: true, insertAdjacentHTML() {} };
+        return boxes[sel];
+      },
+    };
+    search.mount(root, { state: { library: lib, analysis: null, settings: { ai: { mode: 'direct', companionUrl: '' } }, servedByCompanion: false }, query: new URLSearchParams(qs) });
+    return boxes;
+  };
+  const off = mount('source=kindle');
+  assert.match(off['#search-filters'].innerHTML, /<a class="chip " href="#\/search\?source=kindle&amp;edited=1" >直した文<\/a>/);
+  assert.match(off['#search-results'].innerHTML, /2 件/);
+  const on = mount('source=kindle&edited=1');
+  assert.match(on['#search-filters'].innerHTML, /<a class="chip on" href="#\/search\?source=kindle" aria-current="true">直した文<\/a>/);
+  assert.match(on['#search-results'].innerHTML, /1 件/);
+  assert.match(on['#search-results'].innerHTML, /習慣の文（直した）/);
+});

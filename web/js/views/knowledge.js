@@ -6,7 +6,8 @@ import { layerNav } from './layers.js';
 import { TFIDF_HINT } from '../../core/analysis/pipeline.js';
 import { hasChanges } from '../../core/analysis/changes.js';
 import { RELATED_MAX } from '../../core/analysis/neighbors.js';
-import { analysisPointById, isThought } from '../../core/points.js';
+import { analysisPointById, analysisPoints, isThought } from '../../core/points.js';
+import { pendingPointList } from '../../core/auto-analysis.js';
 import { assignedThoughtIds } from '../../core/line-assignments.js';
 import { isLineStarred } from '../../core/line-stars.js';
 import { lineIndex, pendingNudge, pointCard } from '../ui.js';
@@ -65,12 +66,13 @@ export function autoStatusBlock(state) {
   if (state.settings.ai.mode !== 'companion') return html`<p class="small muted">自動の分析は、PC のコンパニオン（bh serve）を使うときに動きます。</p>`;
   const au = state.pcInfo?.autoAnalysis;
   if (!au) return '';
-  const rule = `前回の分析のあとに点が ${au.minPoints} 件増えるか、${au.maxHours} 時間たって 1 件以上増えると、PC が分析し直します`;
+  const rule = `前回の分析のあとに点が ${au.minPoints} 件増えるか、${au.maxHours} 時間たって点が 1 件以上増えるか永久ノートを書いた・直したとき、PC が分析し直します`;
   // bh analyze で分析したときは PC の記録が無いので、手元の分析結果の時刻（最後に成功した分析）で補う
   const okAt = au.lastSuccessAt || state.analysis?.createdAt;
   const cancelled = au.lastCancelledAt && (!au.lastSuccessAt || au.lastCancelledAt > au.lastSuccessAt);
   return html`<p class="small">自動の分析: ${au.enabled ? html`<b>オン</b> — ${rule}` : html`<b>オフ</b>（PC で <span class="code">bh config auto on</span> で入れられます）`}</p>
     <p class="small muted">最後に成功: ${when(okAt)}${au.lastTrigger === 'auto' && au.lastSuccessAt && !au.lastError && !cancelled ? '（自動）' : ''}</p>
+    ${au.enabled && au.notesChanged ? html`<p class="small muted">前回の分析のあとに書いた・直した永久ノートがあります。次の分析で面・立体に入ります。</p>` : ''}
     ${cancelled ? html`<p class="small muted">${when(au.lastCancelledAt)} に分析を中止しました。少し時間をおいてから、PC が自動で始め直します。</p>` : ''}
     ${au.lastError ? html`<p class="notice err">${when(au.lastErrorAt)} の分析に失敗しました: ${au.lastError}。前回の結果はそのまま残っています。次の機会に PC がもう一度試します。</p>` : ''}`;
 }
@@ -78,6 +80,7 @@ export function autoStatusBlock(state) {
 const REBUILT = {
   full: '「最初から作り直す」で、すべて作り直しました',
   grew: '前回作り直したときから点が大きく増えたので、最初から作り直しました',
+  unraveled: '点が減って前回の線がすべてほどけたので、最初から作り直しました',
   format: '今回は最初から作り直しました',
 };
 
@@ -381,6 +384,19 @@ export const isolatedView = {
   render({ state }) {
     const hs = (state.analysis?.isolated || []).map((id) => analysisPointById(state.library, id)).filter(Boolean);
     return html`<a class="back" href="#/knowledge">‹ 知識</a><div class="page-head"><h1>まだつながっていない点</h1></div>
+      ${hs.map((h) => pointCard(h, { library: state.library }))}`;
+  },
+};
+
+/** 前回の分析のあとに増えた点（知識の画面・ホームの「増えた点 N 件」から。数え方は pendingPoints と同じ） */
+export const pendingView = {
+  render({ state }) {
+    const head = html`<a class="back" href="#/knowledge">‹ 知識</a><div class="page-head"><h1>前回の分析のあとに増えた点</h1></div>`;
+    if (!state.analysis) return html`${head}<p class="card small muted">まだ分析していません。</p>`;
+    const hs = pendingPointList(analysisPoints(state.library), state.analysis);
+    if (!hs.length) return html`${head}<p class="card small muted">前回の分析のあとに増えた点はありません。</p>`;
+    return html`${head}
+      <p class="help">${hs.length} 件。まだどの線(グループ)にも入っていません。分析し直す前に、自分のメモ・タグ・★を付けておくと、次の分析の線に反映されます。</p>
       ${hs.map((h) => pointCard(h, { library: state.library }))}`;
   },
 };
