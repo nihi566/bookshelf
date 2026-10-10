@@ -13,6 +13,7 @@
 import { feedbackByStatus } from '../model.js';
 import { analysisPoints, currentPointId, embedText, isThought, legacyEmbedText, pointLabel } from '../points.js';
 import { notesForAnalysis } from '../notes.js';
+import { notesKey } from '../auto-analysis.js';
 import { bookKey, hash, maskSecrets, truncate } from '../text.js';
 import { PROMPT_VERSION, RECOMMEND_KINDS, RELATION_TYPES, farPrompt, humanLine, linePrompt, pickPrompt, planePrompt, recommendPrompt, searchPrompt, solidPrompt } from './prompts.js';
 import { centroid, dot, l2normalize, tfidfEmbed } from './vectors.js';
@@ -286,6 +287,8 @@ export async function analyzeLibrary({ library, llm: rawLlm, cache = emptyCache(
     incremental: Boolean(base),
     // 最後に最初から作り直したときの点の数（ここから 1.5 倍に増えたら作り直す）
     pointsAtFull: base ? pointsAtFull : points.length,
+    // 面・立体に渡した永久ノートの指紋（ノートだけを直したときも、自動の分析が始まるように。NIH-83）
+    notesKey: notesKey(notes),
     stats: { points: points.length, thoughts: points.filter(isThought).length, lines: lines.length, planes: planes.length, isolated: isolated.length, calls },
     lines: lines.map(({ vector, ...l }) => l),
     planes,
