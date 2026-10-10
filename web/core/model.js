@@ -375,8 +375,16 @@ function mergeHighlight(a, b) {
     if (!validText(out.text)) out.text = [a.text, b.text].find(validText) ?? out.text;
   }
   // 伸ばしたハイライトに置き換わった古い点は、どちらの端末から来ても消えたまま
-  const supersededBy = [a.supersededBy, b.supersededBy].filter(Boolean).sort()[0];
-  if (supersededBy) Object.assign(out, { deleted: true, supersededBy });
+  const supersededBy = [a, b].filter((x) => x.supersededBy && !x.joinedAt).map((x) => x.supersededBy).sort()[0];
+  if (supersededBy) {
+    Object.assign(out, { deleted: true, supersededBy });
+    delete out.joinedAt;
+    return out;
+  }
+  // 利用者がくっつけた点は戻せるので、削除と同じく利用者の編集が新しい方を採る
+  const [, winner] = order(a, b, userStamp(a, USER_FIELDS), userStamp(b, USER_FIELDS));
+  if (winner.joinedAt && winner.supersededBy) Object.assign(out, { deleted: true, supersededBy: winner.supersededBy, joinedAt: winner.joinedAt });
+  else for (const k of ['supersededBy', 'joinedAt']) delete out[k];
   return out;
 }
 
@@ -542,6 +550,83 @@ export function updateHighlight(library, id, patch, now = new Date().toISOString
   h.userUpdatedAt = now;
   library.updatedAt = now;
   return h;
+}
+
+/** 同じ本の中で並びが前・次の点（消した点は飛ばす。無ければ null） */
+export function highlightNeighbors(library, id) {
+  const h = library.highlights[id];
+  if (!h || h.deleted) return { prev: null, next: null };
+  const list = bookHighlights(library, h.bookId);
+  const i = list.findIndex((x) => x.id === id);
+  return { prev: list[i - 1] || null, next: list[i + 1] || null };
+}
+
+// くっつけるときに戻せるよう控える欄（戻すときは、この欄だけを控えた値に戻す）
+const JOIN_FIELDS = ['text', 'originalText', 'textEditedAt', 'location', 'locationEnd', 'favorite', 'tags', 'userNote', 'deleted', 'supersededBy', 'joinedAt'];
+
+// 日本語・中国語（全角の記号を含む）や空白どうしはそのままつなぎ、英語などの文どうしは空白を挟む
+const NO_SPACE = /[\s\u3000-\u9fff\uf900-\ufaff\uff00-\uffef]/u;
+const joinText = (a, b) => (NO_SPACE.test(a.slice(-1)) || NO_SPACE.test(b.slice(0, 1)) ? a + b : `${a} ${b}`);
+const joinLines = (...xs) => xs.filter(Boolean).join('\n');
+
+/**
+ * 同じ本の 2 つの点を 1 つにくっつける（ハイライトするときに 2 つに分かれてしまった文を戻す）。
+ * 本の中で前にある点を残し、文は「前の文 + 次の文」に直す（文を直したのと同じ扱い。ID は変えない）。
+ * 後ろの点は前の点に置き換わった点にする（Kindle で伸ばしたハイライトと同じく、リンク・ノートの根拠は前の点としてたどれる）
+ * @returns {{ highlight: object, undo: { before: object[] } }} undo は unjoinHighlights に渡す
+ */
+export function joinHighlights(library, idA, idB, now = new Date().toISOString()) {
+  const live = (id) => (Object.hasOwn(library.highlights, id) && !library.highlights[id].deleted ? library.highlights[id] : null);
+  const x = live(idA);
+  const y = live(idB);
+  if (!x || !y) throw new Error('くっつける点が見つかりません（消したか、同期で変わった可能性があります）');
+  if (x.id === y.id) throw new Error('別の点を選んでください');
+  if (x.bookId !== y.bookId) throw new Error('くっつけられるのは同じ本の点だけです');
+  // 並びは本の画面と同じ順で決める（位置もページも日付も同じ点どうしでも、画面で前に見えている方を前にする）
+  const order = bookHighlights(library, x.bookId).map((h) => h.id);
+  const [first, second] = order.indexOf(x.id) <= order.indexOf(y.id) ? [x, y] : [y, x];
+  const before = [first, second].map((h) => ({ id: h.id, ...Object.fromEntries(JOIN_FIELDS.filter((k) => k in h).map((k) => [k, structuredClone(h[k])])) }));
+  if (!('originalText' in first)) first.originalText = first.text;
+  first.text = joinText(String(first.text), String(second.text));
+  first.textEditedAt = now;
+  // 後ろの点の取り込んだメモは自分のメモに足す（取り込んだメモの欄は同期で空欄を埋め合うので、戻したあとに残ってしまう）
+  first.userNote = joinLines(first.userNote, second.userNote, second.note);
+  first.favorite = Boolean(first.favorite || second.favorite);
+  first.tags = [...new Set([...(first.tags || []), ...(second.tags || [])])];
+  const starts = [first.location, second.location].filter((v) => v != null);
+  const ends = [first.locationEnd ?? first.location, second.locationEnd ?? second.location].filter((v) => v != null);
+  if (starts.length) first.location = Math.min(...starts);
+  if (ends.length) first.locationEnd = Math.max(...ends);
+  Object.assign(second, { deleted: true, supersededBy: first.id, joinedAt: now });
+  for (const h of [first, second]) Object.assign(h, { updatedAt: now, userUpdatedAt: now });
+  library.updatedAt = now;
+  return { highlight: first, undo: { at: now, before } };
+}
+
+/**
+ * joinHighlights を戻す。控えた欄を戻し、時刻は進める（同期で、もう一方の端末のくっつけた結果に負けないように）。
+ * くっつけた後にどちらかの点が変わっていたら（直した・同期で変わった）、その編集を消さないよう何も変えずに断る
+ */
+export function unjoinHighlights(library, undo, now = new Date().toISOString()) {
+  const [a, b] = (undo?.before || []).map((s) => (Object.hasOwn(library.highlights, s.id) ? library.highlights[s.id] : null));
+  if (!a || !b || a.updatedAt !== undo.at || b.joinedAt !== undo.at || b.supersededBy !== a.id) {
+    throw new Error('くっつけた後に点が変わったため、元に戻せません');
+  }
+  for (const saved of undo.before) {
+    const h = library.highlights[saved.id];
+    const textChanged = h.text !== saved.text;
+    for (const k of JOIN_FIELDS) {
+      if (k in saved) h[k] = structuredClone(saved[k]);
+      else delete h[k];
+    }
+    // 文を戻したことも同期で伝える（取り込んだときの文を残し、直した時刻を進める）
+    if (textChanged) {
+      if (!('originalText' in h)) h.originalText = h.text;
+      h.textEditedAt = now;
+    }
+    Object.assign(h, { updatedAt: now, userUpdatedAt: now });
+  }
+  library.updatedAt = now;
 }
 
 /**
