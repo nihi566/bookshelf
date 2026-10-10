@@ -583,3 +583,11 @@ test('価格チェックの画面: 一覧は pageWishlist で切り出した分�
   assert.doesNotMatch(src, /r\.items\.map\(itemRow\)/, '絞り込み結果の全件を描かない');
   assert.match(src, /id="wl-more"/);
 });
+
+test('価格チェックの画面: 同期・編集のあとの描き直し（refresh）では「さらに表示」で増やした件数を保ち、別の画面から来たら 1 ページ目に戻す（NIH-23）', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const src = await readFile(new URL('../web/js/views/wishlist.js', import.meta.url), 'utf8');
+  assert.match(src, /^let shown = WISHLIST_PAGE_SIZE;/m, '表示件数は画面の描き直しをまたいで持つ');
+  assert.match(src, /if \(!ctx\?\.refresh\) shown = WISHLIST_PAGE_SIZE;/);
+  assert.doesNotMatch(src, /^\s+let shown =/m, 'mountList の中で毎回 100 に戻さない');
+});

@@ -20,6 +20,8 @@ const readingLabel = (reading, n) => `${READINGS[reading]} ${n}`;
 const fallbackStore = { ...memoryStore(), canStore: false };
 let filters = { shelf: 'all', reading: 'all', q: '', sort: 'default', ku: false, min: '', max: '', tag: 'all', kind: 'all' };
 let normalFilters = null; // 検索・おすすめ・ホームのリンクから開いている間だけ、開く前の条件（openWishlistFilters）
+// 一覧に描く件数。同期・編集のあとの描き直しでは保ち（見ていた行が消えて表示位置がずれないように）、別の画面から来たら 1 ページ目に戻す
+let shown = WISHLIST_PAGE_SIZE;
 
 function lastScrapedText(iso) {
   if (!iso) return '未取得';
@@ -47,6 +49,7 @@ export const wishlist = {
     const q = ctx?.query?.get('q') || '';
     const ku = ctx?.query?.get('ku') === '1';
     ({ filters, normal: normalFilters } = openWishlistFilters(filters, normalFilters, { q, ku, refresh: Boolean(ctx?.refresh) }));
+    if (!ctx?.refresh) shown = WISHLIST_PAGE_SIZE;
     const show = (w) => {
       // 購入済みの本を読み始めたか（本棚に線があるか）を引く
       const reading = readingLookup(ctx?.state?.library ? listBooks(ctx.state.library) : []);
@@ -122,7 +125,6 @@ function mountList(root, body, items, store, lastScraped) {
   const $ = (id) => body.querySelector(`#${id}`);
   const list = $('wl-list');
   // 一覧は先頭から shown 件だけ描く（絞り込み・並べ替えのたびに 1 ページ目に戻し、タグ・★の付け外しでは今の件数を保つ）
-  let shown = WISHLIST_PAGE_SIZE;
   let current = []; // いまの条件で絞り込んだ全件（「さらに表示」で続きを足すときに使う）
   let shelfTotal = 0; // いまの分類（すべて/Kindle/…）の冊数
 
