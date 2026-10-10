@@ -6,7 +6,7 @@ import { THOUGHT_LABEL, liveThoughts } from '../../core/thoughts.js';
 import { normalizeText } from '../../core/text.js';
 import { browserStore, formatPrice, loadMarks, searchWishlist, wishlistSummary } from '../../core/wishlist.js';
 import { loadWishlist } from '../wishlist-data.js';
-import { bookRow, bookSpine, emptyBooksBlock, highlightCard, homeAlertBlock, lineIndex, pointCard, sourceBadge } from '../ui.js';
+import { bookRow, bookSpine, emptyBooksBlock, highlightCard, homeAlertBlock, lineIndex, pendingNudge, pointCard, sourceBadge } from '../ui.js';
 import { inboxBlock } from './thoughts.js';
 import { discoveriesBlock, partnerBlock } from './discoveries.js';
 import { noteRow } from './notes.js';
@@ -77,7 +77,8 @@ export const home = {
               <div class="layer-label solid">立体</div>
               <h2>${a.solid.title}</h2>
               <p class="core">${a.solid.core}</p>
-            </a>`
+            </a>
+            ${pendingNudge(state, { toKnowledge: true })}`
         : html`<div class="section"><h2>AI 分析</h2></div>
             <div class="card"><p>点が ${s.points} 件たまりました。ローカル LLM で点をつないで、線(グループ)・面・立体にしてみましょう。</p>
             <a class="btn primary" href="#/knowledge">分析する</a></div>`}
