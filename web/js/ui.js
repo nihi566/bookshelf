@@ -4,7 +4,8 @@ import { isTextEdited, listBooks, SOURCES } from '../core/model.js';
 import { hash, isoDate } from '../core/text.js';
 import { kindleSyncState } from '../core/kindle-status.js';
 import { bookCoverUrl } from '../core/covers.js';
-import { isThought } from '../core/points.js';
+import { analysisPoints, isThought } from '../core/points.js';
+import { pendingPoints } from '../core/auto-analysis.js';
 import { THOUGHT_LABEL, THOUGHT_STATUS } from '../core/thoughts.js';
 
 export const COLOR_VAR = {
@@ -169,12 +170,38 @@ export function emptyBooksBlock(state) {
 }
 
 let toastTimer;
-export function toast(message, ms = 2600) {
+/**
+ * 画面の下に短い通知を出す。action を渡すと通知の中にボタンを 1 つ出す（「元に戻す」など）。
+ * ボタンは 1 回押すか、通知が消えたら無くなる（見えない通知のボタンを押せるままにしない）
+ * @param {string} message
+ * @param {number} [ms]
+ * @param {{ label: string, run: () => unknown }} [action]
+ */
+export function toast(message, ms = 2600, action) {
   const el = document.getElementById('toast');
+  const hide = () => {
+    el.classList.remove('show');
+    el.querySelector('.toast-action')?.remove();
+  };
   el.textContent = message;
+  el.classList.toggle('has-action', Boolean(action));
+  if (action) {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'toast-action';
+    btn.textContent = action.label;
+    btn.addEventListener('click', () => {
+      clearTimeout(toastTimer);
+      hide();
+      Promise.resolve()
+        .then(action.run)
+        .catch((e) => toast(e?.message || `${action.label}ことができませんでした`, 5000));
+    });
+    el.append(' ', btn);
+  }
   el.classList.add('show');
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => el.classList.remove('show'), ms);
+  toastTimer = setTimeout(hide, ms);
 }
 
 /** シートの入力が開いたときから変わったか。entries は [...new FormData(form)] の形 */
@@ -237,7 +264,12 @@ export function openSheet(content, onSubmit) {
     e.preventDefault();
     tryClose();
   };
+  // 開いただけで書く欄に入らない（スマホではキーボードが開き、閉じないと下のボタンが押せない。NIH-90）。
+  // dialog に autofocus が無いと、showModal() は中の最初の欄に入る。開いてすぐ書くシートは、その欄に autofocus を付けてある
+  const typeFirst = Boolean(form.querySelector('[autofocus]'));
+  dialog.toggleAttribute('autofocus', !typeFirst);
   dialog.showModal();
+  if (!typeFirst) dialog.focus({ preventScroll: true });
 }
 
 /** 時刻を短く（例: 9/27 18:05） */
@@ -329,4 +361,18 @@ export function homeAlertBlock(state) {
   const playbooks = playbooksSyncAlert(state.pcInfo.google);
   const text = autoAnalysisAlert(state.pcInfo.autoAnalysis);
   return html`${kindleAlertBlock(state)}${playbooks ? html`<a class="notice err" href="#/import" style="${ALERT_STYLE}">${playbooks}（詳しく）</a>` : ''}${text ? html`<a class="notice err" href="#/knowledge" style="${ALERT_STYLE}">${text}（詳しく）</a>` : ''}`;
+}
+
+/**
+ * 前回の分析のあとに増えた点（どの線にも「まだつながらない点」にも入っていない点。ID で数える）の数と、「分析し直す」への案内。
+ * 知識の画面は 0 件でも数を出す。ホーム（toKnowledge）は 1 件以上のときだけ出し、知識の画面の「分析し直す」へリンクする
+ */
+export function pendingNudge(state, { toKnowledge = false } = {}) {
+  const a = state.analysis;
+  if (!a) return '';
+  const n = pendingPoints(analysisPoints(state.library), a);
+  const head = html`前回の分析のあとに増えた点 <b>${n}</b> 件`;
+  if (!n) return toKnowledge ? '' : html`<p class="small">${head}</p>`;
+  const lead = toKnowledge ? html` — <a href="#/knowledge">分析し直す</a>` : '。「分析し直す」で、変わったところだけ作り直します';
+  return html`<p class="small pending-nudge" style="${toKnowledge ? 'margin-top:8px' : ''}">${head}（まだ線につながっていません）${lead}</p>`;
 }

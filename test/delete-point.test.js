@@ -21,7 +21,9 @@ test('NIH-91: 点のカードに、編集を開かずに押せる「点を削除
 test('NIH-91: カードの削除ボタンは、編集シートの削除と同じく点に deleted の印を付けて保存する', () => {
   const src = readFileSync(new URL('../web/js/app.js', import.meta.url), 'utf8');
   const body = src.match(/\n {2}async delete\(el\) \{\r?\n([\s\S]*?)\r?\n {2}\},/)?.[1] || '';
-  assert.match(body, /updateHighlight\(state\.library, el\.dataset\.id, \{ deleted: true \}\)/);
+  assert.match(body, /updateHighlight\(state\.library, id, \{ deleted: true \}\)/);
   assert.match(body, /await persistLibrary\(\)/);
+  // 確認なしの 1 押しなので、編集シートの削除と同じく通知から元に戻せる（NIH-22）
+  assert.match(body, /toast\('削除しました', 6000, \{ label: '元に戻す', run: \(\) => undoDeleteHighlight\(id\) \}\)/);
   assert.match(body, /autoSyncAfterChange\(\)/);
 });

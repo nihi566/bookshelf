@@ -246,3 +246,24 @@ test('G5-4: 前回からの変化（増えた線・大きくなった線・消�
   assert.equal(diffAnalyses(null, next), null);
   assert.equal(hasChanges(diffAnalyses(prev, prev)), false);
 });
+
+test('G5-4: Kindle で伸ばしただけの点は「大きくなった線」「新しくつながった点」に数えない', () => {
+  const prev = { createdAt: 'T1', lines: [{ id: 'L', name: 'L', highlightIds: ['h1', 'h2', 'h3'] }, { id: 'M', name: 'M', highlightIds: ['h4', 'h5'] }], isolated: [] };
+  // h1x は h1 を伸ばしたもの、h1y は h1x をさらに伸ばしたもの。h6 は本当に増えた点
+  const formerIdsOf = (id) => ({ h1x: ['h1'], h1y: ['h1x', 'h1'] })[id] || [];
+  const extended = { lines: [{ id: 'L', name: 'L', highlightIds: ['h1x', 'h2', 'h3'] }, prev.lines[1]] };
+  const d = diffAnalyses(prev, extended, formerIdsOf);
+  assert.deepEqual(d.grownLines, []);
+  assert.deepEqual(d.connectedPoints, []);
+  assert.equal(hasChanges(d), false);
+  // 2 回伸ばした点も、本当に増えた点はこれまでどおり数える
+  const grown = { lines: [{ id: 'L', name: 'L', highlightIds: ['h1y', 'h2', 'h3', 'h6'] }, prev.lines[1]] };
+  const g = diffAnalyses(prev, grown, formerIdsOf);
+  assert.deepEqual(g.grownLines, [{ id: 'L', name: 'L', added: 1 }]);
+  assert.deepEqual(g.connectedPoints, [{ pointId: 'h6', lineId: 'L' }]);
+  // 伸ばした点が別の線へ移ったときは、その線が大きくなった（前回どこかの線にいたので、新しくつながった点ではない）
+  const moved = { lines: [{ id: 'L', name: 'L', highlightIds: ['h2', 'h3'] }, { id: 'M', name: 'M', highlightIds: ['h4', 'h5', 'h1x'] }] };
+  const m = diffAnalyses(prev, moved, formerIdsOf);
+  assert.deepEqual(m.grownLines, [{ id: 'M', name: 'M', added: 1 }]);
+  assert.deepEqual(m.connectedPoints, []);
+});

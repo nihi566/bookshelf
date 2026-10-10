@@ -41,12 +41,13 @@ export function notesSummaryBlock(state) {
  * 書くシートの中身（新しいノート・直す）。根拠の点は、外すときにチェックを外す（足すのは点のページから）
  * @param {object|null} note 直すノート（新しく書くときは null）
  * @param {string[]} [pointIds] 新しく書くときの根拠の点
+ * @param {string} [draftTitle] 新しく書くときの題の下書き（リンクの理由など）
  */
-export function noteSheet(library, note = null, pointIds = []) {
+export function noteSheet(library, note = null, pointIds = [], draftTitle = '') {
   const ids = note ? note.pointIds : pointIds;
   const ev = noteEvidence(library, { pointIds: ids });
   return html`<h2>${note ? '永久ノートを編集' : '永久ノートを書く'}</h2>
-    <label class="field"><span>題（1 ノート = 1 アイデア）</span><input type="text" name="title" maxlength="${NOTE_TITLE_MAX}" value="${note?.title || ''}" placeholder="この考えを一言で" ${note ? '' : 'autofocus'}></label>
+    <label class="field"><span>題（1 ノート = 1 アイデア）</span><input type="text" name="title" maxlength="${NOTE_TITLE_MAX}" value="${(note ? note.title : draftTitle) || ''}" placeholder="この考えを一言で" ${note ? '' : 'autofocus'}></label>
     <label class="field"><span>本文（自分の言葉で）</span><textarea name="body" rows="8" maxlength="${NOTE_BODY_MAX}" placeholder="なぜそう考えるか・どこで使えるか">${note?.body || ''}</textarea></label>
     ${ev.length
       ? html`<fieldset class="note-evidence-edit"><legend>根拠の点（外すときはチェックを外す）</legend>
