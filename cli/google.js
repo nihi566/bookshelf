@@ -26,9 +26,12 @@ export const MIN_INTERVAL_SEC = 15;
 // 3: 取り込めない文書（problems）を残すようになった（前の版で失敗して記録済みの文書も、一度だけ読み直して載せる）
 const SYNC_VERSION = 3;
 
-/** ログインし直すしかない失敗（未ログイン・トークン失効・クライアント設定の誤り） */
-function needsLogin(message) {
-  return Object.assign(new Error(message), { needsLogin: true });
+/**
+ * ログインし直すしかない失敗（未ログイン・トークン失効・クライアント設定の誤り）。
+ * notSetUp: まだ Google を使う設定をしていない（クライアント ID・ログインが無い）。期限切れなど、設定したのに使えなくなったときは付けない
+ */
+function needsLogin(message, { notSetUp = false } = {}) {
+  return Object.assign(new Error(message), { needsLogin: true, notSetUp });
 }
 
 const b64url = (buf) => Buffer.from(buf).toString('base64url');
@@ -45,7 +48,7 @@ export function createGoogleClient({ store, fetchImpl = fetch }) {
 
   async function credentials() {
     const { google } = await store.config();
-    if (!google.clientId) throw needsLogin('Google のクライアント ID が未設定です（bh config google-client <クライアント ID> <クライアント シークレット>）');
+    if (!google.clientId) throw needsLogin('Google のクライアント ID が未設定です（bh config google-client <クライアント ID> <クライアント シークレット>）', { notSetUp: true });
     return google;
   }
 
@@ -68,7 +71,7 @@ export function createGoogleClient({ store, fetchImpl = fetch }) {
   async function accessToken() {
     if (access && access.expiresAt > Date.now() + 60_000) return access.token;
     const saved = await store.googleToken();
-    if (!saved?.refreshToken) throw needsLogin('Google にログインしていません（bh google login）');
+    if (!saved?.refreshToken) throw needsLogin('Google にログインしていません（bh google login）', { notSetUp: true });
     const { clientId, clientSecret } = await credentials();
     remember(await tokenRequest({ client_id: clientId, client_secret: clientSecret, refresh_token: saved.refreshToken, grant_type: 'refresh_token' }));
     return access.token;
@@ -254,7 +257,8 @@ export function describeSync(r) {
  */
 export function startDriveWatcher({ store, client, log = console.log }) {
   // problems: 取り込めないドキュメント（読めるようになるまで残る。error は直近の確認で出たものだけ）
-  const status = { active: false, checking: false, lastCheck: null, lastImport: null, lastResult: null, error: '', problems: [] };
+  // configured: Google を使う設定が済んでいるか（済んでいて error があるときだけ、ホームに警告を出す）
+  const status = { active: false, configured: false, checking: false, lastCheck: null, lastImport: null, lastResult: null, error: '', problems: [] };
   let timer = null;
   let stopped = false;
   let lastLogged = '';
@@ -268,14 +272,14 @@ export function startDriveWatcher({ store, client, log = console.log }) {
     status.checking = true;
     try {
       const r = await client.sync();
-      Object.assign(status, { active: true, lastCheck: new Date().toISOString(), lastResult: r, error: r.errors.join(' / '), problems: r.problems || [] });
+      Object.assign(status, { active: true, configured: true, lastCheck: new Date().toISOString(), lastResult: r, error: r.errors.join(' / '), problems: r.problems || [] });
       if (r.added || r.updated) status.lastImport = status.lastCheck;
       if (r.changed) log(`[google] ${describeSync(r)}`);
       // 書き出しに失敗したドキュメントは毎回試し直すので、同じエラーは 1 回だけ出す
       if (r.errors.length) logOnce(`[google] ! ${r.errors.join(' / ')}`);
       else lastLogged = '';
     } catch (e) {
-      Object.assign(status, { active: !e.needsLogin, error: e.message });
+      Object.assign(status, { active: !e.needsLogin, configured: !e.notSetUp, error: e.message });
       logOnce(`[google] ${e.message}`);
     } finally {
       status.checking = false;
