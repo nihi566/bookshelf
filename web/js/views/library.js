@@ -54,9 +54,9 @@ export const home = {
     return html`${alert}
       <div class="stats">
         <a class="stat point" href="#/search"><b>${s.points}</b><span>点</span></a>
-        <a class="stat line" href="#/knowledge"><b>${a ? a.lines.length : '–'}</b><span>線</span></a>
-        <a class="stat plane" href="#/knowledge"><b>${a ? a.planes.length : '–'}</b><span>面</span></a>
-        <a class="stat solid" href="#/knowledge"><b>${a ? 1 : '–'}</b><span>立体</span></a>
+        <a class="stat line" href="#/lines"><b>${a ? a.lines.length : '–'}</b><span>線</span></a>
+        <a class="stat plane" href="#/planes"><b>${a ? a.planes.length : '–'}</b><span>面</span></a>
+        <a class="stat solid" href="#/solid"><b>${a ? 1 : '–'}</b><span>立体</span></a>
       </div>
       <p class="small muted" style="margin-top:8px">${[`本 ${s.books} 冊`, ...bySource, `★ ${s.favorites}`].map((x, i) => html`${i ? ' ・ ' : ''}<span class="nowrap">${x}</span>`)}${s.technical ? ` ・ 技術書の線 ${s.technical} 件は点に数えていません` : ''}</p>
 
@@ -70,8 +70,8 @@ export const home = {
       ${inboxBlock(state)}
 
       ${a
-        ? html`<div class="section"><h2>立体</h2><a class="small" href="#/knowledge">知識マップへ</a></div>
-            <a class="card solid-card" href="#/knowledge" style="display:block;color:inherit;text-decoration:none">
+        ? html`<div class="section"><h2>立体</h2><a class="small" href="#/solid">知識マップへ</a></div>
+            <a class="card solid-card" href="#/solid" style="display:block;color:inherit;text-decoration:none">
               <div class="layer-label solid">立体</div>
               <h2>${a.solid.title}</h2>
               <p class="core">${a.solid.core}</p>
@@ -82,7 +82,7 @@ export const home = {
 
       <div id="home-wishlist"></div>
 
-      <div class="section"><h2>最近の点</h2><a class="small" href="#/search">すべて見る</a></div>
+      <div class="section"><h2>最近の点</h2><a class="small" href="#/search">全ての点の一覧</a></div>
       ${recent.map((h) => highlightCard(h, { library: lib, lines: idx.get(h.id) }))}`;
   },
   mount(root) {
@@ -128,7 +128,7 @@ export const books = {
       return html`<a class="chip ${on ? 'on' : ''}" href="#/books?${params}" ${on ? html`aria-current="true"` : ''}>${label}</a>`;
     };
     return html`<div class="page-head"><div><h1>読んだ本</h1><div class="sub">${list.length} 冊</div></div><span class="row"><button class="btn small" data-action="register-book">＋ 紙の本</button><a class="btn small" href="#/import">＋ 取り込む</a></span></div>
-      <div class="row" style="margin-bottom:12px"><a class="btn small" href="#/search">ハイライトを検索</a></div>
+      <div class="row" style="margin-bottom:12px"><a class="btn small" href="#/search">全ての点の一覧・検索</a></div>
       <form class="search-box" data-form="book-filter" role="search"><input type="search" name="q" value="${query.get('q') || ''}" placeholder="書名・著者で絞り込む" aria-label="書名・著者で絞り込む"></form>
       <div class="chips" role="group" aria-label="読み方で絞り込む">${chip('source', '', 'すべて')}${chip('source', 'kindle', 'Kindle')}${chip('source', 'playbooks', 'Play Books')}${chip('source', 'paper', '紙の本')}${chip('source', 'memo', '読書メモ')}</div>
       <div class="chips" style="margin-top:6px" role="group" aria-labelledby="books-sort-label"><span class="chips-label" id="books-sort-label">並び順</span>${chip('sort', 'recent', '最近')}${chip('sort', 'title', '書名')}${chip('sort', 'count', '点の数')}</div>
@@ -202,7 +202,7 @@ export const search = {
     // 探し方の切り替え（言葉の一致 / 意味の近さ。意味で探すときは PC の AI を使う）
     const mode = (on, label, value) => html`<a class="chip ${on ? 'on' : ''}" data-mode="${value}" href="${modeHref(query, value)}" ${on ? html`aria-current="true"` : ''}>${label}</a>`;
     return html`<a class="back" href="#/books">‹ 読んだ本</a>
-      <div class="page-head"><h1>点を検索</h1><a class="btn small" id="search-ask" href="${askHref(q)}">問いかける</a></div>
+      <div class="page-head"><div><h1>全ての点</h1><div class="sub">本に引いた線と思いつき。言葉・意味で探せます</div></div><a class="btn small" id="search-ask" href="${askHref(q)}">問いかける</a></div>
       <form class="search-box" data-form="search" role="search">
         <input type="search" name="q" value="${q}" placeholder="${meaning ? '探したいこと（言葉が一致しなくても探します）' : '言葉・書名・#タグ（空白で AND）'}" aria-label="ハイライトと思いつきを検索" autocomplete="off" ${q ? '' : 'autofocus'}>
       </form>

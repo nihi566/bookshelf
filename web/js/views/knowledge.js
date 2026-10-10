@@ -1,8 +1,8 @@
 // 知識（AI 分析）の画面: 点 → 線 → 面 → 立体、おすすめの本
-import { html, raw, esc, safeUrl } from '../html.js';
+import { html, safeUrl } from '../html.js';
 import { FEEDBACK_LABELS, feedbackByStatus, feedbackFor, libraryStats } from '../../core/model.js';
-import { layoutKnowledgeMap } from '../../core/knowledge-map.js';
-import { isoDate, truncate } from '../../core/text.js';
+import { isoDate } from '../../core/text.js';
+import { layerNav } from './layers.js';
 import { TFIDF_HINT } from '../../core/analysis/pipeline.js';
 import { hasChanges } from '../../core/analysis/changes.js';
 import { RELATED_MAX } from '../../core/analysis/neighbors.js';
@@ -125,6 +125,8 @@ export const knowledge = {
       ${jobPanel(job)}`;
     if (!a) {
       return html`${head}
+        <div class="section"><h2>点・線・面・立体</h2></div>
+        ${layerNav(state)}
         <div class="section"><h2>分析のしくみ</h2></div>
         <ol class="card help stack" style="padding-left:2em">
           <li><b style="color:var(--layer-point)">点</b> — ハイライトを埋め込みベクトルにします（埋め込みモデルが無ければ文字の特徴で代用）。</li>
@@ -138,24 +140,15 @@ export const knowledge = {
     }
     const recs = a.recommendations || [];
     return html`${head}
+      <div class="section"><h2>点・線・面・立体</h2><span class="small muted">押すとそれぞれのページへ</span></div>
+      ${layerNav(state)}
+      <a class="solid-link" href="#/solid"><span class="layer-label solid">立体 ・ 知識の核</span><b>${a.solid.title}</b></a>
+
       ${changesBlock(a)}
-      <div class="section"><h2>立体</h2></div>
-      <section class="card solid-card stack">
-        <div class="layer-label solid">立体 ・ 知識の核</div>
-        <h2>${a.solid.title}</h2>
-        <p class="core">${a.solid.core}</p>
-        ${a.solid.principles?.length ? html`<div><h3 class="small">行動の原則</h3><ul class="plain">${a.solid.principles.map((p) => html`<li>${p}</li>`)}</ul></div>` : ''}
-      </section>
 
       ${notesSummaryBlock(state)}
 
       ${outlinesSummaryBlock(state)}
-
-      <div class="section"><h2>知識マップ</h2><span class="small muted">面と線をタップ</span></div>
-      ${mapSvg(a)}
-
-      <div class="section"><h2>面（テーマ）</h2><span class="small muted">${a.planes.length}</span></div>
-      ${a.planes.map((p) => planeCard(a, p))}
 
       ${farBlock(state)}
 
@@ -272,16 +265,6 @@ export const historyView = {
   },
 };
 
-function planeCard(a, p) {
-  const lines = p.lineIds.map((id) => a.lines.find((l) => l.id === id)).filter(Boolean);
-  return html`<section class="card plane-card">
-    <div class="layer-label plane">面</div>
-    <h3><a href="#/knowledge/plane/${p.id}">${p.name}</a></h3>
-    <p class="small">${p.summary}</p>
-    <div class="lines-of-plane">${lines.map((l) => html`<a class="line-row" href="#/knowledge/line/${l.id}"><b>${l.name}</b><span>${l.summary}</span><em>点 ${l.highlightIds.length}</em></a>`)}</div>
-  </section>`;
-}
-
 function recCard(a, r, i, library) {
   const plane = a.planes.find((p) => p.id === r.planeId);
   const v = r.verified;
@@ -313,66 +296,11 @@ function amazonLink(title, asin) {
   return url ? html`<p class="small"><a class="rec-amazon" href="${url}" target="_blank" rel="noopener noreferrer">${label}</a></p>` : '';
 }
 
-/** 立体を放射状の図にする（中心=核、内側=面、外側=線） */
-function mapSvg(a) {
-  const { nodes, edges } = layoutKnowledgeMap(a);
-  const byId = new Map(nodes.map((n) => [n.id, n]));
-  // ラベルの幅も含めて表示範囲を決める（全角 1 文字 ≒ フォントサイズ）
-  const extent = (n) => {
-    if (n.kind !== 'line') {
-      const half = (Math.min([...n.label].length, 13) * (n.kind === 'core' ? 96 : 84)) / 2;
-      return [n.x - half, n.x + half];
-    }
-    const width = Math.min([...n.label].length, 10) * 66 + 60;
-    return n.x < -1 ? [n.x - width, n.x] : n.x > 1 ? [n.x, n.x + width] : [n.x - width / 2, n.x + width / 2];
-  };
-  const xs = nodes.flatMap(extent);
-  const ys = nodes.map((n) => n.y);
-  const minX = Math.min(...xs) - 40;
-  const minY = Math.min(...ys) - 120;
-  const w = Math.max(...xs) - minX + 40;
-  const h = Math.max(...ys) - minY + 200;
-  const edgeSvg = edges
-    .map((e) => {
-      const f = byId.get(e.from);
-      const t = byId.get(e.to);
-      if (!f || !t) return '';
-      if (e.kind === 'relation') {
-        const mx = (f.x + t.x) / 2 * 0.55;
-        const my = (f.y + t.y) / 2 * 0.55;
-        return `<path class="edge-relation" d="M${f.x},${f.y} Q${mx},${my} ${t.x},${t.y}"><title>${esc(e.label)}</title></path>`;
-      }
-      return `<line class="edge-${e.kind === 'core' ? 'core' : 'plane'}" x1="${+f.x}" y1="${+f.y}" x2="${+t.x}" y2="${+t.y}"/>`;
-    })
-    .join('');
-  // 面の名前は横に並ぶので、隣の面と重ならない字数までにする（全角 1 文字 ≒ フォントサイズ 84）
-  const planes = nodes.filter((n) => n.kind === 'plane');
-  const planeChars = (n) => {
-    const gaps = planes.filter((o) => o !== n && Math.abs(o.y - n.y) < 160).map((o) => Math.abs(o.x - n.x));
-    return gaps.length ? Math.max(4, Math.min(12, Math.floor(Math.min(...gaps) / 84) - 1)) : 12;
-  };
-  const nodeSvg = nodes
-    .map((n) => {
-      const r = n.kind === 'core' ? 70 : n.kind === 'plane' ? 48 : Math.min(36, 16 + (n.weight || 1) * 2);
-      const label = esc(truncate(n.label, n.kind === 'line' ? 9 : n.kind === 'plane' ? planeChars(n) : 12));
-      const anchor = n.kind === 'line' ? (n.x < -1 ? 'end' : n.x > 1 ? 'start' : 'middle') : 'middle';
-      const tx = n.kind === 'line' ? n.x + (anchor === 'end' ? -r - 16 : anchor === 'start' ? r + 16 : 0) : n.x;
-      const ty = n.kind === 'line' ? n.y + 22 : n.y + r + 92;
-      const href = n.kind === 'plane' ? `#/knowledge/plane/${encodeURIComponent(n.ref)}` : n.kind === 'line' ? `#/knowledge/line/${encodeURIComponent(n.ref)}` : '#/knowledge';
-      return `<a href="${esc(href)}" class="n-${n.kind}"><circle cx="${+n.x}" cy="${+n.y}" r="${+r}"/><text x="${+tx}" y="${+ty}" text-anchor="${anchor}">${label}</text><title>${esc(n.label)}</title></a>`;
-    })
-    .join('');
-  return html`<div class="map-wrap" id="map-wrap">
-    <div class="map-tools"><button type="button" data-action="map-zoom" data-dir="1" aria-label="拡大">＋</button><button type="button" data-action="map-zoom" data-dir="-1" aria-label="縮小" disabled>－</button></div>
-    <svg id="knowledge-map" viewBox="${minX} ${minY} ${w} ${h}" width="100%" role="img" aria-label="知識マップ">${raw(edgeSvg)}${raw(nodeSvg)}</svg>
-  </div>`;
-}
-
 export const lineView = {
   render({ state, params }) {
     const a = state.analysis;
     const l = a?.lines.find((x) => x.id === params.id);
-    if (!l) return html`<p class="empty">線が見つかりません。<a href="#/knowledge">知識へ</a></p>`;
+    if (!l) return html`<p class="empty">線が見つかりません（分析し直して無くなった可能性があります）。<a href="#/lines">線の一覧へ</a></p>`;
     const plane = a.planes.find((p) => p.lineIds.includes(l.id));
     // 線の点（本に引いた線と思いつき）
     const hs = l.highlightIds.map((id) => analysisPointById(state.library, id)).filter(Boolean);
@@ -382,7 +310,7 @@ export const lineView = {
     const books = new Set(hs.filter((h) => !isThought(h)).map((h) => h.bookId));
     const thoughts = hs.filter(isThought).length;
     const siblings = plane ? plane.lineIds.filter((id) => id !== l.id).map((id) => a.lines.find((x) => x.id === id)).filter(Boolean) : [];
-    return html`<a class="back" href="${plane ? `#/knowledge/plane/${plane.id}` : '#/knowledge'}">‹ ${plane ? plane.name : '知識'}</a>
+    return html`<a class="back" href="${plane ? `#/knowledge/plane/${plane.id}` : '#/lines'}">‹ ${plane ? plane.name : '線'}</a>
       <div class="layer-label line">線 ・ ${books.size} 冊の本${thoughts ? `と思いつき ${thoughts} 件` : ''}をつなぐ</div>
       <h1 style="margin:4px 0 12px">${l.name}</h1>
       <section class="card stack">
@@ -407,11 +335,11 @@ export const planeView = {
   render({ state, params }) {
     const a = state.analysis;
     const p = a?.planes.find((x) => x.id === params.id);
-    if (!p) return html`<p class="empty">面が見つかりません。<a href="#/knowledge">知識へ</a></p>`;
+    if (!p) return html`<p class="empty">面が見つかりません（分析し直して無くなった可能性があります）。<a href="#/planes">面の一覧へ</a></p>`;
     const rels = (a.solid.relations || []).filter((r) => r.from === p.id || r.to === p.id);
     const lines = p.lineIds.map((id) => a.lines.find((l) => l.id === id)).filter(Boolean);
     const bookIds = [...new Set(lines.flatMap((l) => l.highlightIds.map((id) => state.library.highlights[id]?.bookId)).filter(Boolean))];
-    return html`<a class="back" href="#/knowledge">‹ 知識</a>
+    return html`<a class="back" href="#/planes">‹ 面</a>
       <div class="layer-label plane">面</div>
       <h1 style="margin:4px 0 12px">${p.name}</h1>
       <section class="card stack"><p style="font-family:var(--serif);line-height:1.9">${p.summary}</p>
