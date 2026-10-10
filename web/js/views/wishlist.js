@@ -3,7 +3,7 @@
 import { html } from '../html.js';
 import { download } from '../services.js';
 import { bookSpine, toast } from '../ui.js';
-import { applyImportedMarks, bookmeterUrl, browserStore, cleanupSyncedMarks, collectMarks, filterWishlist, formatPrice, inShelf, KEYS, loadMarks, marksFile, memoryStore, openWishlistFilters, parseMarksFile, priceChange, priceSparkline, priceTotal, readingCounts, readingLookup, saveMarks, shelfCounts, TAG_FILTER_LABELS, TAG_LABELS, tagCounts, toggleMark } from '../../core/wishlist.js';
+import { applyImportedMarks, bookmeterUrl, browserStore, cleanupSyncedMarks, collectMarks, filterWishlist, formatPrice, inShelf, KEYS, labelCounts, loadMarks, marksFile, memoryStore, openWishlistFilters, parseMarksFile, priceChange, priceSparkline, priceTotal, readingCounts, readingLookup, saveMarks, shelfCounts, TAG_FILTER_LABELS, TAG_LABELS, tagCounts, toggleMark } from '../../core/wishlist.js';
 import { listBooks } from '../../core/model.js';
 import { isoDate } from '../../core/text.js';
 import { cachedWishlist, FEED_URL, FEED_WANTED_URL, loadWishlist } from '../wishlist-data.js';
@@ -18,7 +18,7 @@ const readingLabel = (reading, n) => `${READINGS[reading]} ${n}`;
 // localStorage に保存できないブラウザ用。画面を移っても付けたタグが残るよう 1 つだけ持ち、
 // canStore: false のままにして「閉じる前に書き出して」の案内と公開データとの差の書き出しを使う（旧画面と同じ）
 const fallbackStore = { ...memoryStore(), canStore: false };
-let filters = { shelf: 'all', reading: 'all', q: '', sort: 'default', ku: false, min: '', max: '', tag: 'all', kind: 'all' };
+let filters = { shelf: 'all', reading: 'all', q: '', sort: 'default', ku: false, min: '', max: '', tag: 'all', kind: 'all', label: '' };
 let normalFilters = null; // 検索・おすすめ・ホームのリンクから開いている間だけ、開く前の条件（openWishlistFilters）
 
 function lastScrapedText(iso) {
@@ -92,16 +92,20 @@ function mountList(root, body, items, store, lastScraped) {
     filters.tag = storedFilter(store, KEYS.tagFilter, Object.keys(TAG_FILTER_LABELS));
     filters.kind = storedFilter(store, KEYS.kindFilter, ['manga', 'book']);
   }
+  // レーベルの選択肢は全部の本から作る（分類を変えても選択肢は消さず、件数だけ描き直す）
+  const labels = labelCounts(items).map(([label]) => label);
+  if (filters.label && !labels.includes(filters.label)) filters.label = '';
   root.querySelector('#wl-sub').textContent = `スクレイピングした本の価格 ${items.length} 冊`;
   body.innerHTML = String(html`
     <p class="small muted">価格の最終取得: ${lastScrapedText(lastScraped)}</p>
     <p class="small muted">フィードで受け取る: <a href="${FEED_URL}" target="_blank" rel="noopener noreferrer" type="application/atom+xml">すべての知らせ</a> / <a href="${FEED_WANTED_URL}" target="_blank" rel="noopener noreferrer" type="application/atom+xml">読みたい本・希望価格・大きな値下がりだけ</a></p>
     <div class="chips" role="group" aria-label="表示する分類">${Object.entries(SHELVES).map(([k, label]) => html`<button type="button" class="chip" data-wl-shelf="${k}" aria-pressed="${String(filters.shelf === k)}">${shelfLabel(k, shelfCount[k])}</button>`)}</div>
     <div class="chips" role="group" aria-label="購入済みの内訳" id="wl-reading" ${filters.shelf === 'purchased' ? '' : 'hidden'}>${Object.keys(READINGS).map((k) => html`<button type="button" class="chip" data-wl-reading="${k}" aria-pressed="${String(filters.reading === k)}"></button>`)}</div>
-    <div class="search-box wl-search" role="search"><input type="search" id="wl-q" value="${filters.q}" placeholder="書名・ASIN で絞り込む" aria-label="書名・ASIN で絞り込む（空白で区切ると全部を含むもの）" autocomplete="off"></div>
+    <div class="search-box wl-search" role="search"><input type="search" id="wl-q" value="${filters.q}" placeholder="書名・出版社（レーベル）・ASIN で絞り込む" aria-label="書名・出版社（レーベル）・ASIN で絞り込む（空白で区切ると全部を含むもの）" autocomplete="off"></div>
     <div class="wl-controls">
       <label class="wl-field"><span>並べ替え</span><select id="wl-sort">${Object.entries(SORTS).map(([k, label]) => html`<option value="${k}" ${filters.sort === k ? 'selected' : ''}>${label}</option>`)}</select></label>
       <label class="wl-field"><span>タグ</span><select id="wl-tag">${Object.entries(TAG_FILTER_LABELS).map(([k, label]) => html`<option value="${k}" ${filters.tag === k ? 'selected' : ''}>${label}</option>`)}</select></label>
+      <label class="wl-field wl-label"><span>出版社（書名のレーベル）</span><select id="wl-label"><option value="">すべて</option>${labels.map((label) => html`<option value="${label}" ${filters.label === label ? 'selected' : ''}>${label}</option>`)}</select></label>
       <label class="wl-field wl-price"><span>価格（円）</span><span class="row"><input type="number" id="wl-min" inputmode="numeric" min="0" value="${filters.min}" placeholder="下限" aria-label="価格の下限（円）"><span aria-hidden="true">〜</span><input type="number" id="wl-max" inputmode="numeric" min="0" value="${filters.max}" placeholder="上限" aria-label="価格の上限（円）"></span></label>
       <label class="wl-check"><input type="checkbox" id="wl-ku" ${filters.ku ? 'checked' : ''}> Kindle Unlimited のみ</label>
     </div>
@@ -109,7 +113,7 @@ function mountList(root, body, items, store, lastScraped) {
     <p class="notice err wl-price-error" id="wl-price-error" role="alert" hidden>価格の下限が上限より大きいため、価格の条件は使っていません。</p>
     <div class="row spread wl-count-row"><p class="small muted" id="wl-count" aria-live="polite"></p><button type="button" class="btn small" id="wl-reset" hidden>条件をクリア</button></div>
     <ul class="wl-list" id="wl-list"></ul>
-    <p class="empty" id="wl-empty" hidden>条件に一致する本がありません。検索語・種別・タグ・価格の条件を見直してください。</p>
+    <p class="empty" id="wl-empty" hidden>条件に一致する本がありません。検索語・種別・タグ・出版社・価格の条件を見直してください。</p>
     <div class="card wl-export">
       <p class="small" id="wl-marks-summary"></p>
       <div class="row"><button type="button" class="btn small" id="wl-export">読んだ・評価を書き出す</button><button type="button" class="btn small" id="wl-import">書き出したファイルを読み込む</button></div>
@@ -127,6 +131,8 @@ function mountList(root, body, items, store, lastScraped) {
     const inCurrentShelf = items.filter((item) => inShelf(item, filters.shelf));
     const counts = tagCounts(inCurrentShelf);
     for (const option of $('wl-tag').options) option.textContent = `${TAG_FILTER_LABELS[option.value]}（${counts[option.value]}）`;
+    const perLabel = new Map(labelCounts(inCurrentShelf));
+    for (const option of $('wl-label').options) option.textContent = option.value ? `${option.value}（${perLabel.get(option.value) || 0}）` : `すべて（${inCurrentShelf.length}）`;
     // 「購入済み」タグの付け外しで分類の件数が変わる
     const shelves = shelfCounts(items);
     for (const b of body.querySelectorAll('[data-wl-shelf]')) b.textContent = shelfLabel(b.dataset.wlShelf, shelves[b.dataset.wlShelf]);
@@ -135,7 +141,7 @@ function mountList(root, body, items, store, lastScraped) {
     $('wl-reading').hidden = filters.shelf !== 'purchased';
     $('wl-price-error').hidden = !r.priceRangeInvalid;
     $('wl-count').textContent = `${r.items.length}件 / 全${inCurrentShelf.length}件を表示${totalText(r.items)}`;
-    $('wl-reset').hidden = !((filters.shelf === 'purchased' && filters.reading !== 'all') || filters.q.trim() || filters.ku || filters.min !== '' || filters.max !== '' || filters.tag !== 'all' || filters.kind !== 'all' || filters.sort !== 'default');
+    $('wl-reset').hidden = !((filters.shelf === 'purchased' && filters.reading !== 'all') || filters.q.trim() || filters.ku || filters.min !== '' || filters.max !== '' || filters.tag !== 'all' || filters.kind !== 'all' || filters.label || filters.sort !== 'default');
     $('wl-empty').hidden = r.items.length !== 0;
     list.innerHTML = String(html`${r.items.map(itemRow)}`);
     const s = collectMarks(items, store);
@@ -166,13 +172,14 @@ function mountList(root, body, items, store, lastScraped) {
       return renderItems();
     }
     if (btn.id === 'wl-reset') {
-      Object.assign(filters, { reading: 'all', q: '', sort: 'default', ku: false, min: '', max: '', tag: 'all', kind: 'all' });
+      Object.assign(filters, { reading: 'all', q: '', sort: 'default', ku: false, min: '', max: '', tag: 'all', kind: 'all', label: '' });
       setPressed('data-wl-reading', 'all');
       saveFilter(KEYS.tagFilter, null);
       saveFilter(KEYS.kindFilter, null);
       $('wl-q').value = $('wl-min').value = $('wl-max').value = '';
       $('wl-sort').value = 'default';
       $('wl-tag').value = 'all';
+      $('wl-label').value = '';
       $('wl-ku').checked = false;
       setPressed('data-wl-kind-filter', 'all');
       return renderItems();
@@ -194,7 +201,7 @@ function mountList(root, body, items, store, lastScraped) {
   });
 
   const onInput = (id, key, transform = (el) => el.value) => {
-    $(id).addEventListener(id === 'wl-ku' || id === 'wl-sort' || id === 'wl-tag' ? 'change' : 'input', (e) => {
+    $(id).addEventListener(id === 'wl-ku' || id === 'wl-sort' || id === 'wl-tag' || id === 'wl-label' ? 'change' : 'input', (e) => {
       filters[key] = transform(e.target);
       if (key === 'tag') saveFilter(KEYS.tagFilter, filters.tag === 'all' ? null : filters.tag);
       renderItems();
@@ -203,6 +210,7 @@ function mountList(root, body, items, store, lastScraped) {
   onInput('wl-q', 'q');
   onInput('wl-sort', 'sort');
   onInput('wl-tag', 'tag');
+  onInput('wl-label', 'label');
   onInput('wl-min', 'min');
   onInput('wl-max', 'max');
   onInput('wl-ku', 'ku', (el) => el.checked);

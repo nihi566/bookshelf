@@ -164,7 +164,8 @@ node cli/bh.js serve  # http://localhost:8787 で Web アプリを開発
 - `web/` … 静的サイト（GitHub Pages にそのまま公開）。`web/core/` はブラウザと Node で共用する純粋なモジュール
 - `cli/` … `bh` コマンドとコンパニオンサーバ
 - `kindle_system/` … 欲しい本の価格チェック（Python。Amazon・読書メーターの「読みたい本」を集めて価格を記録する）。
-  使い方は `kindle_system/README.md`。テストは `cd kindle_system && python -m unittest discover -s test`
+  使い方は `kindle_system/README.md`。テストは `cd kindle_system && python -m unittest discover -s test`。
+  集めた本は Web アプリの「価格」（`#/wishlist`）で見られ、書名・出版社・ASIN の検索、出版社（書名の末尾の「(光文社新書)」のようなレーベル。書名にレーベルが無い本は選べない）・タグ・価格・Kindle Unlimited・種別で絞り込める
 - `web/wishlist-site/` … `kindle_system/` が書き出す欲しい本のデータ（`wishlist.json` / `feed.xml` / `feed-wanted.xml`。生成物なので直接編集しない）。
   `python run.py sync` がこれらだけを main に commit・push し、Pages に公開される
 - `.github/workflows/pages.yml` … テストと GitHub Pages への公開（リポジトリの Settings → Pages で Source を「GitHub Actions」に）
