@@ -88,6 +88,20 @@ test('NIH-99: 履歴を保存して読み直せる。無い・壊れている・
   assert.deepEqual(parseSeenPicks('[{"day":"2026-10-10","ids":["a",3]},{"day":5}]'), [{ day: '2026-10-10', ids: ['a'] }]);
 });
 
+test('NIH-99: ホームの画面は最近見た点を後ろへ回して選び、見せた点を履歴に記録する', async () => {
+  const { home } = await import('../web/js/views/library.js');
+  const library = sampleLib();
+  const state = { library, analysis: null, settings: { ai: { mode: 'direct', companionUrl: '' } }, servedByCompanion: false, pcInfo: null };
+  const recentPicks = new Set(ids(dailyPicks(library, 2, new Date())));
+  const marked = [];
+  String(home.render({ state, shuffle: '', recentPicks, markPicksSeen: (x) => marked.push(x) }));
+  assert.equal(marked.length, 1);
+  assert.deepEqual(marked[0], ids(dailyPicks(library, 2, new Date(), '', recentPicks)));
+  assert.ok(marked[0].every((id) => !recentPicks.has(id)), '最近見た点は出さない');
+  // 履歴を渡さない呼び方（ほかのテスト・古い呼び出し）でも落ちない
+  assert.doesNotThrow(() => String(home.render({ state, shuffle: 0 })));
+});
+
 test('NIH-99: 月・年をまたいでも日数で数える', () => {
   const h = recordSeenPicks([], new Date(2026, 11, 31), ['x']);
   assert.ok(recentPickIds(h, new Date(2027, 0, 1)).has('x'));
