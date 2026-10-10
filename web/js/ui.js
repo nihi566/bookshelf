@@ -386,8 +386,9 @@ export function pendingNudge(state, { toKnowledge = false } = {}) {
   const a = state.analysis;
   if (!a) return '';
   const n = pendingPoints(analysisPoints(state.library), a);
-  const head = html`前回の分析のあとに増えた点 <b>${n}</b> 件`;
-  if (!n) return toKnowledge ? '' : html`<p class="small">${head}</p>`;
+  if (!n) return toKnowledge ? '' : html`<p class="small">前回の分析のあとに増えた点 <b>0</b> 件</p>`;
+  // 件数を押すと、数えた点そのものの一覧へ（分析し直す前にメモ・タグ・★を付けられるように）
+  const head = html`前回の分析のあとに増えた点 <a href="#/knowledge/pending" title="増えた点を見る"><b>${n}</b> 件</a>`;
   const lead = toKnowledge ? html` — <a href="#/knowledge">分析し直す</a>` : '。「分析し直す」で、変わったところだけ作り直します';
   return html`<p class="small pending-nudge" style="${toKnowledge ? 'margin-top:8px' : ''}">${head}（まだ線につながっていません）${lead}</p>`;
 }
