@@ -87,6 +87,7 @@ const REBUILT = {
  * links: 線の画面へのリンクを張るか（過去の分析では、今の分析に無い線を指すことがあるので張らない）
  */
 function changesBlock(a, { links = true } = {}) {
+  if (a.restoredFrom) return html`<div class="section"><h2>前回からの変化</h2></div><p class="card small">${when(a.restoredFrom)} の分析に戻しました（線 ${a.lines.length} 本・面 ${a.planes.length}）。次の分析は、この回から引き継ぎます。</p>`;
   const c = a.changes;
   if (!c) return '';
   const head = html`<div class="section"><h2>前回からの変化</h2><span class="small muted">${isoDate(c.previousAt)} から</span></div>`;
@@ -197,8 +198,9 @@ export const knowledge = {
   },
 };
 
-/** 変化の要約（履歴の一覧の 1 行） */
-function changeSummary(c) {
+/** 変化の要約（履歴の一覧の 1 行）。restoredFrom: 履歴から戻した回なら、元の回の時刻 */
+export function changeSummary(c, restoredFrom = null) {
+  if (restoredFrom) return `${when(restoredFrom)} の分析に戻した`;
   if (!c) return '最初の分析';
   if (c.rebuilt) return '最初から作り直した';
   const parts = [c.addedLines ? `新しい線(グループ) ${c.addedLines}` : '', c.grownLines ? `大きくなった線(グループ) ${c.grownLines}` : '', c.removedLines ? `消えた線(グループ) ${c.removedLines}` : '', c.connectedPoints ? `つながった点 ${c.connectedPoints}` : ''].filter(Boolean);
@@ -210,7 +212,7 @@ const pcConfigured = (state) => state.settings.ai.mode === 'companion' && Boolea
 
 function historyListHtml(items, state) {
   return items.length
-    ? html`<ul class="card plain history-list">${items.map((h) => html`<li><a href="#/knowledge/history/${h.id}">${when(h.createdAt)}</a> <span class="small muted"><span class="nowrap">点 ${h.stats?.points ?? '–'}</span>・<span class="nowrap">線 ${h.stats?.lines ?? '–'}</span>・<span class="nowrap">面 ${h.stats?.planes ?? '–'}</span>${h.createdAt === state?.analysis?.createdAt ? '（いま表示している分析）' : ''}</span><br><span class="small">${changeSummary(h.changes).split('・').map((part, i) => html`${i ? '・' : ''}<span class="nowrap">${part}</span>`)}</span></li>`)}</ul>`
+    ? html`<ul class="card plain history-list">${items.map((h) => html`<li><a href="#/knowledge/history/${h.id}">${when(h.createdAt)}</a> <span class="small muted"><span class="nowrap">点 ${h.stats?.points ?? '–'}</span>・<span class="nowrap">線 ${h.stats?.lines ?? '–'}</span>・<span class="nowrap">面 ${h.stats?.planes ?? '–'}</span>${h.createdAt === state?.analysis?.createdAt ? '（いま表示している分析）' : ''}</span><br><span class="small">${changeSummary(h.changes, h.restoredFrom).split('・').map((part, i) => html`${i ? '・' : ''}<span class="nowrap">${part}</span>`)}</span></li>`)}</ul>`
     : html`<p class="small muted">まだ履歴がありません（PC で分析すると残ります）。</p>`;
 }
 
@@ -235,30 +237,44 @@ function renderHistoryList(box, state) {
   );
 }
 
-/** 過去の分析を 1 回分見る（読むだけ。線・面の画面は今の分析のものなので、リンクは張らない） */
+/** 履歴の ID（PC の cli/store.js の historyId と同じ作り方: 分析した時刻の数字と T・Z） */
+const historyIdOf = (a) => String(a?.createdAt || '').replace(/[^0-9TZ]/g, '');
+
+/**
+ * 過去の分析 1 回分の中身。線・面の画面は今の分析のものなので、リンクは張らない。
+ * current: いま表示している分析か（そうでなければ「この分析に戻す」を出す）
+ */
+export function historyBody(a, { current }) {
+  return html`<section class="card stack">${current
+      ? html`<p class="small muted">いま表示している分析です。</p>`
+      : html`<div class="row"><button type="button" class="btn small primary" data-action="restore-analysis" data-id="${historyIdOf(a)}">この分析に戻す</button><span class="small muted">知識の画面の線(グループ)・面・立体がこの回のものになり、次の分析はこの回から引き継ぎます</span></div>`}</section>
+    ${changesBlock(a, { links: false })}
+    <div class="section"><h2>立体</h2></div>
+    <section class="card solid-card stack">
+      <h2>${a.solid?.title || ''}</h2>
+      <p class="core">${a.solid?.core || ''}</p>
+      ${a.solid?.principles?.length ? html`<div><h3 class="small">行動の原則</h3><ul class="plain">${a.solid.principles.map((p) => html`<li>${p}</li>`)}</ul></div>` : ''}
+    </section>
+    <div class="section"><h2>面と線(グループ)</h2></div>
+    ${a.planes.map((p) => html`<section class="card plane-card"><div class="layer-label plane">面</div><h3>${p.name}</h3><p class="small">${p.summary}</p>
+      <ul class="plain small">${p.lineIds.map((id) => a.lines.find((l) => l.id === id)).filter(Boolean).map((l) => html`<li><b>${l.name}</b> <span class="muted">点 ${l.highlightIds.length}</span></li>`)}</ul></section>`)}`;
+}
+
+/** 過去の分析を 1 回分見る（戻すときは「この分析に戻す」） */
 export const historyView = {
   render() {
     return html`<a class="back" href="#/knowledge">‹ 知識</a>
       <div class="page-head"><div><h1>過去の分析</h1><div class="sub" id="history-sub">PC から読み込んでいます…</div></div></div>
       <div id="history-body"><p class="loading">読み込み中…</p></div>`;
   },
-  mount(root, { params }) {
+  mount(root, { params, state }) {
     const body = root.querySelector('#history-body');
     const sub = root.querySelector('#history-sub');
     companion.historyEntry(params.id).then(
       (a) => {
         if (!body.isConnected) return;
         sub.textContent = `${when(a.createdAt)}・${a.model?.chat || ''}${a.model?.embed ? ' / ' + a.model.embed : ''}・点 ${a.stats?.points ?? '–'} → 線 ${a.lines.length} → 面 ${a.planes.length}`;
-        body.innerHTML = String(html`${changesBlock(a, { links: false })}
-          <div class="section"><h2>立体</h2></div>
-          <section class="card solid-card stack">
-            <h2>${a.solid?.title || ''}</h2>
-            <p class="core">${a.solid?.core || ''}</p>
-            ${a.solid?.principles?.length ? html`<div><h3 class="small">行動の原則</h3><ul class="plain">${a.solid.principles.map((p) => html`<li>${p}</li>`)}</ul></div>` : ''}
-          </section>
-          <div class="section"><h2>面と線(グループ)</h2></div>
-          ${a.planes.map((p) => html`<section class="card plane-card"><div class="layer-label plane">面</div><h3>${p.name}</h3><p class="small">${p.summary}</p>
-            <ul class="plain small">${p.lineIds.map((id) => a.lines.find((l) => l.id === id)).filter(Boolean).map((l) => html`<li><b>${l.name}</b> <span class="muted">点 ${l.highlightIds.length}</span></li>`)}</ul></section>`)}`);
+        body.innerHTML = String(historyBody(a, { current: a.createdAt === state?.analysis?.createdAt }));
       },
       (e) => {
         if (body.isConnected) body.innerHTML = String(html`<p class="notice err">過去の分析を読めませんでした: ${e.message}</p>`);

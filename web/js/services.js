@@ -67,6 +67,8 @@ export const companion = {
   // 分析の履歴は PC にだけ置く（一覧は要約だけ。開いたときに 1 回分を取りに行く）
   history: () => call('/api/history').then((r) => r?.items || []),
   historyEntry: (id) => call(`/api/history/${encodeURIComponent(id)}`),
+  // 過去の分析に戻す（PC が今の時刻の分析として保存し、戻した分析が返る）
+  restoreHistory: (id) => call(`/api/history/${encodeURIComponent(id)}/restore`, { method: 'POST' }),
 };
 
 /**

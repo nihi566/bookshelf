@@ -18,6 +18,7 @@ import { createLlmClient, normalizeBaseUrl } from '../web/core/analysis/llm.js';
 import { analyzeLibrary, recommendBooks, recommendationNote } from '../web/core/analysis/pipeline.js';
 import { autoAnalyzeDue, autoConfig, pendingPoints } from '../web/core/auto-analysis.js';
 import { analysisShapeError } from '../web/core/analysis/shape.js';
+import { restoreAnalysis } from '../web/core/analysis/restore.js';
 import { wishlistForRecommend } from '../web/core/wishlist.js';
 import { parseFiles } from '../web/core/parsers/index.js';
 // 画面に出すエラーの文から、URL に書いたパスワード（http://user:pass@…）を伏せる
@@ -155,6 +156,23 @@ export function createCompanionServer({ store, log = console.log, catalogFetch, 
     if (hist) {
       const a = await store.historyEntry(hist[1]);
       return a ? send(res, 200, a) : send(res, 404, { error: 'その分析は履歴にありません' });
+    }
+    // 過去の分析に戻す（NIH-7）。その回を今の時刻の分析として保存する（履歴にも 1 回分として残る）
+    const back = req.method === 'POST' && url.pathname.match(/^\/api\/history\/([0-9TZ]{8,40})\/restore$/);
+    if (back) {
+      // 分析の最中は戻さない（分析が終わって保存すると、戻した結果が上書きされる）
+      const busy = () => send(res, 409, { error: `PC が${job.trigger === 'auto' ? '自動で' : ''}分析しています。終わってから、もう一度押してください。`, job: publicJob() });
+      if (job.running) return busy();
+      const entry = await store.historyEntry(back[1]);
+      if (!entry) return send(res, 404, { error: 'その分析は履歴にありません' });
+      // 今の分析より新しい時刻にする（時計のずれた端末の分析が未来の時刻でも、同期で戻した回が負けないように）
+      const latest = Date.parse((await store.analysis())?.createdAt || '') || 0;
+      const restored = restoreAnalysis(entry, new Date(Math.max(Date.now(), latest + 1)).toISOString());
+      const err = analysisShapeError(restored);
+      if (err) return send(res, 400, { error: `この分析には戻せません: ${err}` });
+      if (job.running) return busy();
+      await store.saveAnalysis(restored);
+      return send(res, 200, restored);
     }
     switch (route) {
       case 'GET /api/info': {
