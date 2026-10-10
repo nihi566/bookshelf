@@ -120,12 +120,12 @@ test('fillMissingIsbns: 見つかった ISBN を本に付け、探した本は�
   await store.saveState({ kindleSync: { ok: true } });
 
   // 通信できない → 何も付けず、記録もしない（次の確認で探し直す）
-  const down = await fillMissingIsbns({ store, fetchImpl: fakeNdl([], { status: 503 }).fetchImpl });
+  const down = await fillMissingIsbns({ store, gapMs: 0, fetchImpl: fakeNdl([], { status: 503 }).fetchImpl });
   assert.deepEqual(down, { checked: 0, found: 0 });
   assert.equal((await store.state()).coverLookup, undefined);
 
   const ndl = fakeNdl([{ title: '新!働く理由', creator: '戸田, 智弘', isbn: '9784799324431' }]);
-  const r = await fillMissingIsbns({ store, fetchImpl: ndl.fetchImpl });
+  const r = await fillMissingIsbns({ store, gapMs: 0, fetchImpl: ndl.fetchImpl });
   assert.deepEqual(r, { checked: 2, found: 1 });
   const lib = await store.library();
   assert.equal(lib.books.b1.isbn, '9784799324431');
@@ -137,7 +137,7 @@ test('fillMissingIsbns: 見つかった ISBN を本に付け、探した本は�
   assert.deepEqual(st.kindleSync, { ok: true }, 'state.json のほかの記録は残す');
 
   const calls = ndl.calls.length;
-  assert.deepEqual(await fillMissingIsbns({ store, fetchImpl: ndl.fetchImpl }), { checked: 0, found: 0 });
+  assert.deepEqual(await fillMissingIsbns({ store, gapMs: 0, fetchImpl: ndl.fetchImpl }), { checked: 0, found: 0 });
   assert.equal(ndl.calls.length, calls, '探した本はもう探さない');
 });
 
@@ -146,16 +146,29 @@ test('fillMissingIsbns: 4xx で断られた本は探したことにして先へ�
   await store.saveLibrary(libraryWith([{ id: 'b1', title: '断られる本' }, { id: 'b2', title: '夜と霧', author: 'フランクル' }]));
   const ok = fakeNdl([{ title: '夜と霧', creator: 'フランクル', isbn: '4622039702' }]);
   const fetchImpl = async (url, init) => (new URL(url).searchParams.get('title') === '断られる本' ? new Response('bad', { status: 400 }) : ok.fetchImpl(url, init));
-  assert.deepEqual(await fillMissingIsbns({ store, fetchImpl }), { checked: 2, found: 1 });
+  assert.deepEqual(await fillMissingIsbns({ store, gapMs: 0, fetchImpl }), { checked: 2, found: 1 });
   assert.deepEqual(Object.keys((await store.state()).coverLookup.tried).sort(), ['b1', 'b2']);
+});
+
+test('fillMissingIsbns: 回数制限（429）で断られたら、その本から先は記録せず次の確認まで待つ。問い合わせの間は gapMs 空ける', async () => {
+  const store = createStore(mkdtempSync(path.join(tmpdir(), 'bh-cover-')));
+  await store.saveLibrary(libraryWith([1, 2, 3].map((n) => ({ id: `b${n}`, title: `本${n}` }))));
+  const at = [];
+  const fetchImpl = async () => {
+    at.push(Date.now());
+    return at.length === 3 ? new Response('busy', { status: 429 }) : new Response('<rss></rss>');
+  };
+  assert.deepEqual(await fillMissingIsbns({ store, fetchImpl, gapMs: 40 }), { checked: 2, found: 0 });
+  assert.deepEqual(Object.keys((await store.state()).coverLookup.tried).sort(), ['b1', 'b2']);
+  for (let i = 1; i < at.length; i++) assert.ok(at[i] - at[i - 1] >= 35, '問い合わせの間を空ける');
 });
 
 test('fillMissingIsbns: 1 回に探すのは max 冊まで（残りは次の確認で）', async () => {
   const store = createStore(mkdtempSync(path.join(tmpdir(), 'bh-cover-')));
   await store.saveLibrary(libraryWith([1, 2, 3].map((n) => ({ id: `b${n}`, title: `本${n}` }))));
   const ndl = fakeNdl([]);
-  assert.equal((await fillMissingIsbns({ store, fetchImpl: ndl.fetchImpl, max: 2 })).checked, 2);
-  assert.equal((await fillMissingIsbns({ store, fetchImpl: ndl.fetchImpl, max: 2 })).checked, 1);
+  assert.equal((await fillMissingIsbns({ store, gapMs: 0, fetchImpl: ndl.fetchImpl, max: 2 })).checked, 2);
+  assert.equal((await fillMissingIsbns({ store, gapMs: 0, fetchImpl: ndl.fetchImpl, max: 2 })).checked, 1);
 });
 
 test('mergeLibraries: PC が付けた ISBN はスマホ側へ届く', () => {

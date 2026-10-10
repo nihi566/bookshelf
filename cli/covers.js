@@ -14,6 +14,9 @@ export const LOOKUP_INTERVAL_MS = 10 * 60_000;
 const PER_RUN = 20;
 // 応答が無いまま待ち続けると、次の確認も始まらなくなる
 const REQUEST_TIMEOUT_MS = 15_000;
+// 続けて問い合わせると回数制限（HTTP 429）で断られるので、問い合わせの間を空ける
+const REQUEST_GAP_MS = 1_000;
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 /**
  * 探す書名の候補。書名そのまま → 括弧（叢書名など）を除く → 副題を除く → 空白で区切った最も長い語。
@@ -34,10 +37,11 @@ export function titleCandidates(title, { shorten = true } = {}) {
  * 書名・著者が一致する本の ISBN（ISBN-10 にできるもの）を国立国会図書館サーチで探す。見つからなければ空。通信できなければ例外
  * @param {{ title: string, author?: string }} book
  */
-export async function findIsbn(book, { fetchImpl = fetch, signal } = {}) {
+export async function findIsbn(book, { fetchImpl = fetch, signal, gapMs = 0 } = {}) {
   const creator = String(book.author || '').split(/[、,，\s]/)[0];
   // 著者が分からない本は、書名を短くして探さない（書名の一部だけで別の本に当たり、その表紙が出続けるため）
-  for (const title of titleCandidates(book.title, { shorten: Boolean(creator) })) {
+  for (const [i, title] of titleCandidates(book.title, { shorten: Boolean(creator) }).entries()) {
+    if (i && gapMs) await sleep(gapMs);
     const params = new URLSearchParams({ title, mediatype: 'books', cnt: '10' });
     if (creator) params.set('creator', creator);
     const res = await fetchImpl(`${NDL}?${params}`, { signal: signal || AbortSignal.timeout(REQUEST_TIMEOUT_MS) });
@@ -61,14 +65,15 @@ export function booksNeedingIsbn(library, tried = {}) {
  * （書名を直すと本の ID が変わるので、そのときは探し直す）。通信できなかった本は残さず、次の確認で探し直す
  * @returns {Promise<{ checked: number, found: number }>}
  */
-export async function fillMissingIsbns({ store, fetchImpl = fetch, signal, max = PER_RUN }) {
+export async function fillMissingIsbns({ store, fetchImpl = fetch, signal, max = PER_RUN, gapMs = REQUEST_GAP_MS }) {
   const tried = (await store.state()).coverLookup?.tried || {};
   const targets = booksNeedingIsbn(await store.library(), tried).slice(0, max);
   const found = {};
   const checked = [];
-  for (const b of targets) {
+  for (const [i, b] of targets.entries()) {
+    if (i && gapMs) await sleep(gapMs);
     try {
-      const isbn = await findIsbn(b, { fetchImpl, signal });
+      const isbn = await findIsbn(b, { fetchImpl, signal, gapMs });
       if (isbn) found[b.id] = isbn;
       checked.push(b.id);
     } catch (e) {
