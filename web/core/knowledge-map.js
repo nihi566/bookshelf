@@ -209,7 +209,7 @@ export function mapStyle(colors) {
     { selector: 'edge[kind = "plane"]', style: { width: 1.5, 'line-color': colors.plane, opacity: 0.5 } },
     { selector: 'edge[kind = "related"]', style: { width: 0.8, 'line-color': colors.line, opacity: 0.45, 'line-style': 'dashed' } },
     { selector: 'edge[kind = "far"]', style: { width: 2, 'line-color': colors.solid, opacity: 0.85 } },
-    { selector: 'edge[kind = "link"]', style: { width: 1.5, 'line-color': colors.ink, opacity: 0.6 } },
+    { selector: 'edge[kind = "link"]', style: { width: 1.5, 'line-color': colors.ink, opacity: 0.45 } },
     {
       selector: 'edge[kind = "relation"]',
       style: {

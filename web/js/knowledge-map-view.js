@@ -1,15 +1,17 @@
 // 立体のページの知識マップを描く（Cytoscape.js は大きいので、このページを開いたときだけ読み込む）
-import { mapElements, mapLayout, mapStyle } from '../core/knowledge-map.js';
+import { mapElements, mapPositions, mapStyle } from '../core/knowledge-map.js';
 
-// 文字（14px）がおよそ 10px 以上で見える倍率
-const READABLE_ZOOM = 0.75;
-// これより狭い枠（スマホ）では名前を細く折り返す
-const NARROW_WIDTH = 520;
+// 全体を枠に収めると点が 2,000 近くあって小さくなるので、ここまで縮められるようにする
+const MIN_ZOOM = 0.03;
+const MAX_ZOOM = 4;
+// 点が少ないと枠いっぱいまで拡大されるので、文字が大きくなりすぎない倍率で止める
 const MAX_FIT_ZOOM = 1.5;
+// 面の名前は、縮めても画面の上でこの大きさ（px）に見えるようにする（全体を見たときに塊の名前が読めるように）
+const PLANE_LABEL_PX = 13;
+const PLANE_LABEL_MAX_WIDTH_PX = 140;
+const BRIDGE_PX = 1.5;
 
 let cy = null;
-// 開いている面（描き直し・同期のあとも同じ面を開いたままにする）
-let focus = null;
 
 const css = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 
@@ -23,57 +25,69 @@ function showMapError(wrap) {
   canvas.innerHTML = '<p class="notice err">知識マップを描けませんでした。開き直してください（初めて開くときは通信が要ります）。面と線は上の「面」「線(グループ)」から見られます。</p>';
 }
 
-/** wrap（#map-wrap）の中に図を描く。分析が変わっても同じ面を開いたままにする */
-export async function mountKnowledgeMap(wrap, analysis) {
+/** wrap（#map-wrap）の中に図を描く。library は自分のリンクと遠いつながりへの反応に使う */
+export async function mountKnowledgeMap(wrap, analysis, library) {
   try {
     const cytoscape = (await import('../vendor/cytoscape.esm.min.js')).default;
-    draw(cytoscape, wrap, analysis);
+    draw(cytoscape, wrap, analysis, library);
   } catch {
     showMapError(wrap);
   }
 }
 
-function draw(cytoscape, wrap, analysis) {
+const ROUTE = {
+  plane: (ref) => `#/knowledge/plane/${encodeURIComponent(ref)}`,
+  line: (ref) => `#/knowledge/line/${encodeURIComponent(ref)}`,
+  point: (ref) => `#/point/${encodeURIComponent(ref)}`,
+};
+
+function draw(cytoscape, wrap, analysis, library) {
   const canvas = wrap.querySelector('#knowledge-map');
   if (!canvas.isConnected) return;
   cy?.destroy();
-  const colors = { solid: css('--layer-solid'), plane: css('--layer-plane'), line: css('--layer-line'), ink: css('--ink'), surface: css('--surface'), font: css('--font') };
-  cy = cytoscape({ container: canvas, style: mapStyle(colors, { narrow: canvas.clientWidth < NARROW_WIDTH }), minZoom: 0.2, maxZoom: 4, boxSelectionEnabled: false, autoungrabify: true });
-  const show = (next) => {
-    const { nodes, edges, focus: shown } = mapElements(analysis, { focus: next });
-    focus = shown;
-    cy.elements().remove();
-    cy.add([...nodes.map((data) => ({ group: 'nodes', data })), ...edges.map((data) => ({ group: 'edges', data }))]);
-    cy.layout(mapLayout({ focus })).run();
-    // 線の多い面は枠に収めると文字が読めない大きさになるので、読める倍率まで寄せて面を真ん中に置く（残りは指で動かして見る）
-    if (focus && cy.zoom() < READABLE_ZOOM) cy.zoom(READABLE_ZOOM).center(cy.$id(`p:${focus}`));
-    // 点が少ないと枠いっぱいまで拡大されるので、文字が大きくなりすぎない倍率で止める
-    if (cy.zoom() > MAX_FIT_ZOOM) cy.zoom(MAX_FIT_ZOOM).center();
-    const plane = analysis.planes.find((p) => p.id === focus);
-    const back = wrap.querySelector('[data-map="back"]');
-    const link = wrap.querySelector('[data-map="plane"]');
-    back.hidden = !plane;
-    link.hidden = !plane;
-    if (plane) {
-      link.href = `#/knowledge/plane/${encodeURIComponent(plane.id)}`;
-      link.textContent = `${plane.name} のページへ`;
-    }
-  };
-  cy.on('tap', 'node', (e) => {
-    const n = e.target;
-    if (n.data('kind') === 'line') location.hash = `#/knowledge/line/${encodeURIComponent(n.data('ref'))}`;
-    else if (n.data('kind') === 'plane') {
-      // 開いた面・線の無い面は、開いても見るものが無いので面のページへ
-      if (focus || !n.data('weight')) location.hash = `#/knowledge/plane/${encodeURIComponent(n.data('ref'))}`;
-      else show(n.data('ref'));
-    }
+  const colors = { solid: css('--layer-solid'), plane: css('--layer-plane'), line: css('--layer-line'), point: css('--layer-point'), ink: css('--ink'), surface: css('--surface'), font: css('--font') };
+  const els = mapElements(analysis, { library });
+  const pos = mapPositions(els);
+  cy = cytoscape({
+    container: canvas,
+    style: mapStyle(colors),
+    elements: [...els.nodes.map((data) => ({ group: 'nodes', data, position: pos[data.id] })), ...els.edges.map((data) => ({ group: 'edges', data }))],
+    layout: { name: 'preset', fit: true, padding: 16 },
+    minZoom: MIN_ZOOM,
+    maxZoom: MAX_ZOOM,
+    boxSelectionEnabled: false,
+    autoungrabify: true,
+    // 点が多いので、指で動かしている間は辺を描かない（スマホでも引っかからずに動かせるように）
+    hideEdgesOnViewport: true,
   });
-  wrap.querySelector('[data-map="back"]').onclick = () => show(null);
+  if (cy.zoom() > MAX_FIT_ZOOM) cy.zoom(MAX_FIT_ZOOM).center();
+  const planes = cy.nodes('[kind = "plane"]');
+  const bridges = cy.edges('[kind = "far"], [kind = "link"]');
+  let pending = false;
+  const sizePlaneLabels = () => {
+    pending = false;
+    if (!cy) return;
+    const z = cy.zoom();
+    planes.style({ 'font-size': Math.max(16, PLANE_LABEL_PX / z), 'text-max-width': Math.max(160, PLANE_LABEL_MAX_WIDTH_PX / z), 'text-outline-width': Math.max(3, 3 / z) });
+    // 塊どうしの橋は、全体を見たときも見える太さにする（数が少ないので 1 本ずつ変えても軽い）
+    bridges.style('width', Math.max(1, BRIDGE_PX / z));
+  };
+  sizePlaneLabels();
+  cy.on('zoom', () => {
+    if (pending) return;
+    pending = true;
+    requestAnimationFrame(sizePlaneLabels);
+  });
+  cy.on('tap', 'node', (e) => {
+    const go = ROUTE[e.target.data('kind')];
+    if (go) location.hash = go(e.target.data('ref'));
+  });
   for (const b of wrap.querySelectorAll('[data-map="zoom"]')) {
     b.onclick = () => {
       const level = cy.zoom() * (b.dataset.dir === '1' ? 1.4 : 1 / 1.4);
       cy.zoom({ level, renderedPosition: { x: cy.width() / 2, y: cy.height() / 2 } });
     };
   }
-  show(focus);
+  const fit = wrap.querySelector('[data-map="fit"]');
+  if (fit) fit.onclick = () => cy.fit(undefined, 16);
 }
