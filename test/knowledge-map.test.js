@@ -186,11 +186,13 @@ test('mapPeek: 点は文の冒頭と書名、線は名前と点の数を返す�
   };
   const { nodes } = mapElements(analysis());
   const node = (id) => nodes.find((n) => n.id === id);
-  assert.deepEqual(mapPeek({ kind: 'point', ref: 'ha' }, library), { kind: 'point', title: '一行目 二行目', sub: '本の名前' }, '空白・改行は 1 つの空白にまとめる');
+  // 橋を渡さないときは、相手も添える言葉も無い（NIH-88）
+  const none = { peers: [], counts: { far: 0, link: 0 }, why: null };
+  assert.deepEqual(mapPeek({ kind: 'point', ref: 'ha' }, library), { kind: 'point', title: '一行目 二行目', sub: '本の名前', ...none }, '空白・改行は 1 つの空白にまとめる');
   const cut = mapPeek({ kind: 'point', ref: 'hb' }, library);
   assert.ok(cut.title.endsWith('…') && [...cut.title].length <= 81, '長い文は冒頭だけ');
-  assert.deepEqual(mapPeek({ kind: 'point', ref: 'hc' }, library), { kind: 'point', title: '伸ばした線', sub: '本の名前' }, '置き換わった点は今の点を見せる');
-  assert.deepEqual(mapPeek({ kind: 'point', ref: 't1' }, library), { kind: 'point', title: '思いついたこと', sub: '思いつき' });
+  assert.deepEqual(mapPeek({ kind: 'point', ref: 'hc' }, library), { kind: 'point', title: '伸ばした線', sub: '本の名前', ...none }, '置き換わった点は今の点を見せる');
+  assert.deepEqual(mapPeek({ kind: 'point', ref: 't1' }, library), { kind: 'point', title: '思いついたこと', sub: '思いつき', ...none });
   assert.equal(mapPeek({ kind: 'point', ref: 'hd' }, library).sub, '消えた点');
   assert.equal(mapPeek({ kind: 'point', ref: 'hzz' }, library).sub, 'この端末にまだ届いていない点');
   assert.deepEqual(mapPeek(node('l:l1'), library), { kind: 'line', title: '線1', sub: '点 2 件' });
@@ -215,4 +217,50 @@ test('mapStyle: 札を出したノードとつながる辺に印（peek）を付
   } finally {
     cy.destroy();
   }
+});
+
+test('mapElements: 遠いつながりの辺には共通する考え、リンクの辺には理由が載る（札でたどるため。NIH-88）', () => {
+  const library = { highlights: {}, links: {} };
+  addLink(library, 'hb', 'hc', '似ている', '2026-10-01T00:00:00.000Z');
+  const { edges } = mapElements(analysis(), { library });
+  const farEdge = edges.find((e) => e.kind === 'far' && e.source === 'pt:ha');
+  assert.equal(farEdge.idea, '根っこ');
+  assert.equal(edges.find((e) => e.kind === 'link').reason, '似ている');
+  assert.ok(edges.filter((e) => e.kind !== 'far' && e.kind !== 'link').every((e) => !('idea' in e) && !('reason' in e)), 'ほかの辺には載せない');
+});
+
+test('mapPeek: 点の札に、遠いつながり・リンクの相手（遠いつながりが先）と件数を出す。たどってきた辺の共通する考え・理由を添える（NIH-88）', () => {
+  const library = {
+    books: { b1: { id: 'b1', title: '本の名前' } },
+    highlights: {
+      ha: { id: 'ha', bookId: 'b1', text: 'ああ' },
+      hb: { id: 'hb', bookId: 'b1', text: 'い'.repeat(100) },
+      hc: { id: 'hc', deleted: true, supersededBy: 'hc2' },
+      hc2: { id: 'hc2', bookId: 'b1', text: '伸ばした線' },
+    },
+    links: {},
+  };
+  const farEdge = { id: 'far:pt:ha|pt:hd', source: 'pt:ha', target: 'pt:hd', kind: 'far', idea: '<b>根っこ</b>' };
+  const linkEdge = { id: 'link:pt:hb|pt:ha', source: 'pt:hb', target: 'pt:ha', kind: 'link', reason: '似ている' };
+  const member = { id: 'member:l:l1|pt:ha', source: 'l:l1', target: 'pt:ha', kind: 'member' };
+  const info = mapPeek({ id: 'pt:ha', kind: 'point', ref: 'ha' }, library, { bridges: [linkEdge, member, farEdge] });
+  assert.deepEqual(info.counts, { far: 1, link: 1 });
+  assert.deepEqual(info.peers.map((p) => [p.id, p.kind, p.edge]), [['pt:hd', 'far', farEdge.id], ['pt:hb', 'link', linkEdge.id]], '遠いつながりが先。線への所属の辺は相手にしない');
+  assert.equal(info.peers[0].title, 'この端末にまだ届いていない点', '文の無い相手はそう示す');
+  assert.ok(info.peers[1].title.endsWith('…') && [...info.peers[1].title].length <= 31, '相手の文は短く');
+  assert.equal(info.why, null, '直接押したときは、たどってきた辺が無い');
+
+  const viaFar = mapPeek({ id: 'pt:hd', kind: 'point', ref: 'hd' }, library, { bridges: [farEdge], via: farEdge });
+  assert.deepEqual(viaFar.why, { kind: 'far', text: '<b>根っこ</b>' }, '共通する考えは文字のまま返す（エスケープは画面側）');
+  assert.deepEqual(viaFar.peers.map((p) => p.id), ['pt:ha'], '来た相手にも戻れる');
+  assert.equal(viaFar.peers[0].title, 'ああ');
+  assert.deepEqual(mapPeek({ id: 'pt:hb', kind: 'point', ref: 'hb' }, library, { bridges: [linkEdge], via: linkEdge }).why, { kind: 'link', text: '似ている' });
+  assert.equal(mapPeek({ id: 'pt:hb', kind: 'point', ref: 'hb' }, library, { bridges: [linkEdge], via: { ...linkEdge, reason: '' } }).why, null, '理由の無いリンクは添えない');
+  assert.equal(mapPeek({ id: 'pt:hb', kind: 'point', ref: 'hb' }, library, { bridges: [linkEdge], via: member }).why, null, '橋でない辺は添えない');
+
+  const replaced = mapPeek({ id: 'pt:hx', kind: 'point', ref: 'hx' }, library, { bridges: [{ id: 'link:pt:hx|pt:hc', source: 'pt:hx', target: 'pt:hc', kind: 'link' }] });
+  assert.equal(replaced.peers[0].title, '伸ばした線', '置き換わった相手は今の点の文');
+  const alone = mapPeek({ id: 'pt:ha', kind: 'point', ref: 'ha' }, library);
+  assert.deepEqual([alone.peers, alone.counts, alone.why], [[], { far: 0, link: 0 }, null], '橋が無ければ相手は空');
+  assert.equal(mapPeek({ id: 'l:l1', kind: 'line', label: '線1', weight: 2 }, library, { bridges: [member] }).peers, undefined, '線の札には相手を出さない');
 });
