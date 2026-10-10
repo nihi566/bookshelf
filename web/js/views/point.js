@@ -1,7 +1,7 @@
 // 点の画面（#/point/<id>）: 点 1 つと、入っている線・関わる線、リンク、意味の近い点、それを根拠にしている永久ノート
 import { html } from '../html.js';
 import { currentPointId, isThought, pointById, pointLabel } from '../../core/points.js';
-import { lineIndex, pointCard } from '../ui.js';
+import { lineIndex, pcSyncOf, pointCard } from '../ui.js';
 import { citingNotesBlock } from './notes.js';
 import { linksBlock, neighborsBlock } from './links.js';
 
@@ -23,7 +23,7 @@ export const pointView = {
     const related = relatedLinesOf(state.analysis, id);
     return html`<a class="back" href="${back[0]}">‹ ${back[1]}</a>
       <div class="page-head"><div><h1>点</h1><div class="sub">${pointLabel(state.library, p)}</div></div></div>
-      ${pointCard(p, { library: state.library, lines: idx.get(id) || [] })}
+      ${pointCard(p, { library: state.library, lines: idx.get(id) || [], pcSync: pcSyncOf(state) })}
       ${related.length
         ? html`<div class="section"><h2>関わる線(グループ)</h2><span class="small muted">${related.length}</span></div>
           <p class="help">入っている線(グループ)のほかに、近い線です（その線の点と同じくらい、線の中心に近い）。</p>

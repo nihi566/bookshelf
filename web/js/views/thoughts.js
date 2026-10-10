@@ -1,7 +1,7 @@
 // 思いつき（フリートノート）の画面: 受け箱（ホーム）・メモの一覧・書くシート
 import { html } from '../html.js';
 import { THOUGHT_MAX_LENGTH, THOUGHT_STATUS, inboxThoughts, searchThoughts, thoughtCounts } from '../../core/thoughts.js';
-import { lineIndex, thoughtCard } from '../ui.js';
+import { lineIndex, pcSyncOf, thoughtCard } from '../ui.js';
 import { lineAssignmentOf } from '../../core/line-assignments.js';
 
 // ホームの受け箱に並べる件数（残りはメモの一覧で見る）
@@ -53,7 +53,7 @@ export function inboxBlock(state) {
   return html`<section class="inbox" aria-labelledby="inbox-title">
     <div class="section"><h2 id="inbox-title">受け箱 <span class="count">${inbox.length}</span></h2><a class="small" href="#/thoughts">メモをすべて見る</a></div>
     <p class="help">まだ整理していない思いつき ${inbox.length} 件。整理しなくても分析の点になります。</p>
-    ${inbox.slice(0, INBOX_ON_HOME).map((t) => thoughtCard(t, { lines: idx.get(t.id), moves: true, assigned: assignedOf(state, t) }))}
+    ${inbox.slice(0, INBOX_ON_HOME).map((t) => thoughtCard(t, { lines: idx.get(t.id), moves: true, assigned: assignedOf(state, t), pcSync: pcSyncOf(state) }))}
     ${inbox.length > INBOX_ON_HOME ? html`<p class="small"><a href="#/thoughts">ほか ${inbox.length - INBOX_ON_HOME} 件を見る</a></p>` : ''}
   </section>`;
 }
@@ -82,7 +82,7 @@ export const thoughtsView = {
       <form class="search-box" data-form="thought-filter" role="search"><input type="search" name="q" value="${q}" placeholder="メモを探す（空白で AND）" aria-label="メモを探す"></form>
       <div class="chips" role="group" aria-label="状態で絞り込む">${Object.keys(THOUGHT_STATUS).map(chip)}</div>
       <p class="small muted" style="margin-top:8px">${list.length} 件${status === 'discarded' ? '（捨てたメモは分析・今日の点・検索に出ません）' : ''}</p>
-      ${list.map((t) => thoughtCard(t, { lines: idx.get(t.id), query: q, moves: true, assigned: assignedOf(state, t) }))}
+      ${list.map((t) => thoughtCard(t, { lines: idx.get(t.id), query: q, moves: true, assigned: assignedOf(state, t), pcSync: pcSyncOf(state) }))}
       ${!list.length ? html`<p class="empty">${q ? '見つかりませんでした' : EMPTY[status]}</p>` : ''}`;
   },
 };

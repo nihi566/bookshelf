@@ -110,6 +110,17 @@ export function deleteThought(library, id, now = new Date().toISOString()) {
   return tomb;
 }
 
+/**
+ * 最後の PC との同期より後に書いた・直したメモか（PC にまだ届いていない）。
+ * 一度も同期していない・最後の同期の時刻が読めないときは、届いたとは言えないので未同期とする。
+ * updatedAt は書いた端末の時計なので、時計の進んだ別の端末で書いたメモは、届いていても次の同期まで未同期と出ることがある
+ */
+export function isThoughtUnsynced(t, lastSync) {
+  const synced = Date.parse(lastSync ?? '');
+  if (Number.isNaN(synced)) return true;
+  return Date.parse(t.updatedAt) > synced;
+}
+
 const newestFirst = (a, b) => String(b.createdAt).localeCompare(String(a.createdAt)) || a.id.localeCompare(b.id);
 
 /** 消していない思いつき（捨てたものも含む） */
