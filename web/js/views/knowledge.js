@@ -66,7 +66,7 @@ export function autoStatusBlock(state) {
   if (state.settings.ai.mode !== 'companion') return html`<p class="small muted">自動の分析は、PC のコンパニオン（bh serve）を使うときに動きます。</p>`;
   const au = state.pcInfo?.autoAnalysis;
   if (!au) return '';
-  const rule = `前回の分析のあとに点が ${au.minPoints} 件増えるか、${au.maxHours} 時間たって点が 1 件以上増えるか永久ノートを書いた・直したとき、PC が分析し直します`;
+  const rule = `前回の分析のあとに点が ${au.minPoints} 件増える・減るか、${au.maxHours} 時間たって点が 1 件以上増える・減るか永久ノートを書いた・直したとき、PC が分析し直します`;
   // bh analyze で分析したときは PC の記録が無いので、手元の分析結果の時刻（最後に成功した分析）で補う
   const okAt = au.lastSuccessAt || state.analysis?.createdAt;
   const cancelled = au.lastCancelledAt && (!au.lastSuccessAt || au.lastCancelledAt > au.lastSuccessAt);
