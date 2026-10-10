@@ -78,6 +78,7 @@ export function autoStatusBlock(state) {
 const REBUILT = {
   full: '「最初から作り直す」で、すべて作り直しました',
   grew: '前回作り直したときから点が大きく増えたので、最初から作り直しました',
+  unraveled: '点が減って前回の線がすべてほどけたので、最初から作り直しました',
   format: '今回は最初から作り直しました',
 };
 
