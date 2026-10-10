@@ -302,6 +302,9 @@ ul.card.plain.far-wrong { padding-left: 16px; } /* 箇条の点を出さない�
 .badge.thought { background: var(--accent-soft); color: var(--accent); }
 .thought-status.inbox { color: var(--warn); font-weight: 600; }
 .thought-moves { margin-top: 8px; }
+/* 思いつきを自分で入れた線(グループ) */
+.assigned-line { margin: 6px 0 0; color: var(--layer-line); overflow-wrap: anywhere; }
+.assigned-line.missing { color: var(--warn); }
 .section h2 .count { display: inline-block; min-width: 1.7em; padding: 0 6px; margin-left: 4px; border-radius: 999px; background: var(--accent); color: var(--accent-ink); font-size: 0.78rem; text-align: center; vertical-align: 1px; }
 .inbox > .help { margin: -4px 0 10px; }
 

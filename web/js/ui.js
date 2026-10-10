@@ -81,11 +81,28 @@ const STATUS_MOVES = {
   discarded: [['inbox', '未整理に戻す']],
 };
 
-/** 思いつきのカード。moves: 状態を変えるボタンを出す（受け箱・メモの一覧） */
-export function thoughtCard(t, { lines = [], query = '', moves = false } = {}) {
+/** 自分で入れた線(グループ)（assigned: { id, name, missing }。missing: 分析し直して無くなった） */
+function assignedLineRow(assigned) {
+  if (!assigned) return '';
+  return assigned.missing
+    ? html`<p class="small assigned-line missing">自分で入れた線(グループ)「${assigned.name}」は、分析し直して無くなりました。外して入れ直してください</p>`
+    : html`<p class="small assigned-line">自分で入れた線(グループ): <a href="#/knowledge/line/${assigned.id}">${assigned.name}</a></p>`;
+}
+
+/**
+ * 思いつきのカード。moves: 状態を変えるボタンを出す（受け箱・メモの一覧）。
+ * assigned: 自分で入れた線(グループ)（受け箱では入れる・外すボタンも出す）
+ */
+export function thoughtCard(t, { lines = [], query = '', moves = false, assigned = null } = {}) {
+  const lineButton = assigned
+    ? html`<button type="button" class="btn small" data-action="thought-unline" data-id="${t.id}">線(グループ)から外す</button>`
+    : t.status === 'inbox'
+      ? html`<button type="button" class="btn small" data-action="thought-to-line" data-id="${t.id}">線(グループ)に入れる</button>`
+      : '';
   return html`<article class="hl thought" data-hl="${t.id}">
     <p class="hl-text">${query ? mark(t.text, query) : t.text}</p>
     ${t.answerTo ? html`<div class="hl-note"><b>問いへの答え</b>${t.answerTo.question}</div>` : ''}
+    ${assignedLineRow(assigned)}
     ${lines.length ? html`<div class="hl-lines">${lines.map((l) => html`<a class="line-chip" href="#/knowledge/line/${l.id}">${l.name}</a>`)}</div>` : ''}
     <div class="hl-foot">
       <div class="hl-meta">
@@ -100,7 +117,7 @@ export function thoughtCard(t, { lines = [], query = '', moves = false } = {}) {
       </div>
     </div>
     ${moves
-      ? html`<div class="row thought-moves">${(STATUS_MOVES[t.status] || []).map(([status, label]) => html`<button type="button" class="btn small" data-action="thought-status" data-id="${t.id}" data-status="${status}">${label}</button>`)}${t.status === 'inbox' ? html`<button type="button" class="btn small" data-action="thought-to-note" data-id="${t.id}">永久ノートにする</button>` : ''}</div>`
+      ? html`<div class="row thought-moves">${(STATUS_MOVES[t.status] || []).map(([status, label]) => html`<button type="button" class="btn small" data-action="thought-status" data-id="${t.id}" data-status="${status}">${label}</button>`)}${t.status === 'inbox' ? html`<button type="button" class="btn small" data-action="thought-to-note" data-id="${t.id}">永久ノートにする</button>` : ''}${lineButton}</div>`
       : ''}
   </article>`;
 }
