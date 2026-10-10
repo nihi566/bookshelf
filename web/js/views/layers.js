@@ -74,7 +74,7 @@ export const solidView = {
     const wrap = root.querySelector('#map-wrap');
     if (!wrap) return;
     import('../knowledge-map-view.js').then(
-      (m) => m.mountKnowledgeMap(wrap, state.analysis),
+      (m) => m.mountKnowledgeMap(wrap, state.analysis, state.library),
       () => {
         const canvas = wrap.querySelector('#knowledge-map');
         wrap.querySelector('.map-tools').hidden = true;
