@@ -28,7 +28,7 @@ import { wishlist } from './views/wishlist.js';
 import { records } from './views/records.js';
 import { editThoughtSheet, lineSheet, newThoughtSheet, thoughtsView } from './views/thoughts.js';
 import { assignThoughtToLine, lineAssignmentOf, unassignThought } from '../core/line-assignments.js';
-import { FEEDBACK_LABELS, addHighlight, deleteBook, emptyLibrary, guessTechnical, listBooks, mergeParsed, parseShuffleRecord, registerBook, setFeedback, shuffleRecord, shuffleSeedFor, updateBook, updateHighlight } from '../core/model.js';
+import { FEEDBACK_LABELS, addHighlight, deleteBook, emptyLibrary, guessTechnical, highlightNeighbors, joinHighlights, listBooks, mergeParsed, parseShuffleRecord, registerBook, setFeedback, shuffleRecord, shuffleSeedFor, unjoinHighlights, updateBook, updateHighlight } from '../core/model.js';
 import { THOUGHT_STATUS, addThought, deleteThought, thoughtsOf, updateThought } from '../core/thoughts.js';
 import { isThought, pointById } from '../core/points.js';
 import { randomId } from '../core/text.js';
@@ -182,6 +182,15 @@ async function persistLibrary() {
 /** 削除した点を戻す（削除は印を付けるだけなので、印を外せばメモ・タグ・★ごと戻る） */
 async function undoDeleteHighlight(id) {
   if (!updateHighlight(state.library, id, { deleted: false })) throw new Error('この点はもう見つかりません（同期で消えた可能性があります）');
+  await persistLibrary();
+  render({ keepScroll: true });
+  autoSyncAfterChange();
+  toast('元に戻しました');
+}
+
+/** くっつけた 2 つの点を、くっつける前に戻す */
+async function undoJoinHighlights(undo) {
+  unjoinHighlights(state.library, undo);
   await persistLibrary();
   render({ keepScroll: true });
   autoSyncAfterChange();
@@ -696,18 +705,24 @@ const actions = {
   },
   edit(el) {
     const h = state.library.highlights[el.dataset.id];
+    const neighbors = highlightNeighbors(state.library, h.id);
     openSheet(
-      highlightEditSheet(h),
+      highlightEditSheet(h, neighbors),
       async (data, action) => {
+        let joined = null;
         if (action === 'delete') {
           updateHighlight(state.library, h.id, { deleted: true });
         } else {
           // 文が空なら例外のままシートに出す（書いた内容はシートに残る）
+          // くっつけるときも書きかけの編集を先に保存し、直した文どうしをつなぐ
           updateHighlight(state.library, h.id, { text: String(data.get('text') || ''), userNote: String(data.get('userNote') || '').trim(), tags: String(data.get('tags') || '').split(/[\s,、]+/) });
+          const other = { 'join-prev': neighbors.prev, 'join-next': neighbors.next }[action];
+          if (other) joined = joinHighlights(state.library, h.id, other.id);
         }
         await persistLibrary();
         // 保存できてから知らせる。確認なしの 1 押しで消えるので、押し間違えてもすぐ戻せるようにする
         if (action === 'delete') toast('削除しました', 6000, { label: '元に戻す', run: () => undoDeleteHighlight(h.id) });
+        if (joined) toast('くっつけました', 6000, { label: '元に戻す', run: () => undoJoinHighlights(joined.undo) });
         render({ keepScroll: true });
         autoSyncAfterChange();
       },

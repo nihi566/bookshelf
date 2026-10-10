@@ -1,7 +1,7 @@
 // 画面の部品（ハイライト・思いつきのカード、本の行、トースト、シート）
 import { html, mark } from './html.js';
 import { isTextEdited, listBooks, SOURCES } from '../core/model.js';
-import { hash, isoDate } from '../core/text.js';
+import { hash, isoDate, truncate } from '../core/text.js';
 import { kindleSyncState } from '../core/kindle-status.js';
 import { bookCoverUrl } from '../core/covers.js';
 import { analysisPoints, isThought } from '../core/points.js';
@@ -77,11 +77,32 @@ export function highlightCard(h, { library, lines = [], query = '', showBook = t
   </article>`;
 }
 
-/** 点の編集シート。文を直した点は取り込んだときの文と、それを文の欄に入れ直すボタン（保存はしない）を出す */
-export function highlightEditSheet(h) {
+// くっつける相手の文は、この点に接する側（前の点は終わり・次の点は始まり）を短く見せる
+const JOIN_PREVIEW = 40;
+function tail(s, n) {
+  // 末尾だけを 1 文字ずつに分ける（同期で届いた長い文・文字列でない値でも重くならず、落ちない）
+  const chars = Array.from(String(s ?? '').slice(-(2 * n + 2)));
+  return chars.length > n ? '…' + chars.slice(-(n - 1)).join('') : chars.join('');
+}
+
+/** 同じ本の前・次の点とくっつけるボタン（ハイライトするときに 2 つに分かれてしまった文を 1 つに戻す） */
+function joinRows({ prev, next }) {
+  if (!prev && !next) return '';
+  return html`<div class="join-rows">
+    ${prev ? html`<div class="row spread"><p class="help">前の点: ${tail(prev.text, JOIN_PREVIEW)}</p><button class="btn small" value="join-prev">前の点とくっつける</button></div>` : ''}
+    ${next ? html`<div class="row spread"><p class="help">次の点: ${truncate(next.text, JOIN_PREVIEW)}</p><button class="btn small" value="join-next">次の点とくっつける</button></div>` : ''}
+  </div>`;
+}
+
+/**
+ * 点の編集シート。文を直した点は取り込んだときの文と、それを文の欄に入れ直すボタン（保存はしない）を出す。
+ * neighbors: 同じ本の前・次の点（highlightNeighbors）。渡すと、くっつけるボタンを出す
+ */
+export function highlightEditSheet(h, neighbors = {}) {
   return html`<h2>点を編集</h2>
     <label class="field"><span>線を引いた文</span><textarea name="text" rows="4">${h.text}</textarea></label>
     ${isTextEdited(h) ? html`<div class="row spread original-text"><p class="help">取り込んだときの文: ${h.originalText}</p><button type="button" class="btn small" data-action="restore-original-text" data-id="${h.id}">この文に戻す</button></div>` : ''}
+    ${joinRows(neighbors)}
     <label class="field"><span>自分のメモ</span><textarea name="userNote">${h.userNote || ''}</textarea></label>
     <label class="field"><span>タグ（空白かカンマ区切り）</span><input type="text" name="tags" value="${(h.tags || []).join(' ')}" placeholder="例: 習慣 仕事"></label>
     <p class="help">自分のメモ・タグ・★は、AI が点をつなぐときに「読者自身の言葉」として使います（次の分析から）。</p>

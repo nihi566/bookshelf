@@ -182,7 +182,7 @@ test('NIH-66: 「この文に戻す」は文の欄に取り込んだときの文
   assert.match(action, /\.originalText/);
   assert.match(action, /elements\.text/);
   assert.doesNotMatch(action, /updateHighlight|persistLibrary|autoSyncAfterChange/);
-  assert.match(app, /openSheet\(\s*highlightEditSheet\(h\)/);
+  assert.match(app, /openSheet\(\s*highlightEditSheet\(h[,)]/);
 });
 
 // NIH-69: 検索で「文を直した点」だけに絞る

@@ -59,7 +59,8 @@ Book      = { id: 'b'+hash(書名の正規化), title, author, sources: ['kindle
 Highlight = { id: 'h'+hash(bookId+本文の正規化), bookId, source, kind: 'highlight'|'note',
               text, note, chapter, location, locationEnd, page, color, createdAt,
               favorite, tags, userNote, importedAt, updatedAt, deleted?, supersededBy?,
-              originalText?, textEditedAt? }        // 文を直した点だけ: 取り込んだときの文と、直した時刻
+              originalText?, textEditedAt?,         // 文を直した点だけ: 取り込んだときの文と、直した時刻
+              joinedAt? }                           // 前の点にくっつけた点だけ（supersededBy がくっつけた先）
 Thought   = { id: 't'+時刻+乱数, text, status: 'inbox'|'done'|'discarded', answerTo?: { kind, id?, question },
               createdAt, updatedAt }                    // 消したものは { id, deleted: true, createdAt, updatedAt } だけ残す
 FarReaction = { id: 'f'+hash(2 点の ID), a, b, idea, explanation, status: 'interesting'|'wrong'|'', updatedAt }  // 遠いつながりへの反応
@@ -97,6 +98,10 @@ Outline   = { id: 'o'+時刻+乱数, title, sources: [{ kind: 'plane'|'line'|'no
   - 再取り込みの重複・読書メモの重複・伸ばしたハイライトの判定は取り込んだときの文で行う。伸ばしたハイライトに置き換わるときは直した文を引き継ぎ、伸ばした文を `originalText` にする
   - 同期では、★・タグとは別に `textEditedAt` が新しい方の文を採る（別の端末でタグを後から直しても、文の編集が負けない）。外から来た直した文・取り込んだときの文・直した時刻が文字列でなければ採らない。別の端末で伸ばしたハイライトに置き換わった点の直した文は、置き換え先に引き継ぐ
   - 分析は文のハッシュで埋め込み・線をキャッシュしているので、直した点は次の分析で埋め込み直し、その点を含む線を作り直す
+- **前後の点をくっつける**（`joinHighlights`。画面は点の編集シート。前・次は `highlightNeighbors` = 本の中の並び順）: 同じ本の 2 点だけ。本の中で前にある点を残し、文は「前の文 + 次の文」（両側が英数字なら空白を挟む）にして、点の文を直したのと同じく `originalText` を残し `textEditedAt` を進める。★はどちらか、タグは両方、自分のメモは改行でつなぎ（後ろの点の取り込んだメモも自分のメモに足す。取り込んだメモの欄は同期で空欄を埋め合うので、そこに足すと戻したあとに残る）、位置は両方を覆う範囲にする。前後は本の画面の並び（`bookHighlights`）で決める
+  - 後ろの点は `deleted: true, supersededBy: <前の点>, joinedAt` にする。Kindle で伸ばしたハイライトと同じ `supersededBy` なので、リンク・永久ノートの根拠・遠いつながり・分析は前の点としてたどる。再取り込みしても後ろの点は消えたまま
+  - 戻す（`unjoinHighlights`。通知の「元に戻す」）: くっつける前の 2 点の欄に戻し、時刻を進める。同期では、Kindle の置き換えは「どちらから来ても消えたまま」だが、くっつけた点（`joinedAt` あり）は削除と同じく利用者の編集が新しい方を採るので、戻した結果も届く。くっつけた後にどちらかの点が変わっていたら（直した・同期で変わった）、後からの編集を消さないよう戻さずに断る
+  - 既知の制約: 同期していない 2 台で、同じ点をそれぞれ別の相手とくっつける（1 台は A+B、もう 1 台は B+C）と、どちらかの文が生きている点に入らないか、2 回出る。消えた側の文は削除した点に残る（`supersededBy` の先が消えていると、`mergeLibraries` の引き継ぎはそこで止まる）
 - 端末間の同期（`mergeLibraries`）は **欄ごと** に統合し、どちら向きに統合しても同じ結果になる
   - 取り込みで決まる欄（章・色・位置・メモなど）は `updatedAt` が新しい方を採り、空欄はもう一方で埋める
   - 利用者の欄（★・タグ・自分のメモ・削除。本では削除・表紙・技術書）は、利用者が編集した時刻 `userUpdatedAt` が新しい方をまとめて採る。取り込みで欄が埋まっても `userUpdatedAt` は変わらないので、未同期のスマホの編集が PC 側に上書きされない（古い版のデータは、編集の跡があれば `updatedAt` で代用）
