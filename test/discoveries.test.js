@@ -1,9 +1,6 @@
 // G7 発見を届ける: 前回との差から発見を作る・ホームに未読を出す・開くと既読（端末の間で同期）・今日の点に別の本の点を添える
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { emptyLibrary, mergeLibraries, mergeParsed } from '../web/core/model.js';
 import { addThought } from '../web/core/thoughts.js';
 import { SAMPLE_BOOKS } from '../web/core/sample.js';
@@ -13,7 +10,6 @@ import { DISCOVERIES_KEEP, discoveryId, findDiscoveries, mergeDiscoveries } from
 import { markDiscoveryRead, mergeReads, readsOf, unreadDiscoveries } from '../web/core/discovery-reads.js';
 import { startFakeLlm } from './helpers/fake-llm.js';
 
-const WEB = join(dirname(fileURLToPath(import.meta.url)), '..', 'web');
 const T = '2026-10-04T10:00:00.000Z';
 
 test('G7-1: 前回との差から発見を作る（本をまたいでつながった点・新しい線・つながった「まだつながっていない点」）', () => {
@@ -225,10 +221,18 @@ test('G7-2: 発見を開くと「どの点とどの点が、なぜつながっ�
   const opened = [];
   discoveryView.mount({}, { state, params: { id: 'd0' }, markDiscoveryRead: (id) => opened.push(id) });
   assert.deepEqual(opened, ['d0']);
-  // app.js: 開いたら端末に保存して同期する
-  const app = readFileSync(join(WEB, 'js/app.js'), 'utf8');
-  assert.match(app, /async function readDiscovery\(id\) \{[\s\S]*?markDiscoveryRead\(state\.library, id\)[\s\S]*?await persistLibrary\(\);[\s\S]*?autoSyncAfterChange\(\);/);
-  assert.match(app, /markDiscoveryRead: readDiscovery/);
+  // 開いたら端末に保存して同期する（2 回目は既読なので保存しない）
+  const { fakeApp } = await import('./helpers/app-actions.js');
+  const app = fakeApp({ ...state, loaded: true });
+  await app.readDiscovery('d0');
+  assert.ok(readsOf(state.library).d0);
+  assert.deepEqual(app.log, ['persist', 'sync']);
+  await app.readDiscovery('d0');
+  assert.deepEqual(app.log, ['persist', 'sync']);
+  // 保存に失敗したら知らせる（画面は開いたまま）
+  const failing = fakeApp({ ...stateWith(() => []).state, loaded: true }, { persist: async () => { throw new Error('保存できません'); } });
+  await failing.readDiscovery('d1');
+  assert.deepEqual(failing.log, ['toast']);
 });
 
 test('G7-3: 今日の点に、その点とつながる別の本の点を 1 件添える（つながる点が無ければ添えない）', async () => {

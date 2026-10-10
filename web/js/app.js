@@ -3,35 +3,18 @@ import { html } from './html.js';
 import { kv, requestPersistence } from './db.js';
 import { loadCache, loadState, save, saveCache, state } from './state.js';
 import { buildBookmarklet, companion, detectCompanion, download, syncWithPc } from './services.js';
-import { highlightEditSheet, homeAlertBlock, openSheet, serveVersionBlock, toast } from './ui.js';
+import { openSheet, serveVersionBlock, toast } from './ui.js';
 import { swVersion } from '../core/serve-version.js';
-import { book, books, home, search } from './views/library.js';
-import { autoStatusBlock, historyView, isolatedView, knowledge, lineView, pendingView, planeView } from './views/knowledge.js';
-import { linesView, planesView, solidView } from './views/layers.js';
-import { starsView } from './views/stars.js';
-import { toggleLineStar } from '../core/line-stars.js';
-import { discoveriesView, discoveryView } from './views/discoveries.js';
-import { farView } from './views/far.js';
-import { noteView, notesView } from './views/notes.js';
-import { pointView } from './views/point.js';
+import { LAYER_PATHS, PC_INFO_BOXES, PC_INFO_PATHS, THOUGHT_PATHS, matchRoute, parseHash as parseRouteHash } from './routes.js';
+import { appActions } from './app-actions.js';
 import { noteActions } from './note-actions.js';
-import { linkPickerView } from './views/links.js';
 import { linkActions } from './link-actions.js';
-import { askResultBlock, askView, semanticAvailability } from './views/ask.js';
+import { askResultBlock, semanticAvailability } from './views/ask.js';
 import { askActions } from './ask-actions.js';
-import { outlineNewView, outlineStatusBlock, outlineView, outlinesView } from './views/outlines.js';
+import { outlineStatusBlock } from './views/outlines.js';
 import { outlineActions } from './outline-actions.js';
-import { markDiscoveryRead } from '../core/discovery-reads.js';
-import { FAR_REACTIONS, farConnectionById, reactFar } from '../core/far-reactions.js';
-import { importOutcome, importResultBlock, importView, kindleSyncBlock, playbooksSyncBlock, settingsView } from './views/settings.js';
-import { wishlist } from './views/wishlist.js';
-import { records } from './views/records.js';
-import { editThoughtSheet, lineSheet, newThoughtSheet, thoughtsView } from './views/thoughts.js';
-import { assignThoughtToLine, lineAssignmentOf, unassignThought } from '../core/line-assignments.js';
-import { FEEDBACK_LABELS, addHighlight, deleteBook, emptyLibrary, guessTechnical, listBooks, mergeParsed, parseShuffleRecord, registerBook, setFeedback, shuffleRecord, shuffleSeedFor, updateBook, updateHighlight } from '../core/model.js';
-import { THOUGHT_STATUS, addThought, deleteThought, thoughtsOf, updateThought } from '../core/thoughts.js';
-import { isThought, pointById } from '../core/points.js';
-import { randomId } from '../core/text.js';
+import { importOutcome, importResultBlock } from './views/settings.js';
+import { addHighlight, emptyLibrary, listBooks, mergeParsed, parseShuffleRecord, shuffleRecord, shuffleSeedFor } from '../core/model.js';
 import { COVER_MAX_LENGTH } from '../core/covers.js';
 import { parseFiles } from '../core/parsers/index.js';
 import { applyImport, makeBackup } from '../core/importing.js';
@@ -39,54 +22,8 @@ import { isNotebookJson, parseNotebookJson } from '../core/parsers/kindle-notebo
 import { createLlmClient } from '../core/analysis/llm.js';
 import { analyzeLibrary, recommendBooks, recommendationNote } from '../core/analysis/pipeline.js';
 import { followJob, pcJobOutcome } from '../core/jobs.js';
-import { SAMPLE_BOOKS } from '../core/sample.js';
 import { browserStore, loadMarks, toRecommendWishlist } from '../core/wishlist.js';
 import { loadWishlist } from './wishlist-data.js';
-
-const ROUTES = [
-  [/^\/$/, home, 'home'],
-  [/^\/books$/, books, 'books'],
-  [/^\/book\/(?<id>[\w-]+)$/, book, 'books'],
-  [/^\/wishlist$/, wishlist, 'price'],
-  // 全ての点の一覧（点の専用ページ。言葉・意味で探せる）。入口はホームの点の数・読んだ本・知識の画面
-  [/^\/search$/, search, 'books'],
-  [/^\/records$/, records, 'records'],
-  // 思いつき（フリートノート）の一覧。受け箱はホームにあるので、タブはホーム
-  [/^\/thoughts$/, thoughtsView, 'home'],
-  [/^\/knowledge$/, knowledge, 'knowledge'],
-  // 線・面・立体の専用ページ（一覧。点の一覧は全ての点 = #/search）
-  [/^\/lines$/, linesView, 'knowledge'],
-  [/^\/planes$/, planesView, 'knowledge'],
-  [/^\/solid$/, solidView, 'knowledge'],
-  // ★をつけた線(グループ)と点（入口はホームの「★ N」と線(グループ)の画面）
-  [/^\/stars$/, starsView, 'home'],
-  [/^\/knowledge\/line\/(?<id>[\w-]+)$/, lineView, 'knowledge'],
-  [/^\/knowledge\/plane\/(?<id>[\w-]+)$/, planeView, 'knowledge'],
-  [/^\/knowledge\/isolated$/, isolatedView, 'knowledge'],
-  // 前回の分析のあとに増えた点（知識の画面・ホームの「増えた点 N 件」から）
-  [/^\/knowledge\/pending$/, pendingView, 'knowledge'],
-  // 遠いつながり（別の本・別の面の点の組を AI が読み、共通する考えがあったもの）
-  [/^\/knowledge\/far$/, farView, 'knowledge'],
-  // 永久ノート（1 ノート = 1 アイデア）と、点 1 つ（それを根拠にしている永久ノート）
-  [/^\/notes$/, notesView, 'knowledge'],
-  [/^\/note\/(?<id>[\w-]+)$/, noteView, 'knowledge'],
-  [/^\/point\/(?<id>[\w-]+)$/, pointView, 'knowledge'],
-  // リンクを張る相手を選ぶ（点・メモ・永久ノートから）
-  [/^\/link\/(?<id>[\w-]+)$/, linkPickerView, 'knowledge'],
-  // 問いかける（PC の AI が、自分の点を根拠に答える）
-  [/^\/ask$/, askView, 'knowledge'],
-  // 文章の骨組み（一覧・材料を選んで作る・骨組み 1 つ）
-  [/^\/outlines$/, outlinesView, 'knowledge'],
-  [/^\/outline\/new$/, outlineNewView, 'knowledge'],
-  [/^\/outline\/(?<id>[\w-]+)$/, outlineView, 'knowledge'],
-  // 過去の分析（履歴は PC にだけある）
-  [/^\/knowledge\/history\/(?<id>[0-9TZ]+)$/, historyView, 'knowledge'],
-  // 発見（ホームの「発見」から開く）
-  [/^\/discovery\/(?<id>[\w-]+)$/, discoveryView, 'home'],
-  [/^\/discoveries$/, discoveriesView, 'home'],
-  [/^\/import$/, importView, 'settings'],
-  [/^\/settings$/, settingsView, 'settings'],
-];
 
 const view = document.getElementById('view');
 // 今日の点の「別の点」で選び直した種。この端末に残し、その日のうちは開き直しても同じ組を出す（NIH-89）
@@ -103,25 +40,13 @@ let shuffle = parseShuffleRecord(shuffleStore.get(SHUFFLE_KEY));
 let currentPath = null;
 let currentHash = null;
 
-function parseHash() {
-  const raw = location.hash.replace(/^#/, '') || '/';
-  const [path, qs] = raw.split('?');
-  return { path, query: new URLSearchParams(qs || '') };
-}
+const parseHash = () => parseRouteHash(location.hash);
 
 function render({ keepScroll = false } = {}) {
   const { path, query } = parseHash();
-  let match = null;
-  for (const [re, v, tab] of ROUTES) {
-    const m = path.match(re);
-    if (m) {
-      match = { view: v, tab, params: m.groups || {} };
-      break;
-    }
-  }
-  if (!match) match = { view: home, tab: 'home', params: {} };
+  const match = matchRoute(path);
   // refresh: 同じ画面の描き直し（同期・編集のあと）。別の画面から来たとき・リンクを押したときは false
-  const ctx = { state, params: match.params, query, shuffle: shuffleSeedFor(shuffle, new Date()), refresh: location.hash === currentHash, markDiscoveryRead: readDiscovery };
+  const ctx = { state, params: match.params, query, shuffle: shuffleSeedFor(shuffle, new Date()), refresh: location.hash === currentHash, markDiscoveryRead: appOps.readDiscovery };
   currentHash = location.hash;
   // 取り込みの結果は、画面を離れたら（別の画面から来たら）忘れる
   if (!ctx.refresh) state.lastImport = null;
@@ -178,29 +103,6 @@ function mountCommon() {
 async function persistLibrary() {
   await save.library();
 }
-
-/** 削除した点を戻す（削除は印を付けるだけなので、印を外せばメモ・タグ・★ごと戻る） */
-async function undoDeleteHighlight(id) {
-  if (!updateHighlight(state.library, id, { deleted: false })) throw new Error('この点はもう見つかりません（同期で消えた可能性があります）');
-  await persistLibrary();
-  render({ keepScroll: true });
-  autoSyncAfterChange();
-  toast('元に戻しました');
-}
-
-/** 発見を開いたら既読にする（端末に保存し、PC と同期してほかの端末でも既読にする） */
-async function readDiscovery(id) {
-  if (!state.loaded || !markDiscoveryRead(state.library, id)) return;
-  try {
-    await persistLibrary();
-    autoSyncAfterChange();
-  } catch (e) {
-    toast(e.message, 4000);
-  }
-}
-
-// 思いつきを出している画面（受け箱・メモの一覧・点の検索）
-const THOUGHT_PATHS = ['/', '/thoughts', '/search'];
 
 /** 画面の入力欄に書きかけがあるか（描き直すと消えてしまう） */
 function hasDraft() {
@@ -285,9 +187,6 @@ function setJob(patch) {
     } else render({ keepScroll: true });
   } else if (LAYER_PATHS.includes(path) && !state.job.running) render({ keepScroll: true });
 }
-
-// 分析の結果を出す線・面・立体のページ（分析が終わったら描き直す）
-const LAYER_PATHS = ['/lines', '/planes', '/solid'];
 
 let abort = null;
 
@@ -441,15 +340,6 @@ async function sync({ quiet = false } = {}) {
   }
 }
 
-// PC の状態（拡張の確認結果など）を表示する画面
-const PC_INFO_PATHS = ['/settings', '/import', '/', '/knowledge'];
-// 描き直さず、欄だけ差し替える画面（描き直すと取り込み結果の表示・開いた説明・今日の点の「別の点」が消える）
-const PC_INFO_BOXES = {
-  '/import': [['#kindle-sync', kindleSyncBlock], ['#playbooks-sync', playbooksSyncBlock]],
-  '/': [['#home-alert', homeAlertBlock]],
-  '/knowledge': [['#auto-status', autoStatusBlock]],
-};
-
 /** PC の状態（拡張の確認結果など）を取り直し、表示している画面に反映する */
 async function refreshPcInfo() {
   // PC を設定していないとき（GitHub Pages で開いただけ）は localhost に問い合わせない
@@ -571,17 +461,6 @@ async function coverDataUrl(file) {
   throw new Error('表紙の画像を小さくできませんでした。別の画像を選んでください');
 }
 
-/** 技術書の選択肢。自動のときは、書名から今どちらと判断しているかも見せる */
-function technicalField(b) {
-  const value = typeof b?.technical === 'boolean' ? (b.technical ? 'yes' : 'no') : 'auto';
-  const guess = b ? (guessTechnical(b.title) ? '技術書' : '技術書ではない') : '';
-  const opt = (v, label) => html`<option value="${v}" ${v === value ? 'selected' : ''}>${label}</option>`;
-  return html`<label class="field"><span>技術書（IT の教科書）か</span>
-    <select name="technical">${opt('auto', `自動${guess ? `（今: ${guess}）` : '（書名から判断）'}`)}${opt('yes', '技術書（線を点に数えない）')}${opt('no', '技術書ではない')}</select></label>`;
-}
-
-const TECHNICAL_VALUES = { auto: null, yes: true, no: false };
-
 /**
  * 問いかけた結果を出す。問いかける画面の答えの欄とボタンだけを差し替える
  * （答えは数十秒あとに届くので、ほかの画面や、書き直している質問の欄を描き直さない）
@@ -625,213 +504,32 @@ const { create: createOutline, ...outlineButtons } = outlineActions({
   },
 });
 
+// 本・点・思いつき・線(グループ)・反応のデータを変える操作（中身は app-actions.js）
+const appOps = appActions({
+  state,
+  openSheet,
+  toast,
+  persist: persistLibrary,
+  saveAnalysis: () => save.analysis(),
+  sync: autoSyncAfterChange,
+  render,
+  refreshThoughts: refreshThoughtViews,
+  go: (hash) => (location.hash = hash),
+  confirm: (message) => confirm(message),
+  coverDataUrl,
+  clipboard: () => navigator.clipboard,
+  restoreHistory: (id) => companion.restoreHistory(id),
+  pinHistory: (id, pinned) => companion.pinHistory(id, pinned),
+});
+
 const actions = {
   'ask-save': () => askOps.save(),
   ...outlineButtons,
-  'register-book'() {
-    openSheet(
-      html`<h2>紙の本を登録</h2>
-        <label class="field"><span>書名</span><input type="text" name="title" autocomplete="off"></label>
-        <label class="field"><span>著者（任意）</span><input type="text" name="author" autocomplete="off"></label>
-        <label class="field"><span>表紙の画像（任意）</span><input type="file" name="cover" accept="image/*"></label>
-        ${technicalField(null)}
-        <div class="row spread"><span></span><span class="row"><button class="btn" value="cancel">やめる</button><button class="btn primary" value="save">登録</button></span></div>`,
-      async (data) => {
-        try {
-          const b = registerBook(state.library, {
-            title: data.get('title'),
-            author: data.get('author'),
-            cover: await coverDataUrl(data.get('cover')),
-            technical: TECHNICAL_VALUES[data.get('technical')] ?? undefined,
-          });
-          await persistLibrary();
-          toast(`『${b.title}』を登録しました。線を引いた文を足せます`);
-          location.hash = `#/book/${b.id}`;
-          autoSyncAfterChange();
-        } catch (e) {
-          // シートの上ではトーストが隠れて見えないので、投げてシートの中に出す
-          throw e;
-        }
-      },
-    );
-  },
-  'edit-book'(el) {
-    const b = state.library.books[el.dataset.id];
-    openSheet(
-      html`<h2>本の情報</h2>
-        <p class="quote">${b.title}</p>
-        <label class="field"><span>著者</span><input type="text" name="author" value="${b.author || ''}" autocomplete="off"></label>
-        <label class="field"><span>表紙の画像を${b.cover ? '差し替える' : '選ぶ'}（任意）</span><input type="file" name="cover" accept="image/*"></label>
-        ${b.cover ? html`<label class="check"><input type="checkbox" name="removeCover" value="1"> アップロードした表紙を外す</label>` : ''}
-        ${technicalField(b)}
-        <div class="row spread"><span></span><span class="row"><button class="btn" value="cancel">やめる</button><button class="btn primary" value="save">保存</button></span></div>`,
-      async (data) => {
-        try {
-          // 変えた欄だけを送る（変えていない表紙・技術書の編集時刻を進めて、別の端末の編集を負かさない）
-          const patch = { author: data.get('author') };
-          const technical = TECHNICAL_VALUES[data.get('technical')] ?? null;
-          if (technical !== (typeof b.technical === 'boolean' ? b.technical : null)) patch.technical = technical;
-          const cover = await coverDataUrl(data.get('cover'));
-          if (cover) patch.cover = cover;
-          else if (data.get('removeCover')) patch.cover = '';
-          updateBook(state.library, b.id, patch);
-          await persistLibrary();
-          toast('保存しました');
-          render({ keepScroll: true });
-          autoSyncAfterChange();
-        } catch (e) {
-          // シートの上ではトーストが隠れて見えないので、投げてシートの中に出す
-          throw e;
-        }
-      },
-    );
-  },
-  async fav(el) {
-    const h = updateHighlight(state.library, el.dataset.id, { favorite: !state.library.highlights[el.dataset.id].favorite });
-    await persistLibrary();
-    el.classList.toggle('on', h.favorite);
-    el.textContent = h.favorite ? '★' : '☆';
-    el.setAttribute('aria-pressed', String(h.favorite));
-    autoSyncAfterChange();
-  },
-  edit(el) {
-    const h = state.library.highlights[el.dataset.id];
-    openSheet(
-      highlightEditSheet(h),
-      async (data, action) => {
-        if (action === 'delete') {
-          updateHighlight(state.library, h.id, { deleted: true });
-        } else {
-          // 文が空なら例外のままシートに出す（書いた内容はシートに残る）
-          updateHighlight(state.library, h.id, { text: String(data.get('text') || ''), userNote: String(data.get('userNote') || '').trim(), tags: String(data.get('tags') || '').split(/[\s,、]+/) });
-        }
-        await persistLibrary();
-        // 保存できてから知らせる。確認なしの 1 押しで消えるので、押し間違えてもすぐ戻せるようにする
-        if (action === 'delete') toast('削除しました', 6000, { label: '元に戻す', run: () => undoDeleteHighlight(h.id) });
-        render({ keepScroll: true });
-        autoSyncAfterChange();
-      },
-    );
-  },
-  'restore-original-text'(el) {
-    // 文の欄に取り込んだときの文を入れるだけ（保存は利用者が「保存」を押す。やめれば何も変わらない）
-    const original = state.library.highlights[el.dataset.id]?.originalText;
-    const field = el.closest('form')?.elements.text;
-    if (typeof original !== 'string' || !field) return;
-    field.value = original;
-    field.focus();
-  },
-  // 編集を開かずに 1 回で消す（編集シートの「この点を削除」と同じ処理。押し間違えてもトーストから戻せる）
-  async delete(el) {
-    const id = el.dataset.id;
-    if (!state.library.highlights[id]) return;
-    updateHighlight(state.library, id, { deleted: true });
-    await persistLibrary();
-    toast('削除しました', 6000, { label: '元に戻す', run: () => undoDeleteHighlight(id) });
-    render({ keepScroll: true });
-    autoSyncAfterChange();
-  },
-  async copy(el) {
-    const h = pointById(state.library, el.dataset.id);
-    if (!h) return;
-    // http の LAN アドレスなど、安全でない画面ではクリップボードを使えない
-    if (!navigator.clipboard) return toast('この画面ではコピーできません（https か localhost で開いてください）', 4000);
-    const b = state.library.books[h.bookId];
-    await navigator.clipboard.writeText(isThought(h) || !b ? h.text : `${h.text}\n— ${b.title}${b.author ? `（${b.author}）` : ''}`);
-    toast('コピーしました');
-  },
-  // ---- 思いつき（フリートノート） ----
-  'new-thought'() {
-    if (!state.loaded) return toast('まだ端末のデータを読み込んでいます。少し待ってから押してください');
-    // ID はシートを開いたときに 1 回だけ作る（保存に失敗して押し直しても、同じメモが 2 件にならない）
-    const id = randomId('t');
-    openSheet(newThoughtSheet(), async (data) => {
-      // 失敗したら例外のままシートに出す（書いた文はシートに残る）
-      addThought(state.library, { text: data.get('text') }, undefined, id);
-      // 端末に先に保存する（PC とつながっていなくても消えない。つながったときに同期する）
-      await persistLibrary();
-      toast('受け箱に入れました');
-      refreshThoughtViews();
-      autoSyncAfterChange();
-    });
-  },
-  'edit-thought'(el) {
-    const t = thoughtsOf(state.library)[el.dataset.id];
-    if (!t || t.deleted) return;
-    openSheet(editThoughtSheet(t), async (data, action) => {
-      if (action === 'delete') deleteThought(state.library, t.id);
-      // 本文が変わっていなければ updateThought は何もしない（別の端末の新しい編集を負かさない）
-      else updateThought(state.library, t.id, { text: data.get('text') });
-      await persistLibrary();
-      toast(action === 'delete' ? '削除しました' : '保存しました');
-      render({ keepScroll: true });
-      autoSyncAfterChange();
-    });
-  },
-  async 'thought-status'(el) {
-    const t = updateThought(state.library, el.dataset.id, { status: el.dataset.status });
-    await persistLibrary();
-    toast(`「${THOUGHT_STATUS[t.status]}」にしました`);
-    render({ keepScroll: true });
-    autoSyncAfterChange();
-  },
-  // 思いつきを、自分で選んだ線(グループ)に入れる（分析を待たずに整理する。分析し直しても外れない）
-  'thought-to-line'(el) {
-    if (!state.loaded) return toast('まだ端末のデータを読み込んでいます。少し待ってから押してください');
-    const t = thoughtsOf(state.library)[el.dataset.id];
-    if (!t || t.deleted) return;
-    const lines = state.analysis?.lines || [];
-    if (!lines.length) return toast('線(グループ)がまだありません。知識の画面で分析すると選べます', 4000);
-    openSheet(lineSheet(t, lines), async (data) => {
-      // シートを開いている間に分析が差し替わっていたら、今の分析から引き直す（無い線(グループ)には入れない）
-      const line = (state.analysis?.lines || []).find((l) => l.id === data.get('line'));
-      if (!line) throw new Error('選んだ線(グループ)が、分析し直して無くなりました。もう一度選んでください');
-      assignThoughtToLine(state.library, t.id, line);
-      await persistLibrary();
-      toast(`線(グループ)「${line.name}」に入れました`);
-      render({ keepScroll: true });
-      autoSyncAfterChange();
-    });
-  },
-  // 線(グループ)の★（★のページの「無くなった線(グループ)」からも外せるよう、分析に無い線は★をつけたときの名前で外す）
-  async 'line-star'(el) {
-    if (!state.loaded) return toast('まだ端末のデータを読み込んでいます。少し待ってから押してください');
-    const line = (state.analysis?.lines || []).find((l) => l.id === el.dataset.id) || { id: el.dataset.id, name: '' };
-    const on = toggleLineStar(state.library, line);
-    await persistLibrary();
-    toast(on ? '★をつけました（★の一覧はホームの「★」から）' : '★を外しました');
-    render({ keepScroll: true });
-    autoSyncAfterChange();
-  },
-  async 'thought-unline'(el) {
-    // ほかの端末の同期で先に外れていたら、何もしない
-    if (!lineAssignmentOf(state.library, el.dataset.id)) return render({ keepScroll: true });
-    unassignThought(state.library, el.dataset.id);
-    await persistLibrary();
-    toast('線(グループ)から外しました');
-    render({ keepScroll: true });
-    autoSyncAfterChange();
-  },
+  ...appOps.actions,
   // ---- 永久ノート（書く・直す・線やメモから作る・点を根拠にする。中身は note-actions.js） ----
   ...noteActions({ state, openSheet, toast, persist: persistLibrary, sync: autoSyncAfterChange, render, go: (hash) => (location.hash = hash), confirm: (message) => confirm(message) }),
   // ---- リンク（張る・理由を書く・外す。中身は link-actions.js） ----
   ...linkActions({ state, openSheet, toast, persist: persistLibrary, sync: autoSyncAfterChange, render, go: (hash) => (location.hash = hash), confirm: (message) => confirm(message) }),
-  async 'delete-book'(el) {
-    const b = state.library.books[el.dataset.id];
-    if (!confirm(`『${b.title}』とその点をすべて削除しますか？`)) return;
-    deleteBook(state.library, b.id);
-    await persistLibrary();
-    location.hash = '#/books';
-    toast('削除しました');
-    autoSyncAfterChange();
-  },
-  async 'load-sample'() {
-    const stats = mergeParsed(state.library, SAMPLE_BOOKS);
-    await persistLibrary();
-    toast(`サンプルを入れました（点 ${stats.added} 件）`);
-    location.hash = '#/';
-    render();
-  },
   shuffle() {
     // 押すたびに新しい種で選び直す（開き直すたびに同じ並びが出ないよう、回数ではなく乱数にする）
     shuffle = shuffleRecord(new Date(), Math.random().toString(36).slice(2));
@@ -843,53 +541,6 @@ const actions = {
   'rerun-recommend': () => runAnalysis('recommend'),
   'cancel-analysis': cancelAnalysis,
   'check-pc-job': () => checkPcJob(),
-  // 過去の分析に戻す（NIH-7。PC がその回を今の分析として保存し、手元の分析も差し替える）
-  async 'restore-analysis'(el) {
-    if (state.job?.running) return toast('分析の最中です。終わってから押してください');
-    if (!confirm('この分析に戻しますか？ 知識の画面の線(グループ)・面・立体が、この回のものになります（今の分析も履歴に残っているので、あとで戻せます）')) return;
-    el.disabled = true;
-    try {
-      state.analysis = await companion.restoreHistory(el.dataset.id);
-      await save.analysis();
-    } finally {
-      el.disabled = false;
-    }
-    toast('この分析に戻しました');
-    location.hash = '#/knowledge';
-  },
-  // 履歴の回に「この回を残す」の印を付け外しする（NIH-102。PC の履歴の一覧に印を持つ）
-  async 'pin-history'(el) {
-    const pinned = el.dataset.pinned !== 'true';
-    el.disabled = true;
-    try {
-      await companion.pinHistory(el.dataset.id, pinned);
-    } catch (e) {
-      el.disabled = false;
-      return toast(e.message);
-    }
-    toast(pinned ? 'この回を残します。直近 12 回を過ぎても消えません' : '残すのをやめました。直近 12 回を過ぎると消えます');
-    render({ keepScroll: true });
-  },
-  async 'rec-feedback'(el) {
-    const r = state.analysis?.recommendations?.[Number(el.dataset.i)];
-    if (!r) return;
-    const f = setFeedback(state.library, { title: r.title, author: r.author }, el.dataset.status);
-    await persistLibrary();
-    toast(f.status ? `「${r.title}」を「${FEEDBACK_LABELS[f.status]}」にしました。次のおすすめに反映します` : '反応を外しました');
-    render({ keepScroll: true });
-    autoSyncAfterChange();
-  },
-  // 遠いつながりへの反応（面白い: 残り続ける / ちがう: もう出さない）。「ちがう」とした組は画面に無いので、反応の記録からも探す
-  async 'far-react'(el) {
-    if (!state.loaded) return toast('まだ端末のデータを読み込んでいます。少し待ってから押してください');
-    const f = farConnectionById(state.analysis, state.library, el.dataset.id);
-    if (!f || !Object.hasOwn(FAR_REACTIONS, el.dataset.status)) return;
-    const r = reactFar(state.library, f, el.dataset.status);
-    await persistLibrary();
-    toast(r.status === 'wrong' ? '「ちがう」にしました。この組はもう出しません（すべての遠いつながりの画面で取り消せます）' : r.status === 'interesting' ? '「面白い」にしました。分析し直しても残ります' : '反応を外しました');
-    render({ keepScroll: true });
-    autoSyncAfterChange();
-  },
   sync: () => sync(),
   async 'toggle-autosync'(el) {
     state.settings.autoSync = el.checked;

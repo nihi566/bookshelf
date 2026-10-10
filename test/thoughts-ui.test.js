@@ -25,12 +25,23 @@ test('G1-1: 上のバー（どの画面にも出る）に「メモ」の入口�
   assert.match(sheet, /<textarea name="text"[^>]* autofocus/, '開いたらすぐ書ける');
   assert.equal((sheet.match(/value="save"/g) || []).length, 1, '保存は 1 回押すだけ');
   assert.doesNotMatch(sheet, /<select|type="radio"|type="checkbox"/, '書く前に選ばせる欄が無い');
-  // ボタンの動き（app.js の actions['new-thought']）がつながっている: シートを開き、書いたメモを端末に保存してから同期する
-  const app = readFileSync(join(WEB, 'js/app.js'), 'utf8');
-  const action = app.match(/'new-thought'\(\) \{([\s\S]*?)\n  \},/)[1];
-  assert.match(action, /openSheet\(newThoughtSheet\(\)/);
-  assert.match(action, /addThought\(state\.library, \{ text: data\.get\('text'\) \}[^)]*\);[\s\S]*?await persistLibrary\(\);[\s\S]*?autoSyncAfterChange\(\);/);
-  assert.match(action, /const id = randomId\('t'\);[\s\S]*?openSheet/, 'ID はシートを開くときに 1 回だけ作る（押し直しで 2 件にしない）');
+  // ボタンの動き（actions['new-thought']）: シートを開き、書いたメモを端末に保存してから同期する
+  const { fakeApp, formData } = await import('./helpers/app-actions.js');
+  const st = { ...state(), loaded: true };
+  const app = fakeApp(st);
+  app.actions['new-thought']();
+  assert.equal(app.sheets[0].content, sheet);
+  await app.sheets[0].onSubmit(formData({ text: '思いついたこと' }));
+  const [t] = Object.values(st.library.thoughts);
+  assert.equal(t.text, '思いついたこと');
+  assert.deepEqual(app.log, ['openSheet', 'persist', 'toast', 'refreshThoughts', 'sync']);
+  // 保存に失敗して押し直しても、同じメモが 2 件にならない（ID はシートを開くときに 1 回だけ作る）
+  await app.sheets[0].onSubmit(formData({ text: '思いついたこと' }));
+  assert.equal(Object.keys(st.library.thoughts).length, 1);
+  // 端末のデータを読み終える前は、シートを開かない
+  const early = fakeApp(state());
+  early.actions['new-thought']();
+  assert.deepEqual(early.log, ['toast']);
 });
 
 test('読み込みが終わる前は、端末のライブラリを保存しない（空のライブラリで上書きしない）', async () => {

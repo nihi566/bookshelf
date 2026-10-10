@@ -5,6 +5,7 @@ import { truncate } from '../../core/text.js';
 import { analysisPointById, isThought, pointById, pointLabel, searchPoints } from '../../core/points.js';
 import { currentPointId } from '../../core/point-ids.js';
 import { isNoteId, notesOf, searchNotes } from '../../core/notes.js';
+import { notesCitingAll } from '../../core/note-evidence.js';
 import { LINK_REASON_MAX, linksFor } from '../../core/links.js';
 import { farLinksFor } from '../../core/far-reactions.js';
 import { NEIGHBORS_MAX } from '../../core/analysis/neighbors.js';
@@ -39,6 +40,15 @@ function endRow(library, id, { reason = '', actions = '' } = {}) {
   return html`<li class="link-row ${v.gone ? 'gone' : ''}">${v.href ? html`<a class="link-target" href="${v.href}">${inner}</a>` : html`<span class="link-target">${inner}</span>`}${actions ? html`<span class="row link-actions">${actions}</span>` : ''}</li>`;
 }
 
+/** 点どうし・点とメモのリンクの行の、ノートへの操作（もう書いたノートがあれば「ノート: <題>」、無ければ「ノートにする」） */
+function linkNoteAction(library, link, id, other, title) {
+  const [first, ...rest] = notesCitingAll(library, [id, other]);
+  if (!first) return html`<button type="button" class="btn small" data-action="link-to-note" data-id="${link.id}" aria-label="「${title}」とのリンクを永久ノートにする">ノートにする</button>`;
+  const fullTitle = first.title || '（題なし）';
+  // 読み上げの名前は見える文字で始める（題は切り詰めずに）
+  return html`<a class="btn small" href="#/note/${first.id}" aria-label="ノート: ${fullTitle}（このリンクの両端を根拠にした永久ノート）">ノート: ${truncate(fullTitle, 30)}</a>${rest.length ? html`<span class="small muted">ほか ${rest.length}</span>` : ''}`;
+}
+
 /**
  * 点・メモ・永久ノートの画面の「リンク」（張ったリンクと、点なら「面白い」とした遠いつながり）。
  * 相手を押すと相手の画面へ行け、そこからさらにリンクをたどれる
@@ -50,8 +60,9 @@ export function linksBlock(state, id) {
   const rows = [
     ...links.map(({ link, other }) => () => {
       const { title, gone } = endView(state.library, other);
-      // 点どうし・点とメモのリンクは、両端の点を根拠にした永久ノートの種にできる（ノートに張ったリンクは対象外）
-      const toNote = !gone && !isNoteId(id) && !isNoteId(other) ? html`<button type="button" class="btn small" data-action="link-to-note" data-id="${link.id}" aria-label="「${title}」とのリンクを永久ノートにする">ノートにする</button>` : '';
+      // 点どうし・点とメモのリンクは、両端の点を根拠にした永久ノートの種にできる（ノートに張ったリンクは対象外）。
+      // 両端をどちらも根拠にしたノートがもうあれば、書く代わりにそのノートへ行ける（同じ 2 点から 2 冊目を書かない）
+      const toNote = !gone && !isNoteId(id) && !isNoteId(other) ? linkNoteAction(state.library, link, id, other, title) : '';
       return endRow(state.library, other, { reason: link.reason, actions: html`${toNote}<button type="button" class="btn small" data-action="link-reason" data-id="${link.id}" aria-label="「${title}」へのリンクの理由を書く">理由</button><button type="button" class="btn small" data-action="link-remove" data-id="${link.id}" aria-label="「${title}」へのリンクを外す">外す</button>` });
     }),
     ...far.map((f) => () => endRow(state.library, f.other, { reason: `遠いつながり（面白い）・${f.reason}` })),
