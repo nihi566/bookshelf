@@ -20,9 +20,9 @@
 | `www.googleapis.com` | Google Books で本を探す（`recommend.js`）。PC が Google ドライブから Play ブックスのメモを読む（`cli/google.js`。読み取り専用） | 検索語・書名。ドライブには読み取りの依頼だけ |
 | `accounts.google.com`・`oauth2.googleapis.com` | Google ドライブを読むためのログイン・トークンの更新と取り消し（`cli/google.js`） | ログインの情報だけ |
 | `ci.nii.ac.jp` | CiNii Books で本を探す（`recommend.js`） | 検索語 |
-| `ndlsearch.ndl.go.jp` | 国立国会図書館サーチで本を探す・実在を確かめる（`recommend.js`） | 検索語・書名・著者 |
+| `ndlsearch.ndl.go.jp` | 国立国会図書館サーチで本を探す・実在を確かめる（`recommend.js`）。PC が表紙の取れない Play ブックスの本の ISBN を探す（`cli/covers.js`） | 検索語・書名・著者 |
 | `books.google.com` | 表紙の画像（Play ブックスの書籍 ID）と、おすすめの本のページへのリンク | 書籍 ID |
-| `images-na.ssl-images-amazon.com` | 表紙の画像（ASIN） | ASIN |
+| `images-na.ssl-images-amazon.com` | 表紙の画像（ASIN、または ISBN から作った ISBN-10） | ASIN・ISBN-10 |
 | `api.github.com` | 読書記録 `records.json` を読み書きする（`records-github.js`） | 読書記録（書名・著者・ASIN・読了日・ページ数）と、利用者が保存した GitHub のトークン |
 | `nihi566.github.io` | 欲しい本の一覧 `wishlist.json` を読む（`wishlist-data.js`。フィードの URL の案内にも使う）。コンパニオンが受け付けるオリジンの既定値（`cli/store.js`） | 何も送らない（読むだけ） |
 | `read.amazon.co.jp`・`read.amazon.com` | Kindle のノートブックからハイライトを読む（ブラウザ拡張・ブックマークレット）。ノートブックを開くリンク | 何も送らない（ログイン済みのページを読むだけ。読んだハイライトは自分の PC かアプリに渡す） |
@@ -56,7 +56,7 @@
 ```
 Library = { version, books: { [id]: Book }, highlights: { [id]: Highlight }, feedback, thoughts: { [id]: Thought }, discoveryReads: { [id]: readAt },
             farReactions: { [id]: FarReaction }, notes: { [id]: Note }, links: { [id]: Link }, outlines: { [id]: Outline }, updatedAt }
-Book      = { id: 'b'+hash(書名の正規化), title, author, sources: ['kindle'|'playbooks'|'paper'|'memo'], asin?, volumeId?, cover?（アップロードした表紙の data URL）, technical?（技術書か。無ければ書名から推定）, updatedAt, deleted? }
+Book      = { id: 'b'+hash(書名の正規化), title, author, sources: ['kindle'|'playbooks'|'paper'|'memo'], asin?, volumeId?, isbn?（表紙に使う。PC が書名・著者から探して付ける）, cover?（アップロードした表紙の data URL）, technical?（技術書か。無ければ書名から推定）, updatedAt, deleted? }
 Highlight = { id: 'h'+hash(bookId+本文の正規化), bookId, source, kind: 'highlight'|'note',
               text, note, chapter, location, locationEnd, page, color, createdAt,
               favorite, tags, userNote, importedAt, updatedAt, deleted?, supersededBy?,
