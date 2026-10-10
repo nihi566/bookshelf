@@ -42,6 +42,8 @@ function historySummary(a) {
     id: historyId(a),
     createdAt: short(a.createdAt, 40),
     recommendedAt: short(a.recommendedAt, 40) || null,
+    // 履歴から戻した回なら、元の回の時刻（NIH-7）
+    restoredFrom: short(a.restoredFrom, 40) || null,
     model: { chat: short(a.model?.chat, 80), embed: short(a.model?.embed, 80) },
     stats: { points: num(s.points), thoughts: num(s.thoughts), lines: num(s.lines), planes: num(s.planes), isolated: num(s.isolated) },
     incremental: a.incremental === true,

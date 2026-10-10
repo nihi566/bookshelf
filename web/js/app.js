@@ -828,6 +828,20 @@ const actions = {
   'rerun-recommend': () => runAnalysis('recommend'),
   'cancel-analysis': cancelAnalysis,
   'check-pc-job': () => checkPcJob(),
+  // 過去の分析に戻す（NIH-7。PC がその回を今の分析として保存し、手元の分析も差し替える）
+  async 'restore-analysis'(el) {
+    if (state.job?.running) return toast('分析の最中です。終わってから押してください');
+    if (!confirm('この分析に戻しますか？ 知識の画面の線(グループ)・面・立体が、この回のものになります（今の分析も履歴に残っているので、あとで戻せます）')) return;
+    el.disabled = true;
+    try {
+      state.analysis = await companion.restoreHistory(el.dataset.id);
+      await save.analysis();
+    } finally {
+      el.disabled = false;
+    }
+    toast('この分析に戻しました');
+    location.hash = '#/knowledge';
+  },
   async 'rec-feedback'(el) {
     const r = state.analysis?.recommendations?.[Number(el.dataset.i)];
     if (!r) return;

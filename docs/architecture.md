@@ -124,7 +124,7 @@ Analysis = { version: 2, createdAt, model: { chat, embed }, incremental,
   - 見つかった遠いつながりは、あとで点の文を書き換えても残す（判定し直さない）
   - 「ちがう」とした組は候補にしない。結果には残し、画面（`visibleFarConnections`）・発見の一覧・`bh analyze` の表示で隠す（取り消したらまた出せるように）。反応が候補の選び方に渡るのは「その組を飛ばす」ことだけで、本・面・分野で候補を狭めない
   - 新しく見つかった遠いつながりは発見（`kind: 'far'`。`lineName` = 共通する考え、`reason` = なぜつながるか）にする。線の ID に依らないので、作り直した分析でも作る（最初の分析では作らない）。「ちがう」とした組の発見は画面に出さない
-- **履歴**: PC の `data/history/<分析した時刻>.json` に直近 12 回分を残す（`history/index.json` は要約）。`GET /api/history` で一覧、`GET /api/history/<id>` で 1 回分。スマホには最新の結果（`changes` 入り）だけを同期し、過去の分析は開いたときに PC から取る
+- **履歴**: PC の `data/history/<分析した時刻>.json` に直近 12 回分を残す（`history/index.json` は要約）。`GET /api/history` で一覧、`GET /api/history/<id>` で 1 回分。`POST /api/history/<id>/restore` でその回に戻す（今の分析より新しい時刻の分析として保存し、元の回の時刻を `restoredFrom` に、`changes` は持たない。分析の最中は 409。次の分析の遠いつながりの拾い直しは `restoredFrom` から数える）。スマホには最新の結果（`changes` 入り）だけを同期し、過去の分析は開いたときに PC から取る
 - **自分の言葉**: 埋め込みの文は「線を引いた文 + 取り込んだメモ + 自分のメモ + タグ」（`embedText`。印は付けない）。線を作る AI への入力では、取り込んだメモと分けて自分のメモ・タグを「読者自身の言葉」と示す。思いつきは書名の代わりに「思いつき」と示す
 - `response_format` は `json_schema` → `json_object` → なし の順に自動で緩める（LM Studio は `json_object` 非対応、古いサーバは `json_schema` 非対応）。壊れた JSON は 1 回だけ言い直させる
 - LLM の結果は「メンバー構成（点の ID + 点の文のハッシュ）+ モデル + プロンプト版」のハッシュでキャッシュ。自分のメモ・タグを書き換えた点を含む線は作り直す
