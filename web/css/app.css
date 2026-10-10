@@ -365,6 +365,8 @@ a.wl-main:hover .title { text-decoration: underline; }
 .wl-history th { color: var(--ink-2); font-weight: 600; }
 .wl-export { margin-top: 16px; }
 .wishlist-hits, .home-wishlist { margin-bottom: 12px; }
+#home-records { margin-top: 4px; }
+#home-records:empty { display: none; }
 .badge.wish { background: var(--accent-soft); color: var(--accent); }
 .badge.wish.similar { background: var(--surface-2); color: var(--ink-2); font-weight: 400; white-space: normal; }
 .rec-wish:not(:empty) { margin: 2px 0 4px; }

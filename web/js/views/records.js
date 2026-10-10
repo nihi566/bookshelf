@@ -3,7 +3,7 @@
 import { html } from '../html.js';
 // 線を 1 本でも引いた本は自動で記録する（core/records.js の autoRecords。records.json には書かない）。手で付けた記録が優先。
 import { listBooks } from '../../core/model.js';
-import { addMonths, autoRecords, newManualId, parsePagesInput, summarizeMonth, summarizeYear, todayLocal, weekdayLabel } from '../../core/records.js';
+import { addMonths, autoRecords, mergedRecords, monthReading, newManualId, parsePagesInput, summarizeMonth, summarizeYear, todayLocal, weekdayLabel } from '../../core/records.js';
 import { BRANCH, OWNER, REPO, fetchRecords, recordsErrorMessage, saveChange } from '../../core/records-github.js';
 import { bookSpine, openSheet, toast } from '../ui.js';
 
@@ -29,7 +29,9 @@ function storeToken(token) {
 }
 
 // 画面を移っても読み直さない（開くたびに GitHub に問い合わせない）。保存・「読み込み直す」で更新する
-const rec = { status: 'idle', file: null, error: null };
+const rec = { status: 'idle', file: null, error: null, failedAt: 0 };
+// ホームから読み直すのは、前に失敗してからこの時間がたったときだけ
+const HOME_RETRY_MS = 5 * 60 * 1000;
 let loadSeq = 0;
 let loading = Promise.resolve();
 // いま表示している記録画面の描き直し（読み込み中に月を移ると画面が作り直されるので、読み終えたら新しい方を描く）
@@ -46,7 +48,7 @@ function reload() {
       if (seq === loadSeq) Object.assign(rec, { status: 'ready', file, error: null });
     })
     .catch((error) => {
-      if (seq === loadSeq) Object.assign(rec, { status: 'error', error });
+      if (seq === loadSeq) Object.assign(rec, { status: 'error', error, failedAt: Date.now() });
     })
     .finally(() => seq === loadSeq && redraw());
   return loading;
@@ -94,8 +96,7 @@ function monthBars(year, selectedMonth, lastMonth) {
 
 /** 手で付けた記録と、線から自動で付けた記録を合わせたもの（手で付けた記録が優先） */
 function allRecords(state) {
-  const auto = autoRecords(state.library, rec.file);
-  return { records: { ...auto.dated, ...rec.file.records }, undated: auto.undated };
+  return mergedRecords(state.library, rec.file);
 }
 
 function itemRow(item, canEdit) {
@@ -229,6 +230,26 @@ function openRecordSheet(state, { bookId = '', onSaved }) {
       return false;
     },
   );
+}
+
+/**
+ * ホームに出す今月の冊数・ページ数。記録はこの画面と同じものを使い、読み込み済みなら GitHub に問い合わせ直さない。
+ * 読めないときは例外（呼び出し側は何も出さない）
+ */
+export async function loadMonthReading(state, today = todayLocal()) {
+  // 読めないまま（オフライン・回数制限など）ホームを開くたびに問い合わせ直さない。記録の画面と「読み込み直す」はいつでも読み直す
+  const retry = rec.status === 'idle' || (rec.status === 'error' && Date.now() - rec.failedAt >= HOME_RETRY_MS);
+  if (retry) await reload();
+  // 待っている間に「読み込み直す」が割り込んだら、新しい方の読み込みを待つ
+  while (rec.status === 'loading') await loading;
+  if (rec.status !== 'ready') throw rec.error || new Error('読書記録を読めませんでした');
+  const [year, month] = today.split('-').map(Number);
+  return monthReading(state.library, rec.file, year, month);
+}
+
+/** ホームの 1 行「今月 N 冊・N ページ（読書記録へ）」 */
+export function homeRecordsLine({ year, month, count, pages }) {
+  return html`今月 ${count} 冊・${pages.toLocaleString('ja-JP')} ページ（<a href="${periodHref({ year, month })}">読書記録へ</a>）`;
 }
 
 export const records = {
