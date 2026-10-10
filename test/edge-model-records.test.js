@@ -203,8 +203,12 @@ test('edge model: deleteBook・updateHighlight は存在しない ID で何も�
 test('edge model: updateHighlight は許可していない欄を変えない', () => {
   const lib = libWith([kindle('本', [{ text: 'a' }])]);
   const id = highlightIdFor(bookIdFor('本'), 'a');
-  updateHighlight(lib, id, { text: '改ざん', bookId: 'x', userNote: 'メモ' }, T2);
+  // 文は直せる欄（NIH-56）。取り込んだときの文・直した時刻・出どころは直接書き換えさせない
+  updateHighlight(lib, id, { source: 'paper', originalText: '改ざん', textEditedAt: T1, bookId: 'x', userNote: 'メモ' }, T2);
   assert.equal(lib.highlights[id].text, 'a');
+  assert.equal(lib.highlights[id].source, 'kindle');
+  assert.equal('originalText' in lib.highlights[id], false);
+  assert.equal('textEditedAt' in lib.highlights[id], false);
   assert.equal(lib.highlights[id].bookId, bookIdFor('本'));
   assert.equal(lib.highlights[id].userNote, 'メモ');
   assert.equal(lib.highlights[id].userUpdatedAt, T2);

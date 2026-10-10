@@ -1,5 +1,6 @@
 // 立体のページの知識マップを描く（Cytoscape.js は大きいので、このページを開いたときだけ読み込む）
 import { mapElements, mapLayout, mapStyle } from '../core/knowledge-map.js';
+import { isLineStarred } from '../core/line-stars.js';
 
 // 文字（14px）がおよそ 10px 以上で見える倍率
 const READABLE_ZOOM = 0.75;
@@ -23,24 +24,24 @@ function showMapError(wrap) {
   canvas.innerHTML = '<p class="notice err">知識マップを描けませんでした。開き直してください（初めて開くときは通信が要ります）。面と線は上の「面」「線(グループ)」から見られます。</p>';
 }
 
-/** wrap（#map-wrap）の中に図を描く。分析が変わっても同じ面を開いたままにする */
-export async function mountKnowledgeMap(wrap, analysis) {
+/** wrap（#map-wrap）の中に図を描く。分析が変わっても同じ面を開いたままにする。library は線の★を見るのに使う */
+export async function mountKnowledgeMap(wrap, analysis, library) {
   try {
     const cytoscape = (await import('../vendor/cytoscape.esm.min.js')).default;
-    draw(cytoscape, wrap, analysis);
+    draw(cytoscape, wrap, analysis, library);
   } catch {
     showMapError(wrap);
   }
 }
 
-function draw(cytoscape, wrap, analysis) {
+function draw(cytoscape, wrap, analysis, library) {
   const canvas = wrap.querySelector('#knowledge-map');
   if (!canvas.isConnected) return;
   cy?.destroy();
   const colors = { solid: css('--layer-solid'), plane: css('--layer-plane'), line: css('--layer-line'), ink: css('--ink'), surface: css('--surface'), font: css('--font') };
   cy = cytoscape({ container: canvas, style: mapStyle(colors, { narrow: canvas.clientWidth < NARROW_WIDTH }), minZoom: 0.2, maxZoom: 4, boxSelectionEnabled: false, autoungrabify: true });
   const show = (next) => {
-    const { nodes, edges, focus: shown } = mapElements(analysis, { focus: next });
+    const { nodes, edges, focus: shown } = mapElements(analysis, { focus: next, isStarred: (id) => isLineStarred(library, id) });
     focus = shown;
     cy.elements().remove();
     cy.add([...nodes.map((data) => ({ group: 'nodes', data })), ...edges.map((data) => ({ group: 'edges', data }))]);
