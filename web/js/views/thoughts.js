@@ -33,7 +33,7 @@ export function lineSheet(t, lines) {
   return html`<h2>線(グループ)に入れる</h2>
     <p class="quote">${t.text}</p>
     <label class="field"><span>入れる線(グループ)</span><select name="line" required>${sorted.map((l) => html`<option value="${l.id}">${l.name}</option>`)}</select></label>
-    <p class="help">分析を待たずに、このメモをその線(グループ)の点にします。分析し直しても外れません。あとで外せます。</p>
+    <p class="help">分析を待たずに、このメモをその線(グループ)の点にします。分析し直しても外れず、その線(グループ)を作る AI にも見せます。あとで外せます。</p>
     <div class="row spread"><span></span><span class="row"><button class="btn" value="cancel">やめる</button><button class="btn primary" value="save">入れる</button></span></div>`;
 }
 

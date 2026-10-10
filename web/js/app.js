@@ -14,7 +14,7 @@ import { askActions } from './ask-actions.js';
 import { outlineStatusBlock } from './views/outlines.js';
 import { outlineActions } from './outline-actions.js';
 import { importOutcome, importResultBlock } from './views/settings.js';
-import { addHighlight, emptyLibrary, listBooks, mergeParsed, parseShuffleRecord, shuffleRecord, shuffleSeedFor } from '../core/model.js';
+import { addHighlight, emptyLibrary, listBooks, mergeParsed, parseSeenPicks, parseShuffleRecord, recentPickIds, recordSeenPicks, shuffleRecord, shuffleSeedFor } from '../core/model.js';
 import { COVER_MAX_LENGTH } from '../core/covers.js';
 import { parseFiles } from '../core/parsers/index.js';
 import { applyImport, makeBackup } from '../core/importing.js';
@@ -37,6 +37,16 @@ const shuffleStore = (() => {
   }
 })();
 let shuffle = parseShuffleRecord(shuffleStore.get(SHUFFLE_KEY));
+// 今日の点で見せた点の、日付つきの履歴（数日分）。次の日からはこれを後ろへ回す（NIH-99）
+const SEEN_KEY = 'today-seen';
+let seenPicks = parseSeenPicks(shuffleStore.get(SEEN_KEY));
+
+function markPicksSeen(ids) {
+  const next = recordSeenPicks(seenPicks, new Date(), ids);
+  if (next === seenPicks) return;
+  seenPicks = next;
+  shuffleStore.set(SEEN_KEY, JSON.stringify(seenPicks));
+}
 let currentPath = null;
 let currentHash = null;
 
@@ -46,7 +56,7 @@ function render({ keepScroll = false } = {}) {
   const { path, query } = parseHash();
   const match = matchRoute(path);
   // refresh: 同じ画面の描き直し（同期・編集のあと）。別の画面から来たとき・リンクを押したときは false
-  const ctx = { state, params: match.params, query, shuffle: shuffleSeedFor(shuffle, new Date()), refresh: location.hash === currentHash, markDiscoveryRead: appOps.readDiscovery };
+  const ctx = { state, params: match.params, query, shuffle: shuffleSeedFor(shuffle, new Date()), recentPicks: recentPickIds(seenPicks, new Date()), markPicksSeen, refresh: location.hash === currentHash, markDiscoveryRead: appOps.readDiscovery };
   currentHash = location.hash;
   // 取り込みの結果は、画面を離れたら（別の画面から来たら）忘れる
   if (!ctx.refresh) state.lastImport = null;
@@ -561,6 +571,13 @@ const actions = {
   async 'copy-bookmarklet'() {
     await navigator.clipboard.writeText(await buildBookmarklet());
     toast('ブックマークレットをコピーしました。ブックマークの URL に貼り付けてください');
+  },
+  // 取り込みで読めなかったファイルの行から、同じ画面の取り出し方の説明を開いて見せる
+  'open-import-help'(el) {
+    const target = document.getElementById(el.dataset.target);
+    if (!target) return;
+    if (target.tagName === 'DETAILS') target.open = true;
+    target.scrollIntoView({ behavior: 'smooth', block: 'start' });
   },
 };
 

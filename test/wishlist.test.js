@@ -667,6 +667,21 @@ test('価格チェックの画面: 一覧は pageWishlist で切り出した分�
   assert.match(src, /id="wl-more"/);
 });
 
+test('価格チェックの画面: 「さらに表示」の横の「残りをすべて表示」で残りを一度に描き、絞り込みでは 100 件に戻す（NIH-100）', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const src = await readFile(new URL('../web/js/views/wishlist.js', import.meta.url), 'utf8');
+  assert.match(src, /id="wl-more"[^\n]*id="wl-more-all"/, '「さらに表示」の横に置く');
+  // 残りがあるときだけ出し、ボタンに残りの件数を書く
+  assert.match(src, /\$\('wl-more-all'\)\.hidden = p\.rest === 0;/);
+  assert.match(src, /\$\('wl-more-all'\)\.textContent = `残りをすべて表示（\$\{p\.rest\}件）`;/);
+  // 押すと残り全件を足す（showMore に足す件数を渡す）
+  assert.match(src, /if \(btn\.id === 'wl-more-all'\) return showMore\(current\.length\);/);
+  assert.match(src, /if \(btn\.id === 'wl-more'\) return showMore\(WISHLIST_PAGE_SIZE\);/);
+  assert.match(src, /const showMore = \(count\) => \{[\s\S]*?shown = from \+ count;/);
+  // 絞り込みでは今までどおり 1 ページ目に戻す
+  assert.match(src, /const refilter = \(\) => \{\s*shown = WISHLIST_PAGE_SIZE;/);
+});
+
 test('価格チェックの画面: 同期・編集のあとの描き直し（refresh）では「さらに表示」で増やした件数を保ち、別の画面から来たら 1 ページ目に戻す（NIH-23）', async () => {
   const { readFile } = await import('node:fs/promises');
   const src = await readFile(new URL('../web/js/views/wishlist.js', import.meta.url), 'utf8');

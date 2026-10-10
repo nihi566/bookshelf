@@ -356,7 +356,7 @@ export const lineView = {
         <div class="row"><button type="button" class="btn small primary" data-action="line-to-note" data-id="${l.id}">この線を永久ノートにする</button><span class="small muted">AI の線を下書きにして、自分の言葉に直せます</span></div>
         <div class="row"><a class="btn small" href="#/outline/new?line=${l.id}">文章の骨組みを作る</a></div>
       </section>
-      ${citingNotesBlock(state.library, new Set(l.highlightIds), 'この線の点を根拠にしている永久ノート')}
+      ${citingNotesBlock(state.library, new Set([...l.highlightIds, ...manual]), 'この線の点を根拠にしている永久ノート')}
       <div class="section"><h2>つながっている点</h2><span class="small muted">${hs.length}</span></div>
       ${hs.map((h) => pointCard(h, { library: state.library, lines: (idx.get(h.id) || []).filter((x) => x.id !== l.id), assigned: manual.includes(h.id) ? { id: l.id, name: l.name, missing: false } : null }))}
       ${related.length
