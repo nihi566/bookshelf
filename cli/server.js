@@ -193,7 +193,7 @@ export function createCompanionServer({ store, log = console.log, catalogFetch, 
           kindleSync: st.kindleSync || null,
           analysis: analysis ? { createdAt: analysis.createdAt, recommendedAt: analysis.recommendedAt, ...analysis.stats } : null,
           job: publicJob(),
-          google: drive ? publicDrive(drive.status) : null,
+          google: drive ? { ...publicDrive(drive.status), lastNew: st.playbooksSync?.lastNew || null } : null,
           // 自動の分析の設定と、最後に成功した時刻・失敗の理由（知識の画面に出す）
           autoAnalysis: { ...autoConfig(cfg.autoAnalyze), running: Boolean(auto), pending: pendingPoints(analysisPoints(lib), analysis), ...publicAutoState(st.autoAnalysis) },
         });

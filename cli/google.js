@@ -268,12 +268,28 @@ export function startDriveWatcher({ store, client, log = console.log }) {
     lastLogged = msg;
   };
 
+  // 最後に新しい点が届いた時刻・件数は、bh serve を起動し直しても出せるよう state.json に残す（残せなくても見張りは止めない）
+  async function saveLastNew(lastNew) {
+    try {
+      // state.json はほかの記録（Kindle・自動の分析）と共有なので、読んでから書くまでを順番待ちにする
+      await store.lock(async () => {
+        const st = await store.state();
+        await store.saveState({ ...st, playbooksSync: { ...(st.playbooksSync || {}), lastNew } });
+      });
+    } catch (e) {
+      log(`[google] ! 最後に新しい点の記録を残せませんでした: ${e.message}`);
+    }
+  }
+
   async function tick() {
     status.checking = true;
     try {
       const r = await client.sync();
       Object.assign(status, { active: true, configured: true, lastCheck: new Date().toISOString(), lastResult: r, error: r.errors.join(' / '), problems: r.problems || [] });
-      if (r.added || r.updated) status.lastImport = status.lastCheck;
+      if (r.added || r.updated) {
+        status.lastImport = status.lastCheck;
+        await saveLastNew({ at: status.lastCheck, added: r.added, updated: r.updated });
+      }
       if (r.changed) log(`[google] ${describeSync(r)}`);
       // 書き出しに失敗したドキュメントは毎回試し直すので、同じエラーは 1 回だけ出す
       if (r.errors.length) logOnce(`[google] ! ${r.errors.join(' / ')}`);
