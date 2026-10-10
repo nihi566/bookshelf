@@ -40,6 +40,26 @@ test('mapElements: 面を選ぶと、その面と面の線だけを出す（線�
   assert.deepEqual(edges.map((e) => [e.source, e.target, e.kind]), [['p:p1', 'l:l1', 'plane'], ['p:p1', 'l:l2', 'plane']]);
 });
 
+test('mapElements: 面を開いたとき、★の線は starred が載り、名前の前に ★ が付く。★の無い線は今のまま', () => {
+  const { nodes } = mapElements(analysis(), { focus: 'p1', isStarred: (id) => id === 'l2' });
+  assert.deepEqual(nodes.slice(1).map((n) => [n.ref, n.starred, n.label]), [['l1', false, '線1'], ['l2', true, '★ 線2']]);
+  assert.equal(nodes[0].starred, undefined, '面には載せない');
+  const plain = mapElements(analysis(), { focus: 'p1' }).nodes;
+  assert.deepEqual(plain.slice(1).map((n) => [n.starred, n.label]), [[false, '線1'], [false, '線2']], '判定を渡さなければ★は無し');
+});
+
+test('mapStyle: ★の線だけに枠線を付ける（★の無い線の見た目は変えない）', () => {
+  const colors = { solid: '#7a4bb0', plane: '#b0781a', line: '#1f6f5c', ink: '#23211d', surface: '#fffdf8', font: 'sans-serif' };
+  const { nodes } = mapElements(analysis(), { focus: 'p1', isStarred: (id) => id === 'l2' });
+  const cy = cytoscape({ headless: true, styleEnabled: true, elements: nodes.map((data) => ({ group: 'nodes', data })), style: mapStyle(colors) });
+  try {
+    assert.equal(cy.$id('l:l1').numericStyle('border-width'), 0);
+    assert.ok(cy.$id('l:l2').numericStyle('border-width') > 0);
+  } finally {
+    cy.destroy();
+  }
+});
+
 test('mapElements: 無くなった面を選んでいたら全体に戻す。分析が空でも核だけ出す', () => {
   assert.equal(mapElements(analysis(), { focus: 'pX' }).focus, null);
   assert.deepEqual(ids(mapElements({ planes: [], lines: [], solid: {} }).nodes), ['core']);

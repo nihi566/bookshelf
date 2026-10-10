@@ -4,8 +4,9 @@
 /**
  * 図に置く点（ノード）と辺。focus に面の ID を渡すと、その面と面の線だけを返す
  * （無くなった面なら全体に戻し、focus は null で返す）
+ * isStarred(線の ID) が true の線は starred を立て、名前の前に ★ を付ける（線の一覧と同じ印）
  */
-export function mapElements(analysis, { focus = null } = {}) {
+export function mapElements(analysis, { focus = null, isStarred = () => false } = {}) {
   const planes = analysis?.planes || [];
   const lineById = new Map((analysis?.lines || []).map((l) => [l.id, l]));
   const linesOf = (p) => (p.lineIds || []).map((id) => lineById.get(id)).filter(Boolean);
@@ -16,7 +17,10 @@ export function mapElements(analysis, { focus = null } = {}) {
       focus: plane.id,
       nodes: [
         { id: `p:${plane.id}`, kind: 'plane', label: plane.name, ref: plane.id, weight: lines.length },
-        ...lines.map((l) => ({ id: `l:${l.id}`, kind: 'line', label: l.name, ref: l.id, weight: (l.highlightIds || []).length })),
+        ...lines.map((l) => {
+          const starred = Boolean(isStarred(l.id));
+          return { id: `l:${l.id}`, kind: 'line', label: starred ? `★ ${l.name}` : l.name, ref: l.id, weight: (l.highlightIds || []).length, starred };
+        }),
       ],
       edges: lines.map((l) => ({ id: `e:${plane.id}:${l.id}`, source: `p:${plane.id}`, target: `l:${l.id}`, kind: 'plane' })),
     };
@@ -63,6 +67,8 @@ export function mapStyle(colors, { narrow = false } = {}) {
       style: { 'background-color': colors.plane, width: 'mapData(weight, 0, 40, 26, 54)', height: 'mapData(weight, 0, 40, 26, 54)', 'font-size': 16, 'font-weight': 'bold', 'text-max-width': w(150, 80) },
     },
     { selector: 'node[kind = "line"]', style: { 'background-color': colors.line, width: 'mapData(weight, 0, 20, 12, 34)', height: 'mapData(weight, 0, 20, 12, 34)' } },
+    // ★の線は輪の外に核の色の枠を付ける（★の無い線は枠なしのまま）
+    { selector: 'node[kind = "line"][?starred]', style: { 'border-width': 3, 'border-color': colors.solid, 'font-weight': 'bold' } },
     { selector: 'edge', style: { width: 1.5, 'line-color': colors.plane, opacity: 0.4, 'curve-style': 'straight' } },
     { selector: 'edge[kind = "core"]', style: { width: 2.5, 'line-color': colors.solid, opacity: 0.35 } },
     {
