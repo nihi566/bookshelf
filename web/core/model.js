@@ -565,7 +565,7 @@ export function highlightNeighbors(library, id) {
 const JOIN_FIELDS = ['text', 'originalText', 'textEditedAt', 'location', 'locationEnd', 'favorite', 'tags', 'userNote', 'deleted', 'supersededBy', 'joinedAt'];
 
 // 日本語・中国語（全角の記号を含む）や空白どうしはそのままつなぎ、英語などの文どうしは空白を挟む
-const NO_SPACE = /[\s　-鿿豈-﫿＀-￯]/u;
+const NO_SPACE = /[\s\u3000-\u9fff\uf900-\ufaff\uff00-\uffef]/u;
 const joinText = (a, b) => (NO_SPACE.test(a.slice(-1)) || NO_SPACE.test(b.slice(0, 1)) ? a + b : `${a} ${b}`);
 const joinLines = (...xs) => xs.filter(Boolean).join('\n');
 
@@ -627,6 +627,16 @@ export function unjoinHighlights(library, undo, now = new Date().toISOString()) 
     Object.assign(h, { updatedAt: now, userUpdatedAt: now });
   }
   library.updatedAt = now;
+}
+
+/**
+ * 利用者が削除した点（ゴミ箱。削除した時刻の新しい順）。updateHighlight(…, { deleted: false }) で戻せるものだけ。
+ * 取り込みで長い文に置き換わった点（supersededBy）と、本が削除されたままの点（戻しても見えない）は出さない
+ */
+export function deletedHighlights(library) {
+  return Object.values(library.highlights)
+    .filter((h) => h.deleted && !h.supersededBy && library.books[h.bookId] && !library.books[h.bookId].deleted)
+    .sort((a, b) => String(b.userUpdatedAt || b.updatedAt || '').localeCompare(String(a.userUpdatedAt || a.updatedAt || '')));
 }
 
 export function deleteBook(library, bookId, now = new Date().toISOString()) {

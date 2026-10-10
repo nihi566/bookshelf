@@ -4,6 +4,7 @@ import { book, books, home, search } from './views/library.js';
 import { autoStatusBlock, historyView, isolatedView, knowledge, lineView, pendingView, planeView } from './views/knowledge.js';
 import { linesView, planesView, solidView } from './views/layers.js';
 import { starsView } from './views/stars.js';
+import { trashView } from './views/trash.js';
 import { discoveriesView, discoveryView } from './views/discoveries.js';
 import { farView } from './views/far.js';
 import { noteView, notesView } from './views/notes.js';
@@ -59,6 +60,8 @@ export const ROUTES = [
   [/^\/discoveries$/, discoveriesView, 'home'],
   [/^\/import$/, importView, 'settings'],
   [/^\/settings$/, settingsView, 'settings'],
+  // 削除した点（通知の「元に戻す」が消えた後でも戻せる。入口は設定の「データ」）
+  [/^\/trash$/, trashView, 'settings'],
 ];
 
 /** location.hash（「#/book/x?q=y」）を、パスと問い合わせに分ける */
