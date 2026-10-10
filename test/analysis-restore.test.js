@@ -12,6 +12,10 @@ import { createCompanionServer } from '../cli/server.js';
 import { restoreAnalysis } from '../web/core/analysis/restore.js';
 import { analysisShapeError } from '../web/core/analysis/shape.js';
 import { analysisStamp } from '../web/core/importing.js';
+import { emptyLibrary, mergeParsed } from '../web/core/model.js';
+import { SAMPLE_BOOKS } from '../web/core/sample.js';
+import { createLlmClient } from '../web/core/analysis/llm.js';
+import { analyzeLibrary, emptyCache } from '../web/core/analysis/pipeline.js';
 import { startFakeLlm } from './helpers/fake-llm.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -126,6 +130,39 @@ test('NIH-7: PC で履歴の前の回に戻すと、今の分析がその回の�
     assert.equal((await restore(base, '20990101T000000000Z')).status, 404);
     assert.equal((await fetch(`${base}/api/history/..%2Fconfig/restore`, { method: 'POST' })).status, 404);
   });
+});
+
+test('NIH-7: 今の分析が未来の時刻（時計のずれた端末から届いた・おすすめを選び直した）でも、戻した回の方が新しい', async () => {
+  await withServer(async ({ base, store }) => {
+    await store.saveAnalysis(past());
+    const id = (await store.history())[0].id;
+    const ahead = (h) => new Date(Date.now() + h * 3_600_000).toISOString();
+    const current = past({ createdAt: ahead(1), recommendedAt: ahead(2) });
+    await store.saveAnalysis(current);
+    const restored = await (await restore(base, id)).json();
+    assert.ok(restored.createdAt > current.recommendedAt, 'おすすめを選び直した時刻よりも新しい');
+    assert.ok(analysisStamp(restored) > analysisStamp(current), '同期の比べ方で、戻す前の分析より新しい');
+  });
+});
+
+test('NIH-7: 戻した回の次の分析は、戻した回より後に見つけた遠いつながりを失わない（判定済みなので二度と判定しないため）', async () => {
+  const fake = await startFakeLlm({ far: () => ({ shared: true, idea: '共通する考え', explanation: '同じことを別の言葉で言っている。' }) });
+  try {
+    const lib = emptyLibrary();
+    mergeParsed(lib, SAMPLE_BOOKS, { now: '2026-10-01T00:00:00.000Z' });
+    const llm = createLlmClient({ baseUrl: fake.url, chatModel: 'fake-chat', embedModel: 'fake-embed' });
+    const cache = emptyCache();
+    const first = (await analyzeLibrary({ library: lib, llm, cache, options: { recommend: false } })).analysis;
+    const second = (await analyzeLibrary({ library: lib, llm, cache, previous: first, options: { recommend: false } })).analysis;
+    const later = second.farConnections.filter((f) => !first.farConnections.some((x) => x.id === f.id));
+    assert.ok(later.length >= 1 && second.createdAt > first.createdAt, '試験の前提: 2 回目で新しい遠いつながりが見つかる');
+    // 1 回目に戻してから分析し直す
+    const restored = restoreAnalysis(first, new Date(Date.now() + 1000).toISOString());
+    const third = (await analyzeLibrary({ library: lib, llm, cache, previous: restored, options: { recommend: false } })).analysis;
+    for (const f of later) assert.ok(third.farConnections.some((x) => x.id === f.id), `2 回目に見つけた組 ${f.id} を拾い直す`);
+  } finally {
+    await fake.close();
+  }
 });
 
 test('NIH-7: PC が分析している間は戻さない（分析の保存で、戻した結果が上書きされないように）', async () => {

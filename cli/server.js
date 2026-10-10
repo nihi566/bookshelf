@@ -12,7 +12,7 @@ import path from 'node:path';
 import { REPO_ROOT } from './store.js';
 import { libraryStats, mergeLibraries } from '../web/core/model.js';
 import { analysisPoints } from '../web/core/points.js';
-import { applyImport } from '../web/core/importing.js';
+import { analysisStamp, applyImport } from '../web/core/importing.js';
 import { mergeKindleSync, normalizeKindleReport } from '../web/core/kindle-status.js';
 import { createLlmClient, normalizeBaseUrl } from '../web/core/analysis/llm.js';
 import { analyzeLibrary, recommendBooks, recommendationNote } from '../web/core/analysis/pipeline.js';
@@ -165,14 +165,18 @@ export function createCompanionServer({ store, log = console.log, catalogFetch, 
       if (job.running) return busy();
       const entry = await store.historyEntry(back[1]);
       if (!entry) return send(res, 404, { error: 'その分析は履歴にありません' });
-      // 今の分析より新しい時刻にする（時計のずれた端末の分析が未来の時刻でも、同期で戻した回が負けないように）
-      const latest = Date.parse((await store.analysis())?.createdAt || '') || 0;
-      const restored = restoreAnalysis(entry, new Date(Math.max(Date.now(), latest + 1)).toISOString());
-      const err = analysisShapeError(restored);
-      if (err) return send(res, 400, { error: `この分析には戻せません: ${err}` });
-      if (job.running) return busy();
-      await store.saveAnalysis(restored);
-      return send(res, 200, restored);
+      // 続けて押されても、今の分析を読んでから保存するまでを 1 回ずつにする（同じ時刻の回で履歴を上書きしない）
+      const out = await store.lock(async () => {
+        // 今の分析（おすすめを選んだ時刻も含む）より新しい時刻にする（時計のずれた端末の分析が未来の時刻でも、同期で戻した回が負けないように）
+        const latest = Date.parse(analysisStamp(await store.analysis())) || 0;
+        const restored = restoreAnalysis(entry, new Date(Math.max(Date.now(), latest + 1)).toISOString());
+        const err = analysisShapeError(restored);
+        if (err) return { status: 400, body: { error: `この分析には戻せません: ${err}` } };
+        if (job.running) return null;
+        await store.saveAnalysis(restored);
+        return { status: 200, body: restored };
+      });
+      return out ? send(res, out.status, out.body) : busy();
     }
     switch (route) {
       case 'GET /api/info': {

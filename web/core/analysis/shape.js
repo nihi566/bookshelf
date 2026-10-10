@@ -28,7 +28,7 @@ export function analysisShapeError(a, now = Date.now()) {
   if (!isAnalysisTime(a.createdAt, now)) return '分析した時刻（createdAt）の形が違います';
   if (a.recommendedAt != null && !isAnalysisTime(a.recommendedAt, now)) return 'おすすめを選んだ時刻（recommendedAt）の形が違います';
   if (a.restoredFrom != null && !isAnalysisTime(a.restoredFrom, now)) return '戻した元の分析の時刻（restoredFrom）の形が違います';
-  if (a.version != null &&!Number.isInteger(a.version)) return '分析の版（version）の形が違います';
+  if (a.version != null && !Number.isInteger(a.version)) return '分析の版（version）の形が違います';
   if (!Array.isArray(a.lines) || !a.lines.every((l) => l && typeof l === 'object' && isStr(l.id, 80) && isIdList(l.highlightIds))) return '線（lines）の形が違います';
   if (!Array.isArray(a.planes) || !a.planes.every((p) => p && typeof p === 'object' && isStr(p.id, 80) && isIdList(p.lineIds))) return '面（planes）の形が違います';
   if (a.isolated != null && !isIdList(a.isolated)) return 'まだつながらない点（isolated）の形が違います';
