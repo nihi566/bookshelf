@@ -52,7 +52,7 @@ test('G5-3: 知識の画面に、自動の分析の失敗の理由と最後に�
   assert.match(off, /<b>オフ<\/b>/);
   assert.match(String(autoStatusBlock(st(lib, null, { mode: 'direct' }))), /PC のコンパニオン（bh serve）を使うときに動きます/);
   // PC の情報を取り直したら、この欄だけ差し替える
-  assert.match(readFileSync(join(WEB, 'js/app.js'), 'utf8'), /'\/knowledge': \['#auto-status', autoStatusBlock\]/);
+  assert.match(readFileSync(join(WEB, 'js/app.js'), 'utf8'), /'\/knowledge': \[\['#auto-status', autoStatusBlock\]\]/);
 });
 
 test('G5-4: 知識の画面で「前回から増えた線・大きくなった線・消えた線・新しくつながった点」が見られ、過去の分析を開ける', async () => {

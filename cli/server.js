@@ -31,6 +31,8 @@ const NO_EMBED_MODEL = 'PC に埋め込みモデルが設定されていない�
 const NO_CHAT_MODEL = 'PC のチャットモデルが設定されていないので、AI に頼めません（PC で bh config model qwen2.5:7b などを実行してください）';
 
 const WEB_ROOT = path.join(REPO_ROOT, 'web');
+// 画面に渡す、Play ブックスの取り込めないドキュメントの数の上限（件数は problemCount で全部を渡す）
+const DRIVE_PROBLEMS_MAX = 30;
 const MIME = {
   '.html': 'text/html; charset=utf-8',
   '.js': 'text/javascript; charset=utf-8',
@@ -306,8 +308,10 @@ export function createCompanionServer({ store, log = console.log, catalogFetch, 
     }
   }
 
-  function publicDrive({ active, lastCheck, lastImport, error }) {
-    return { active, lastCheck, lastImport, error };
+  function publicDrive({ active, lastCheck, lastImport, error, problems = [] }) {
+    // 取り込めないドキュメントは画面に出すだけなので、数と長さを切って渡す
+    const cut = (s, n) => String(s || '').slice(0, n);
+    return { active, lastCheck, lastImport, error, problemCount: problems.length, problems: problems.slice(0, DRIVE_PROBLEMS_MAX).map((p) => ({ name: cut(p.name, 200), error: cut(p.error, 300), modifiedTime: cut(p.modifiedTime, 40) })) };
   }
 
   function publicJob() {
