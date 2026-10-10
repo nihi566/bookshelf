@@ -39,6 +39,13 @@ test('読み込みが終わる前は、端末のライブラリを保存しな�
   await assert.rejects(save.library(), /まだ端末のデータを読み込んでいます/);
 });
 
+test('NIH-82: メモの削除は確かめてから消す。断ったらシートを開いたまま何も消さない（永久ノート・リンク・骨組みの削除とそろえる）', () => {
+  const app = readFileSync(join(WEB, 'js/app.js'), 'utf8');
+  const action = app.match(/'edit-thought'\(el\) \{([\s\S]*?)\n  \},/)[1];
+  // 墓標は同期で生き返らない（stickyDelete）ので「元に戻す」ではなく、消す前に確かめる
+  assert.match(action, /if \(action === 'delete'\) \{\s*if \(!confirm\('このメモを削除しますか？[^']*'\)\) return true;\s*deleteThought\(state\.library, t\.id\);/);
+});
+
 test('G1-3: ホームの受け箱に未整理のメモが件数付きで出て、「整理済みにする」「捨てる」を押せる', async () => {
   const { home } = await import('../web/js/views/library.js');
   const lib = emptyLibrary();

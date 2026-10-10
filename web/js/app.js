@@ -759,7 +759,12 @@ const actions = {
     const t = thoughtsOf(state.library)[el.dataset.id];
     if (!t || t.deleted) return;
     openSheet(editThoughtSheet(t), async (data, action) => {
-      if (action === 'delete') deleteThought(state.library, t.id);
+      // 消したメモは本文の無い墓標になり、同期しても生き返らない（「元に戻す」は効かない）ので、消す前に確かめる。
+      // 断ったらシートを開いたままにする（書きかけの文を失わない）
+      if (action === 'delete') {
+        if (!confirm('このメモを削除しますか？（書いた文は戻せません）')) return true;
+        deleteThought(state.library, t.id);
+      }
       // 本文が変わっていなければ updateThought は何もしない（別の端末の新しい編集を負かさない）
       else updateThought(state.library, t.id, { text: data.get('text') });
       await persistLibrary();
