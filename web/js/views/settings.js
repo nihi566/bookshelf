@@ -32,6 +32,11 @@ export function googleLabel(g) {
   return `有効（最終確認 ${shortTime(g.lastCheck)}・最後に新しい点 ${lastNewText(g.lastNew)}）${problems ? ` ／ 取り込めない本 ${problems} 冊（取り込みの画面に理由）` : ''}${g.error ? ` ／ ${g.error}` : ''}`;
 }
 
+/** 設定 → 接続を確認 の Kindle（ブラウザ拡張）の要約。拡張から連絡が無い（ks が null）ときも「まだ届いていません」 */
+export function kindleLabel(ks) {
+  return `最後に新しい点 ${lastNewText(ks?.lastNew)}`;
+}
+
 /**
  * 取り込み画面の Play ブックス自動取り込みの状態欄の中身（PC がドライブを見張っている結果）。
  * 取り込めない本は、文書が直るまで出し続ける（PC の記録に残っている）
