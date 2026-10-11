@@ -17,7 +17,7 @@ import { analysisStamp, applyImport } from '../web/core/importing.js';
 import { mergeKindleSync, normalizeKindleReport } from '../web/core/kindle-status.js';
 import { createLlmClient, normalizeBaseUrl } from '../web/core/analysis/llm.js';
 import { analyzeLibrary, recommendBooks, recommendationNote } from '../web/core/analysis/pipeline.js';
-import { autoAnalyzeDue, autoConfig, notesChanged, parseAutoSettings, pendingPoints, removedPoints } from '../web/core/auto-analysis.js';
+import { autoAnalyzeDue, autoConfig, dismissalsChanged, notesChanged, parseAutoSettings, pendingPoints, removedPoints } from '../web/core/auto-analysis.js';
 import { analysisShapeError } from '../web/core/analysis/shape.js';
 import { swVersion } from '../web/core/serve-version.js';
 import { restoreAnalysis } from '../web/core/analysis/restore.js';
@@ -478,7 +478,7 @@ export function createCompanionServer({ store, log = console.log, catalogFetch, 
 
   /** 自動の分析の設定と状態（/api/info と、設定を変えたときの応答で同じ形） */
   function autoInfo({ library, analysis, st, cfg, points }) {
-    return { ...autoConfig(cfg.autoAnalyze), running: Boolean(auto), pending: pendingPoints(points, analysis), removed: removedPoints(points, analysis), notesChanged: notesChanged(library, analysis), next: autoNext({ library, analysis, st, cfg }), ...publicAutoState(st.autoAnalysis) };
+    return { ...autoConfig(cfg.autoAnalyze), running: Boolean(auto), pending: pendingPoints(points, analysis), removed: removedPoints(points, analysis), notesChanged: notesChanged(library, analysis), dismissalsChanged: dismissalsChanged(library, analysis), next: autoNext({ library, analysis, st, cfg }), ...publicAutoState(st.autoAnalysis) };
   }
 
   /** 自動の分析の条件の判断（checkAutoAnalyze と /api/info で同じ入力から判断する） */
@@ -492,6 +492,7 @@ export function createCompanionServer({ store, log = console.log, catalogFetch, 
       lastFailureAt: later(st.autoAnalysis?.lastErrorAt, lastStop.failure),
       lastCancelledAt: later(st.autoAnalysis?.lastCancelledAt, lastStop.cancel),
       notesChanged: notesChanged(library, analysis),
+      dismissalsChanged: dismissalsChanged(library, analysis),
     });
   }
 
