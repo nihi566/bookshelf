@@ -2,9 +2,8 @@
 import { html } from '../html.js';
 import { deletedBooks, deletedHighlights, libraryStats } from '../../core/model.js';
 import { ACCEPT } from '../../core/parsers/index.js';
-import { isoDate } from '../../core/text.js';
 import { kindleSyncLines } from '../ui.js';
-import { syncButton } from '../sync-busy.js';
+import { syncButton, syncStatus } from '../sync-busy.js';
 
 /** 取り込み画面の Kindle 自動取り込みの状態欄の中身。拡張からの確認結果は PC が持っているので、PC モードで PC の情報を取れているときだけ出す */
 export function kindleSyncBlock(state) {
@@ -257,7 +256,7 @@ export const settingsView = {
       <div class="card stack">
         <p class="help">スマホで取り込んだ点や編集を PC に送り、PC の分析結果を受け取ります（コンパニオンサーバ経由）。</p>
         <label class="check"><input type="checkbox" data-action="toggle-autosync" ${state.settings.autoSync ? 'checked' : ''}> 自動で同期する（起動時と、開いている間 PC に新しい線が入ったとき）</label>
-        <div class="row">${syncButton(state, '今すぐ同期')}<span class="small muted">${state.lastSync ? `最終: ${isoDate(state.lastSync)} ${new Date(state.lastSync).toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' })}` : '未同期'}</span></div>
+        <div class="row">${syncButton(state, '今すぐ同期')}${syncStatus(state)}</div>
       </div>
 
       <div class="section"><h2>データ</h2></div>

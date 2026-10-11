@@ -2,6 +2,7 @@
 // 押してから結果のトーストが出るまで画面が変わらず、続けて押すと同期が二重に走っていたため。
 // DOM に頼らない（Node のテストから import して呼べる）。画面にあるボタンは applySyncBusy に渡された root から探す
 import { html } from './html.js';
+import { isoDate } from '../core/text.js';
 
 export const SYNC_BUSY_LABEL = '同期しています';
 
@@ -38,4 +39,29 @@ export function applySyncBusy(root, busy) {
     if (busy) btn.setAttribute('aria-busy', 'true');
     else btn.removeAttribute('aria-busy');
   }
+}
+
+// ---- 最後の同期の結果（NIH-146） ----
+// 押した同期の失敗はトースト（5 秒）でしか出ず、自動同期の失敗はどこにも出なかったため、設定の「今すぐ同期」の横に残す
+
+/** 同期の結果を覚える。失敗なら時刻と理由（同期の処理が出したメッセージ）、成功（error が無い）なら消す。保存はしない */
+export function recordSyncResult(state, error, now = new Date()) {
+  state.lastSyncError = error ? { at: now.toISOString(), message: error.message || '理由の分からないエラー' } : null;
+}
+
+const when = (iso) => `${isoDate(iso)} ${new Date(iso).toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' })}`;
+
+/**
+ * 「今すぐ同期」の横の表示: 最後に成功した同期と、そのあと失敗していれば失敗の時刻と理由。
+ * 失敗より後に成功した同期があれば失敗は出さない（入力中の自動同期など、recordSyncResult を通らずに成功する同期もあるため）
+ */
+export function syncStatus(state) {
+  const failed = state.lastSyncError;
+  const err = failed && !(Date.parse(state.lastSync ?? '') >= Date.parse(failed.at)) ? failed : null;
+  return html`<span class="small muted" data-sync-status>${state.lastSync ? `最終: ${when(state.lastSync)}` : '未同期'}${err ? html`<br><span class="warn-text">失敗: ${when(err.at)} — ${err.message}</span>` : ''}</span>`;
+}
+
+/** 画面にある同期の表示を、描き直さずに今の状態へ差し替える（設定を開いたまま自動同期が失敗したときのため） */
+export function applySyncStatus(root, state) {
+  for (const box of root.querySelectorAll('[data-sync-status]')) box.outerHTML = String(syncStatus(state));
 }

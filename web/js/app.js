@@ -7,7 +7,7 @@ import { openSheet, serveVersionBlock, toast } from './ui.js';
 import { swVersion } from '../core/serve-version.js';
 import { JOB_PATHS, LAYER_PATHS, PC_INFO_BOXES, PC_INFO_PATHS, THOUGHT_PATHS, matchRoute, parseHash as parseRouteHash } from './routes.js';
 import { appActions } from './app-actions.js';
-import { applySyncBusy, isSyncing, trackSync } from './sync-busy.js';
+import { applySyncBusy, applySyncStatus, isSyncing, recordSyncResult, trackSync } from './sync-busy.js';
 import { noteActions } from './note-actions.js';
 import { linkActions } from './link-actions.js';
 import { askResultBlock, semanticAvailability } from './views/ask.js';
@@ -329,13 +329,18 @@ async function cancelAnalysis() {
 
 // 同期している間は、画面にある同期のボタンを押せなくし「同期しています」と出す（NIH-141）
 function sync(opts) {
-  return trackSync(state, () => runSync(opts), () => applySyncBusy(document, isSyncing(state)));
+  return trackSync(state, () => runSync(opts), () => {
+    applySyncBusy(document, isSyncing(state));
+    // 最後の同期の結果（失敗の時刻と理由）を、設定の「今すぐ同期」の横に出し直す（NIH-146）
+    applySyncStatus(document, state);
+  });
 }
 
 async function runSync({ quiet = false } = {}) {
   try {
     const { analysisDir } = await syncWithPc();
     state.pcSyncFailed = false;
+    recordSyncResult(state, null);
     if (!quiet) toast(`PC と同期しました${analysisDir ? `（分析: ${analysisDir}）` : ''}`);
     // 書きかけの入力欄があるときは描き直さない（同期した内容は次に画面を開いたときに出る）
     if (!hasDraft()) render({ keepScroll: true });
@@ -350,6 +355,7 @@ async function runSync({ quiet = false } = {}) {
     // 本が 0 冊のとき「読んだ本」に PC のつなぎ方を出すため、失敗を覚えておく
     const wasFailed = state.pcSyncFailed;
     state.pcSyncFailed = true;
+    recordSyncResult(state, e);
     if (!quiet) toast(e.message, 5000);
     // 空表示に案内を出すために描き直す（本があれば空表示は出ないので、絞り込みの入力中を描き直さない）
     if (!wasFailed && parseHash().path === '/books' && !listBooks(state.library).length) render({ keepScroll: true });
