@@ -155,11 +155,11 @@ async function importFiles(files) {
     state.lastImport = { results, stats, analysisChanged: r.analysisChanged };
     const outcome = importOutcome(results, stats);
     toast(outcome.message, outcome.failed ? 5000 : undefined);
-    showResult(String(importResultBlock(state.lastImport)));
+    showResult(String(importResultBlock(state.lastImport, state)));
     autoSyncAfterChange();
   } catch (e) {
     state.lastImport = { error: e.message };
-    showResult(String(importResultBlock(state.lastImport)));
+    showResult(String(importResultBlock(state.lastImport, state)));
   }
 }
 

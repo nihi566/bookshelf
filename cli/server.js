@@ -17,7 +17,7 @@ import { analysisStamp, applyImport } from '../web/core/importing.js';
 import { mergeKindleSync, normalizeKindleReport } from '../web/core/kindle-status.js';
 import { createLlmClient, normalizeBaseUrl } from '../web/core/analysis/llm.js';
 import { analyzeLibrary, recommendBooks, recommendationNote } from '../web/core/analysis/pipeline.js';
-import { autoAnalyzeDue, autoConfig, notesChanged, pendingPoints } from '../web/core/auto-analysis.js';
+import { autoAnalyzeDue, autoConfig, notesChanged, pendingPoints, removedPoints } from '../web/core/auto-analysis.js';
 import { analysisShapeError } from '../web/core/analysis/shape.js';
 import { swVersion } from '../web/core/serve-version.js';
 import { restoreAnalysis } from '../web/core/analysis/restore.js';
@@ -213,6 +213,7 @@ export function createCompanionServer({ store, log = console.log, catalogFetch, 
         const lib = await store.library();
         const analysis = await store.analysis();
         const st = await store.state();
+        const points = analysisPoints(lib);
         return send(res, 200, {
           app: 'book-highlights',
           // 設定 → 接続を確認 が、古いコードのまま動いていないかを見る（web/core/serve-version.js）
@@ -226,7 +227,7 @@ export function createCompanionServer({ store, log = console.log, catalogFetch, 
           job: publicJob(),
           google: drive ? { ...publicDrive(drive.status), lastNew: st.playbooksSync?.lastNew || null } : null,
           // 自動の分析の設定と、最後に成功した時刻・失敗の理由（知識の画面に出す）
-          autoAnalysis: { ...autoConfig(cfg.autoAnalyze), running: Boolean(auto), pending: pendingPoints(analysisPoints(lib), analysis), notesChanged: notesChanged(lib, analysis), ...publicAutoState(st.autoAnalysis) },
+          autoAnalysis: { ...autoConfig(cfg.autoAnalyze), running: Boolean(auto), pending: pendingPoints(points, analysis), removed: removedPoints(points, analysis), notesChanged: notesChanged(lib, analysis), ...publicAutoState(st.autoAnalysis) },
         });
       }
       case 'GET /api/history':

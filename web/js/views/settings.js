@@ -95,16 +95,32 @@ function importHelpLinks(name) {
   return html`<div class="row small" style="margin-top:4px">取り出し方: ${importHelpTargets(name).map((t) => html`<button type="button" class="btn small" data-action="open-import-help" data-target="${t.id}">${t.label}</button>`)}</div>`;
 }
 
+/**
+ * 新しい点が入ったときの、分析への導線（知識の画面の「分析し直す」へ）。PC の自動の分析がオンなら、自動で分析される旨を添える
+ * @param {number} added 新しい点の数
+ * @param {object} [state] 自動の分析の状態を見るため（無ければ自動の一言は出さない）
+ */
+function analyzeLink(added, state) {
+  if (!added) return { button: '', note: '' };
+  const auto = state?.settings?.ai?.mode === 'companion' && state.pcInfo?.autoAnalysis?.enabled === true;
+  return {
+    button: html`<a class="btn small primary" href="#/knowledge">分析する</a>`,
+    note: auto ? html`<p class="small muted">PC の自動の分析がオンです。条件を満たすと PC が分析し直します。すぐに線につなぐなら「分析する」から。</p>` : '',
+  };
+}
+
 /** 取り込み画面の結果欄の中身。{ error } は読み込みそのものの失敗、{ results, stats, analysisChanged } はファイルごとの結果 */
-export function importResultBlock(result) {
+export function importResultBlock(result, state) {
   if (result.error) return html`<p class="notice err">${result.error}</p>`;
   const { results, stats } = result;
   const o = importOutcome(results, stats);
+  const analyze = analyzeLink(stats.added, state);
   return html`<div class="card" style="margin-top:12px">
         <p class="notice${o.tone ? ` ${o.tone}` : ''}">${o.note}${result.analysisChanged ? '（バックアップの新しい分析結果も反映）' : ''}</p>
         <ul class="result-list">${results.map((r) => html`<li>${r.error ? '✗' : '✓'} <b>${r.name}</b><br><span class="small muted">${r.error || `${r.formatLabel} — 本 ${r.books} 冊 / 点 ${r.highlights} 件${r.images ? `（画像 ${r.images} 枚は取り込めません）` : ''}`}</span>${r.error ? importHelpLinks(r.name) : ''}</li>`)}</ul>
         ${stats.memoTitles?.length ? html`<p class="small muted">既にある本にまとめた読書メモ: ${stats.memoTitles.map((m) => `「${m.from}」→『${m.to}』`).join('、')}</p>` : ''}
-        <div class="row" style="margin-top:8px"><a class="btn small" href="#/books">本を見る</a></div>
+        ${analyze.note}
+        <div class="row" style="margin-top:8px">${analyze.button}<a class="btn small" href="#/books">本を見る</a></div>
       </div>`;
 }
 
@@ -116,7 +132,7 @@ export const importView = {
         <input type="file" id="file-input" multiple accept="${ACCEPT}">
         <b>ファイルを選ぶ</b><br><span class="help">またはここにドロップ（.txt .html .docx .md .json .zip）</span>
       </label>
-      <div id="import-result">${refresh && state.lastImport ? importResultBlock(state.lastImport) : ''}</div>
+      <div id="import-result">${refresh && state.lastImport ? importResultBlock(state.lastImport, state) : ''}</div>
 
       <div class="section"><h2>Kindle</h2></div>
       <div class="card">
