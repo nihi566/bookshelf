@@ -74,6 +74,33 @@ export function autoConfig(c = {}) {
   return { enabled: !off, minPoints: num(c?.minPoints, AUTO_DEFAULTS.minPoints, (n) => n >= 1), maxHours: num(c?.maxHours, AUTO_DEFAULTS.maxHours, (n) => n > 0) };
 }
 
+/**
+ * 変える設定を確かめる（bh config auto / auto-points / auto-hours と、知識の画面から送る PUT /api/config/auto で同じ範囲。NIH-162）。
+ * 送られた項目だけを返す（送らなかった項目は今の設定のまま）。
+ * @param {{ enabled?: boolean, minPoints?: number|string, maxHours?: number|string }|null} patch
+ * @returns {{ ok: true, value: { enabled?: boolean, minPoints?: number, maxHours?: number } } | { ok: false, error: string }}
+ */
+export function parseAutoSettings(patch) {
+  if (!patch || typeof patch !== 'object' || Array.isArray(patch)) return { ok: false, error: '変える項目がありません' };
+  const value = {};
+  if ('enabled' in patch) {
+    if (typeof patch.enabled !== 'boolean') return { ok: false, error: '入切は true か false で送ってください' };
+    value.enabled = patch.enabled;
+  }
+  if ('minPoints' in patch) {
+    const n = readNumber(patch.minPoints);
+    if (!Number.isInteger(n) || n < 1) return { ok: false, error: '件数は 1 以上の整数を指定してください' };
+    value.minPoints = n;
+  }
+  if ('maxHours' in patch) {
+    const h = readNumber(patch.maxHours);
+    if (!Number.isFinite(h) || h <= 0) return { ok: false, error: '時間は 0 より大きい数を指定してください' };
+    value.maxHours = h;
+  }
+  if (!Object.keys(value).length) return { ok: false, error: '変える項目がありません' };
+  return { ok: true, value };
+}
+
 /** 時刻から now までの経過（未来の時刻は 0 として扱わず、待たない: 端末の時計を戻したときに待たされ続けないように） */
 function elapsed(now, iso) {
   const t = Date.parse(iso || '');

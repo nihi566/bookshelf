@@ -17,7 +17,7 @@ import { analysisStamp, applyImport } from '../web/core/importing.js';
 import { mergeKindleSync, normalizeKindleReport } from '../web/core/kindle-status.js';
 import { createLlmClient, normalizeBaseUrl } from '../web/core/analysis/llm.js';
 import { analyzeLibrary, recommendBooks, recommendationNote } from '../web/core/analysis/pipeline.js';
-import { autoAnalyzeDue, autoConfig, notesChanged, pendingPoints, removedPoints } from '../web/core/auto-analysis.js';
+import { autoAnalyzeDue, autoConfig, notesChanged, parseAutoSettings, pendingPoints, removedPoints } from '../web/core/auto-analysis.js';
 import { analysisShapeError } from '../web/core/analysis/shape.js';
 import { swVersion } from '../web/core/serve-version.js';
 import { restoreAnalysis } from '../web/core/analysis/restore.js';
@@ -227,8 +227,23 @@ export function createCompanionServer({ store, log = console.log, catalogFetch, 
           job: publicJob(),
           google: drive ? { ...publicDrive(drive.status), lastNew: st.playbooksSync?.lastNew || null } : null,
           // 自動の分析の設定と、最後に成功した時刻・失敗の理由（知識の画面に出す）
-          autoAnalysis: { ...autoConfig(cfg.autoAnalyze), running: Boolean(auto), pending: pendingPoints(points, analysis), removed: removedPoints(points, analysis), notesChanged: notesChanged(lib, analysis), next: autoNext({ library: lib, analysis, st, cfg }), ...publicAutoState(st.autoAnalysis) },
+          autoAnalysis: autoInfo({ library: lib, analysis, st, cfg, points }),
         });
+      }
+      case 'PUT /api/config/auto': {
+        // 知識の画面から自動の分析の入切・条件を変える（NIH-162。bh config auto / auto-points / auto-hours と同じ範囲）
+        const r = parseAutoSettings(await readBody(req));
+        if (!r.ok) return send(res, 400, { error: r.error });
+        // 続けて押されても、読んでから保存するまでを 1 回ずつにする（先に送った項目を消さない）
+        const saved = await store.lock(async () => {
+          const c = await store.config();
+          const next = { ...c, autoAnalyze: { ...c.autoAnalyze, ...r.value } };
+          await store.saveConfig(next);
+          return next;
+        });
+        // 1 分ごとの確認は設定を読み直すので、次の確認から新しい条件で判断する。画面には同じ判断の一文を返す
+        const lib = await store.library();
+        return send(res, 200, { autoAnalysis: autoInfo({ library: lib, analysis: await store.analysis(), st: await store.state(), cfg: saved, points: analysisPoints(lib) }) });
       }
       case 'GET /api/history':
         // pinMax: 「この回を残す」の印の上限（画面が見出しに「残す N / 上限 回」と出す。NIH-127）
@@ -459,6 +474,11 @@ export function createCompanionServer({ store, log = console.log, catalogFetch, 
       job.running = false;
       job.finishedAt = new Date().toISOString();
     }
+  }
+
+  /** 自動の分析の設定と状態（/api/info と、設定を変えたときの応答で同じ形） */
+  function autoInfo({ library, analysis, st, cfg, points }) {
+    return { ...autoConfig(cfg.autoAnalyze), running: Boolean(auto), pending: pendingPoints(points, analysis), removed: removedPoints(points, analysis), notesChanged: notesChanged(library, analysis), next: autoNext({ library, analysis, st, cfg }), ...publicAutoState(st.autoAnalysis) };
   }
 
   /** 自動の分析の条件の判断（checkAutoAnalyze と /api/info で同じ入力から判断する） */

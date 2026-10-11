@@ -39,10 +39,13 @@ export function fakeApp(state, overrides = {}) {
     pinHistory: async () => {
       throw new Error('pinHistory を差し替えていません');
     },
+    setAutoAnalysis: async () => {
+      throw new Error('setAutoAnalysis を差し替えていません');
+    },
     ...overrides,
   };
-  const { actions, readDiscovery } = appActions(deps);
-  return { actions, readDiscovery, log, sheets, toasts };
+  const { actions, readDiscovery, saveAutoConfig } = appActions(deps);
+  return { actions, readDiscovery, saveAutoConfig, log, sheets, toasts };
 }
 
 /** シートの入力（FormData の代わり。get だけ使う） */

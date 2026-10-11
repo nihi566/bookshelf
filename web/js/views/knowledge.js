@@ -66,6 +66,18 @@ function nextLine(au) {
   return html`<p class="small muted">次の自動の分析: ${text}</p>`;
 }
 
+/** 自動の分析の入切・条件を変える欄（PC の bh config auto / auto-points / auto-hours と同じ設定を変える。NIH-162） */
+function autoConfigForm(au) {
+  return html`<details class="auto-config"><summary class="small">条件を変える</summary>
+    <form data-form="auto-config" class="stack">
+      <label class="check"><input type="checkbox" name="enabled" value="1" ${au.enabled ? 'checked' : ''}> 自動で分析する</label>
+      <label class="field"><span>前回の分析のあとに点がこの件数増える・減ったら分析する</span><input type="number" name="minPoints" min="1" step="1" inputmode="numeric" required value="${au.minPoints}"></label>
+      <label class="field"><span>前回からこの時間（時間）たって、点が 1 件以上増える・減るか永久ノートを書いた・直したら分析する</span><input type="number" name="maxHours" min="0" step="any" inputmode="decimal" required value="${au.maxHours}"></label>
+      <div class="row"><button type="submit" class="btn small primary">保存する</button></div>
+    </form>
+  </details>`;
+}
+
 /**
  * 自動の分析の状態（PC の bh serve が、点が増えたら人の操作なしに分析し直す）。
  * PC の情報（/api/info）を取り直したときに、この欄だけ差し替える（app.js の PC_INFO_BOXES）
@@ -78,9 +90,10 @@ export function autoStatusBlock(state) {
   // bh analyze で分析したときは PC の記録が無いので、手元の分析結果の時刻（最後に成功した分析）で補う
   const okAt = au.lastSuccessAt || state.analysis?.createdAt;
   const cancelled = au.lastCancelledAt && (!au.lastSuccessAt || au.lastCancelledAt > au.lastSuccessAt);
-  return html`<p class="small">自動の分析: ${au.enabled ? html`<b>オン</b> — ${rule}` : html`<b>オフ</b>（PC で <span class="code">bh config auto on</span> で入れられます）`}</p>
+  return html`<p class="small">自動の分析: ${au.enabled ? html`<b>オン</b> — ${rule}` : html`<b>オフ</b>（下の「条件を変える」で入れられます）`}</p>
     <p class="small muted">最後に成功: ${when(okAt)}${au.lastTrigger === 'auto' && au.lastSuccessAt && !au.lastError && !cancelled ? '（自動）' : ''}</p>
     ${nextLine(au)}
+    ${autoConfigForm(au)}
     ${au.enabled && au.notesChanged ? html`<p class="small muted">前回の分析のあとに書いた・直した永久ノートがあります。次の分析で面・立体に入ります。</p>` : ''}
     ${cancelled ? html`<p class="small muted">${when(au.lastCancelledAt)} に分析を中止しました。少し時間をおいてから、PC が自動で始め直します。</p>` : ''}
     ${au.lastError ? html`<p class="notice err">${when(au.lastErrorAt)} の分析に失敗しました: ${au.lastError}。前回の結果はそのまま残っています。次の機会に PC がもう一度試します。</p>` : ''}`;

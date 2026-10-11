@@ -372,7 +372,8 @@ async function refreshPcInfo() {
   if (partial) {
     for (const [selector, block] of partial) {
       const box = document.querySelector(`#view ${selector}`);
-      if (!box) continue;
+      // 欄の中で入力している（自動の分析の条件など）ときは差し替えない（書きかけの値を消さない）
+      if (!box || box.contains(document.activeElement)) continue;
       // 開いて読んでいる説明（取り込めない本の理由など）を、差し替えで閉じない
       const open = box.querySelector('details')?.open;
       box.innerHTML = String(block(state));
@@ -528,6 +529,7 @@ const appOps = appActions({
   clipboard: () => navigator.clipboard,
   restoreHistory: (id) => companion.restoreHistory(id),
   pinHistory: (id, pinned) => companion.pinHistory(id, pinned),
+  setAutoAnalysis: (patch) => companion.setAutoAnalysis(patch),
 });
 
 const actions = {
@@ -608,6 +610,7 @@ const forms = {
     }
     autoSyncAfterChange();
   },
+  'auto-config': (form, submitter) => appOps.saveAutoConfig(new FormData(form), submitter),
   'book-filter'(form) {
     const q = new FormData(form).get('q');
     const { query } = parseHash();

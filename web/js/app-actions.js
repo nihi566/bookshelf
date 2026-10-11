@@ -31,8 +31,9 @@ const NOT_LOADED = 'まだ端末のデータを読み込んでいます。少し
  * @param {() => { writeText(text: string): Promise<void> }|undefined} deps.clipboard 使えない画面では undefined
  * @param {(id: string) => Promise<object>} deps.restoreHistory PC の過去の分析をいまの分析に戻す
  * @param {(id: string, pinned: boolean) => Promise<unknown>} deps.pinHistory PC の過去の分析に「この回を残す」の印を付け外しする
+ * @param {(patch: object) => Promise<{ autoAnalysis: object }>} deps.setAutoAnalysis PC の自動の分析の入切・条件を変える
  */
-export function appActions({ state, openSheet, toast, persist, saveAnalysis, sync, render, refreshThoughts, go, confirm, coverDataUrl, clipboard, restoreHistory, pinHistory }) {
+export function appActions({ state, openSheet, toast, persist, saveAnalysis, sync, render, refreshThoughts, go, confirm, coverDataUrl, clipboard, restoreHistory, pinHistory, setAutoAnalysis }) {
   const notLoaded = () => {
     if (state.loaded) return false;
     toast(NOT_LOADED);
@@ -317,5 +318,24 @@ export function appActions({ state, openSheet, toast, persist, saveAnalysis, syn
     },
   };
 
-  return { actions, readDiscovery };
+  /**
+   * 知識の画面の「条件を変える」を PC に保存し、返ってきた状態で「次の自動の分析」の一文をその場で描き直す（NIH-162）。
+   * 値の範囲は PC が確かめる（断られたら理由が例外で届き、画面の欄はそのまま残る）
+   * @param {{ get(name: string): unknown }} data フォームの入力
+   * @param {{ disabled: boolean }|null} [submitter] 押したボタン（保存の間は押せなくする）
+   */
+  async function saveAutoConfig(data, submitter = null) {
+    if (submitter) submitter.disabled = true;
+    let autoAnalysis;
+    try {
+      ({ autoAnalysis } = await setAutoAnalysis({ enabled: data.get('enabled') === '1', minPoints: data.get('minPoints'), maxHours: data.get('maxHours') }));
+    } finally {
+      if (submitter) submitter.disabled = false;
+    }
+    state.pcInfo = { ...state.pcInfo, autoAnalysis };
+    toast(autoAnalysis.enabled ? '自動の分析の条件を保存しました' : '自動の分析を切りました');
+    render({ keepScroll: true });
+  }
+
+  return { actions, readDiscovery, saveAutoConfig };
 }
