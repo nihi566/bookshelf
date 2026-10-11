@@ -1,5 +1,6 @@
 // ホーム・本・検索の画面
 import { html } from '../html.js';
+import { joinCandidateIds } from '../../core/join-hints.js';
 import { bookHighlights, dailyPicks, guessTechnical, isTechnicalBook, libraryStats, listBooks, searchHighlights, SOURCES } from '../../core/model.js';
 import { searchPoints } from '../../core/points.js';
 import { THOUGHT_LABEL, liveThoughts } from '../../core/thoughts.js';
@@ -158,6 +159,7 @@ export const book = {
     const b = state.library.books[params.id];
     if (!b || b.deleted) return html`<p class="empty">本が見つかりません。<a href="#/books">読んだ本の一覧へ</a></p>`;
     const hs = bookHighlights(state.library, b.id);
+    const joinHints = joinCandidateIds(hs);
     const idx = lineIndex(state.analysis);
     const linesHere = (state.analysis?.lines || []).filter((l) => l.bookIds?.includes(b.id));
     let chapter = null;
@@ -167,7 +169,7 @@ export const book = {
         chapter = h.chapter;
         items.push(html`<h3 class="chapter">${chapter}</h3>`);
       }
-      items.push(highlightCard(h, { library: state.library, lines: idx.get(h.id), showBook: false }));
+      items.push(highlightCard(h, { library: state.library, lines: idx.get(h.id), showBook: false, joinHint: joinHints.has(h.id) }));
     }
     const technical = isTechnicalBook(b);
     // 紙の本には線を引いた文を手で足す欄を出す（章は前に入れたものから選べる）

@@ -52,7 +52,10 @@ export function locationText(h) {
   return locationParts(h).join(' · ');
 }
 
-export function highlightCard(h, { library, lines = [], query = '', showBook = true } = {}) {
+/**
+ * 点のカード。joinHint: 文の途中で切れていそうな点（joinCandidateIds）に「次の点とくっつける?」の印を出す（押すと編集シート）
+ */
+export function highlightCard(h, { library, lines = [], query = '', showBook = true, joinHint = false } = {}) {
   const book = library.books[h.bookId];
   return html`<article class="hl" style="--hl-color:${COLOR_VAR[h.color] || 'var(--hl-yellow)'}" data-hl="${h.id}">
     <p class="hl-text">${query ? mark(h.text, query) : h.text}</p>
@@ -65,6 +68,7 @@ export function highlightCard(h, { library, lines = [], query = '', showBook = t
         ${showBook && book ? html`<a class="book-link" href="#/book/${book.id}">${book.title}</a>` : ''}
         <span>${locationParts(h).map((p, i) => html`${i ? ' · ' : ''}<span class="nowrap">${p}</span>`)}</span>
         ${sourceBadge(h.source)}${isTextEdited(h) ? html` <span class="badge edited" title="取り込んだときの文から直しています（✎ で元に戻せます）">直した文</span>` : ''}
+        ${joinHint ? html` <button type="button" class="badge join-hint" data-action="edit" data-id="${h.id}" title="文の途中で切れていて、次の点と位置が続いています。押すと編集を開きます（くっつけるボタンがあります）">次の点とくっつける?</button>` : ''}
       </div>
       <div class="hl-actions">
         <button class="icon-btn ${h.favorite ? 'on' : ''}" data-action="fav" data-id="${h.id}" aria-pressed="${String(Boolean(h.favorite))}" aria-label="お気に入り">${h.favorite ? '★' : '☆'}</button>
