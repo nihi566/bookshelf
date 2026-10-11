@@ -109,3 +109,80 @@ test('NIH-121: 分析の進み具合が変わると、知識の画面と一覧�
   const { JOB_PATHS } = await import('../web/js/routes.js');
   assert.deepEqual(JOB_PATHS, ['/knowledge', '/knowledge/pending']);
 });
+
+// NIH-157: 一覧の画面で分析が終わったら、その回の結果（新しくつながった点・発見）と、前回からの変化・発見へのリンクを出す
+const RESULT = /class="card stack run-result"/;
+// analysisAt: 終わった回が作った分析（analysisOf の createdAt）
+const DONE = { running: false, stage: 'done', message: '完了しました', mode: 'analyze', analysisAt: '2026-10-09T10:00:00.000Z' };
+
+/** 分析し直したあとの分析（点はすべて線に入り、前回からの変化と発見を持つ） */
+function rerunOf(lib, { connected = 3, rebuilt = false } = {}) {
+  const a = analysisOf(lib, 0);
+  const ids = a.lines[0].highlightIds;
+  const at = a.createdAt;
+  const prev = '2026-10-08T10:00:00.000Z';
+  const changes = rebuilt
+    ? { previousAt: prev, rebuilt: true, reason: 'grew', addedLines: [], grownLines: [], removedLines: [], connectedPoints: [] }
+    : { previousAt: prev, addedLines: [], grownLines: [{ id: 'l1', name: '線1', added: connected }], removedLines: [], connectedPoints: ids.slice(0, connected).map((pointId) => ({ pointId, lineId: 'l1' })), extendedPoints: 0 };
+  const disc = (n, foundAt, pointIds = [ids[n], ids[n + 1]]) => ({ id: `d${n}`, kind: 'cross', lineId: 'l1', lineName: '線1', reason: '', pointIds, foundAt });
+  return {
+    ...a,
+    changes,
+    // この回の発見 2 件・消えた点の発見 1 件・前回までの発見 1 件
+    discoveries: [disc(0, at), disc(1, at), disc(2, at, [ids[2], 'h-gone']), disc(3, prev)],
+  };
+}
+
+test('NIH-157: 一覧の画面で分析が終わると、新しくつながった点の数・この回の発見の件数・リンクが出る', async () => {
+  const { pendingView } = await import('../web/js/views/knowledge.js');
+  const lib = sample();
+  const out = String(pendingView.render({ state: { ...st(lib, rerunOf(lib)), job: DONE } }));
+  assert.match(out, RESULT);
+  assert.match(out, /新しく線\(グループ\)につながった点 <b>3<\/b>/);
+  assert.match(out, /発見 <b>2<\/b> 件/, 'この回の発見だけ数える（前回までの発見・消えた点の発見は数えない）');
+  assert.match(out, /<a [^>]*href="#\/knowledge"[^>]*>[^<]*前回からの変化/);
+  assert.match(out, /<a [^>]*href="#\/discoveries"/);
+  assert.match(out, /増えた点はありません/, '増えた点は 0 件のまま');
+});
+
+test('NIH-157: 発見が 0 件なら発見へのリンクは出さない。作り直した回はそう出す', async () => {
+  const { pendingView } = await import('../web/js/views/knowledge.js');
+  const lib = sample();
+  const none = { ...rerunOf(lib), discoveries: [] };
+  const out = String(pendingView.render({ state: { ...st(lib, none), job: DONE } }));
+  assert.match(out, /発見 <b>0<\/b> 件/);
+  assert.doesNotMatch(out, /href="#\/discoveries"/);
+  const rebuilt = String(pendingView.render({ state: { ...st(lib, rerunOf(lib, { rebuilt: true })), job: DONE } }));
+  assert.match(rebuilt, RESULT);
+  assert.match(rebuilt, /最初から作り直しました/);
+});
+
+test('NIH-157: 失敗・分析中・状況不明・おすすめの選び直しでは結果を出さない', async () => {
+  const { pendingView } = await import('../web/js/views/knowledge.js');
+  const lib = sample();
+  const a = rerunOf(lib);
+  const jobs = [
+    { running: false, stage: 'error', error: 'LLM に接続できません', message: '', mode: 'analyze' },
+    { running: true, stage: 'lines', message: '線を作っています', done: 1, total: 3, mode: 'analyze' },
+    { running: false, lost: true, stage: 'lines', error: '', message: '' },
+    { running: false, stage: 'interrupted', error: 'PC の分析が途中で止まりました', message: '' },
+    { ...DONE, mode: 'recommend' },
+    // 終わったあとに同期・「この分析に戻す」で分析が差し替わった
+    { ...DONE, analysisAt: '2026-10-01T00:00:00.000Z' },
+    null,
+  ];
+  for (const job of jobs) assert.doesNotMatch(String(pendingView.render({ state: { ...st(lib, a), job } })), RESULT, JSON.stringify(job));
+  assert.match(String(pendingView.render({ state: { ...st(lib, a), job: jobs[0] } })), /LLM に接続できません/, '失敗の理由は進み具合の欄に出る');
+  // 前回が無い分析（前回からの変化が無い）では出さない
+  assert.doesNotMatch(String(pendingView.render({ state: { ...st(lib, { ...a, changes: null }), job: DONE } })), RESULT);
+});
+
+test('NIH-157: 分析のあとにまた点が増えていても、終わった回の結果を一覧の上に出す', async () => {
+  const { pendingView } = await import('../web/js/views/knowledge.js');
+  const lib = sample();
+  const a = rerunOf(lib);
+  addThought(lib, { text: '分析のあとの思いつき' }, '2026-10-10T00:00:00.000Z');
+  const out = String(pendingView.render({ state: { ...st(lib, a), job: DONE } }));
+  assert.match(out, RESULT);
+  assert.ok(out.search(RESULT) < out.indexOf('#/point/'), '一覧より上に出す');
+});
