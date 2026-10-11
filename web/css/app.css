@@ -174,7 +174,12 @@ main { max-width: 760px; margin: 0 auto; padding: 16px max(16px, env(safe-area-i
 .badge.paper { background: #efe3cf; color: #6b4a1a; }
 .badge.memo { background: #e6e0f3; color: #4f3b80; }
 .badge.tech { background: #e3e7ea; color: #3c4a55; }
+/* 文の途中で切れていそうな点の「次の点とくっつける?」（押すと編集シート） */
+.badge.join-hint { border: 1px dashed #b7791f; background: #fff7e6; color: #8a5a00; font-family: inherit; cursor: pointer; }
+.badge.join-hint:hover { background: #fdebc8; }
 @media (prefers-color-scheme: dark) {
+  .badge.join-hint { border-color: #c99a4a; background: #3a2e1a; color: #f0c98a; }
+  .badge.join-hint:hover { background: #4a3a20; }
   .badge.kindle { background: #43301a; color: #f3c285; }
   .badge.playbooks { background: #183449; color: #8cc8f5; }
   .badge.paper { background: #3d3122; color: #e8c896; }
