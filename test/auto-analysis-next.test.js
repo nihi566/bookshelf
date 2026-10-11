@@ -73,6 +73,9 @@ test('NIH-112: /api/info の autoAnalysis.next に、今の判断の理由と見
     assert.equal(next.due, false);
     assert.equal(next.reason, 'あと 9 件増える・減るか、前回から 24 時間たつと分析します');
     assert.equal(next.nextAt, new Date(Date.parse(createdAt) + 24 * 3_600_000).toISOString());
+    // チャットモデルが無ければ始まらないので、そう伝える
+    await store.saveConfig({ llm: { baseUrl: 'http://127.0.0.1:9', chatModel: '', embedModel: 'fake-embed' } });
+    assert.match((await info()).reason, /チャットモデルが設定されていません/);
   } finally {
     server.close();
   }

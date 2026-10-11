@@ -475,7 +475,11 @@ export function createCompanionServer({ store, log = console.log, catalogFetch, 
 
   /** 次の自動の分析がいつ・何を待って始まるか（知識の画面に出す。NIH-112） */
   function autoNext({ library, analysis, st, cfg }) {
-    if (!cfg.llm.chatModel) return { due: false, reason: 'チャットモデルが設定されていません（PC で bh config model <モデル名>）', nextAt: null };
+    // checkAutoAnalyze が始めない場面では「まもなく始めます」と出さない
+    const wait = (reason) => ({ due: false, reason, nextAt: null });
+    if (job.running) return wait('分析の最中です。終わってから判断します');
+    if (activeImports > 0 || drive?.status?.checking) return wait('取り込みの最中です。終わってから判断します');
+    if (!cfg.llm.chatModel) return wait('チャットモデルが設定されていません（PC で bh config model <モデル名>）');
     const { due, reason, nextAt } = autoDecision({ library, analysis, st, cfg });
     return { due, reason, nextAt };
   }
