@@ -8,7 +8,7 @@ import { emptyLibrary, mergeLibraries, mergeParsed, updateHighlight } from '../w
 import { SAMPLE_BOOKS } from '../web/core/sample.js';
 import { addThought, thoughtsOf } from '../web/core/thoughts.js';
 import { addNote, addNotePoint, deleteNote, liveNotes, noteDraftFromLine, noteFromThought, notesOf, searchNotes, updateNote } from '../web/core/notes.js';
-import { missingEvidence, noteEvidence, notesCiting } from '../web/core/note-evidence.js';
+import { missingEvidence, noteEvidence, notesCiting, notesSharingEvidence } from '../web/core/note-evidence.js';
 import { currentPointId } from '../web/core/points.js';
 import { applyImport, makeBackup } from '../web/core/importing.js';
 import { createLlmClient } from '../web/core/analysis/llm.js';
@@ -392,6 +392,29 @@ test('G3-6: 点・線・面の画面から、それを根拠にしている永�
   // 点のカードから点の画面へ行ける（読み上げに名前がある）
   assert.match(line, /<a class="icon-btn" href="#\/point\/[^"]+" aria-label="点のページを開く（永久ノート）">↗<\/a>/);
   assert.deepEqual(notesCiting(state.library, new Set([ids[1]])).map((n) => n.id), ['ncite1']);
+});
+
+test('NIH-150: 永久ノートの画面に、根拠の点が重なるほかの永久ノートが出る（自分・消したノートは出さない。無ければ何も出ない）', async () => {
+  const { noteView } = await import('../web/js/views/notes.js');
+  const { state, ids, hs } = noteState();
+  addNote(state.library, { title: '自分のノート', pointIds: [ids[0], ids[1]] }, T, 'nself1');
+  addNote(state.library, { title: '<i>重なる</i>ノート', pointIds: [ids[1], ids[2]] }, T2, 'nover1');
+  addNote(state.library, { title: '消したノート', pointIds: [ids[0]] }, T, 'ngone1');
+  deleteNote(state.library, 'ngone1', T2);
+  addNote(state.library, { title: '関係ないノート', pointIds: [hs[10].id] }, T, 'nother1');
+  addNote(state.library, { title: '根拠の無いノート' }, T, 'nempty1');
+  assert.deepEqual(notesSharingEvidence(state.library, notesOf(state.library).nself1).map((n) => n.id), ['nover1']);
+  const out = String(noteView.render({ state, params: { id: 'nself1' } }));
+  assert.match(out, /<h2>根拠が重なる永久ノート<\/h2>/);
+  assert.match(out, /href="#\/note\/nover1"/);
+  assert.match(out, /&lt;i&gt;重なる&lt;\/i&gt;ノート/);
+  assert.doesNotMatch(out, /href="#\/note\/nself1"/, '自分は出さない');
+  assert.doesNotMatch(out, /ngone1|nother1|nempty1/);
+  // 重なる側からも戻れる
+  assert.match(String(noteView.render({ state, params: { id: 'nover1' } })), /href="#\/note\/nself1"/);
+  // 重なるノートが無ければ何も出ない（根拠の無いノートも）
+  assert.doesNotMatch(String(noteView.render({ state, params: { id: 'nother1' } })), /根拠が重なる永久ノート/);
+  assert.doesNotMatch(String(noteView.render({ state, params: { id: 'nempty1' } })), /根拠が重なる永久ノート/);
 });
 
 test('G3-1 / C8: ノートの一覧・ノートの画面・書くシート・検索（文字はエスケープする。受け箱のメモに「永久ノートにする」）', async () => {

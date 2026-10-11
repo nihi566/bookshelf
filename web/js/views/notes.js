@@ -3,7 +3,7 @@
 import { html } from '../html.js';
 import { isoDate, truncate } from '../../core/text.js';
 import { NOTE_BODY_MAX, NOTE_TITLE_MAX, citesPoint, notesOf, searchNotes } from '../../core/notes.js';
-import { missingEvidence, noteEvidence, notesCiting } from '../../core/note-evidence.js';
+import { missingEvidence, noteEvidence, notesCiting, notesSharingEvidence } from '../../core/note-evidence.js';
 import { lineIndex, pointCard } from '../ui.js';
 import { linksBlock } from './links.js';
 
@@ -22,7 +22,11 @@ export function noteRow(library, n) {
 
 /** 点・線・面の画面に出す「これを根拠にしている永久ノート」（無ければ何も出さない） */
 export function citingNotesBlock(library, ids, title) {
-  const notes = notesCiting(library, ids);
+  return notesBlock(library, notesCiting(library, ids), title);
+}
+
+/** ノートの並びと見出し（無ければ何も出さない） */
+function notesBlock(library, notes, title) {
   if (!notes.length) return '';
   return html`<div class="section"><h2>${title}</h2><span class="small muted">${notes.length}</span></div>
     <ul class="note-list">${notes.map((n) => noteRow(library, n))}</ul>`;
@@ -115,6 +119,7 @@ export const noteView = {
       ${ev.length
         ? ev.map((e) => (e.point ? pointCard(e.point, { library: state.library, lines: idx.get(e.id) }) : html`<p class="card small muted">この点は消えました。</p>`))
         : html`<p class="empty">根拠の点はまだありません。点のページの「永久ノートの根拠にする」で足せます。</p>`}
+      ${notesBlock(state.library, notesSharingEvidence(state.library, n), '根拠が重なる永久ノート')}
       ${linksBlock(state, n.id)}`;
   },
 };

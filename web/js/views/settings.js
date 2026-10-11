@@ -19,7 +19,7 @@ function shortTime(iso) {
   return Number.isNaN(d.getTime()) ? '—' : `${d.getMonth() + 1}/${d.getDate()} ${d.toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' })}`;
 }
 
-/** Play ブックスで最後に新しい点が届いた時刻・件数（PC の state.json に残るので、bh serve を起動し直しても消えない） */
+/** 自動取り込み（Play ブックス・Kindle）で最後に新しい点が届いた時刻・件数（PC の state.json に残るので、bh serve を起動し直しても消えない） */
 function lastNewText(n) {
   return n?.at ? `${shortTime(n.at)}・${Number(n.added) || 0} 件${n.updated ? `（更新 ${n.updated} 件）` : ''}` : 'まだ届いていません';
 }
@@ -30,6 +30,11 @@ export function googleLabel(g) {
   if (!g.active) return g.error || '未設定';
   const problems = g.problemCount ?? g.problems?.length ?? 0;
   return `有効（最終確認 ${shortTime(g.lastCheck)}・最後に新しい点 ${lastNewText(g.lastNew)}）${problems ? ` ／ 取り込めない本 ${problems} 冊（取り込みの画面に理由）` : ''}${g.error ? ` ／ ${g.error}` : ''}`;
+}
+
+/** 設定 → 接続を確認 の Kindle（ブラウザ拡張）の要約。拡張から連絡が無い（ks が null）ときも「まだ届いていません」 */
+export function kindleLabel(ks) {
+  return `最後に新しい点 ${lastNewText(ks?.lastNew)}`;
 }
 
 /**
