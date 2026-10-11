@@ -65,12 +65,13 @@ export async function pullMain({ repoDir, run }) {
 }
 
 /** ポートで待ち受けているプロセス（[{ pid, cmd }]） */
-async function listeners({ platform, port, run }) {
+export async function listeners({ platform, port, run = execRun }) {
   let out = '';
   try {
+    // 待ち受けが無いと Get-NetTCPConnection は SilentlyContinue でも終了コードを 1 にするので、最後に exit 0 で「該当なし」を成功にする
     out = platform === 'win32'
       ? await run('powershell', ['-NoProfile', '-NonInteractive', '-Command',
-        `[Console]::OutputEncoding=[Text.Encoding]::UTF8; foreach ($i in (Get-NetTCPConnection -LocalPort ${port} -State Listen -ErrorAction SilentlyContinue | Select-Object -ExpandProperty OwningProcess -Unique)) { "$i\`t$((Get-CimInstance Win32_Process -Filter "ProcessId=$i").CommandLine)" }`])
+        `[Console]::OutputEncoding=[Text.Encoding]::UTF8; foreach ($i in (Get-NetTCPConnection -LocalPort ${port} -State Listen -ErrorAction SilentlyContinue | Select-Object -ExpandProperty OwningProcess -Unique)) { "$i\`t$((Get-CimInstance Win32_Process -Filter "ProcessId=$i").CommandLine)" }; exit 0`])
       : await run('sh', ['-c', `for p in $(lsof -nP -t -iTCP:${port} -sTCP:LISTEN 2>/dev/null); do printf '%s\\t%s\\n' "$p" "$(ps -o args= -p "$p")"; done`]);
   } catch (e) {
     throw new Error(`ポート ${port} を使っているプロセスを調べられませんでした: ${e.message}`);

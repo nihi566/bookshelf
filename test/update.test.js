@@ -5,7 +5,8 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { createStore } from '../cli/store.js';
 import { createCompanionServer } from '../cli/server.js';
-import { SERVE_TASK, backupData, backupStamp, isServeCommand, runUpdate, swVersion } from '../cli/update.js';
+import { createServer } from 'node:net';
+import { SERVE_TASK, backupData, backupStamp, isServeCommand, listeners, runUpdate, swVersion } from '../cli/update.js';
 
 const tmp = (p) => mkdtempSync(path.join(tmpdir(), p));
 const SW = "const CACHE = 'bh-v42';\n";
@@ -75,7 +76,11 @@ function setup({ pullFails = false, listeners = [{ pid: 111, cmd: 'node cli\\bh.
       return '';
     }],
     [/log --oneline/, 'bbb2222 feat: 新しい機能\n'],
-    [/Get-NetTCPConnection/, () => alive.map((l) => `${l.pid}\t${l.cmd}`).join('\n')],
+    // 実物の PowerShell は、ポートを使うプロセスが無いと -ErrorAction SilentlyContinue でも終了コード 1 で終わる（最後に exit 0 しない限り）
+    [/Get-NetTCPConnection/, (cmd) => {
+      if (!alive.length && !/;\s*exit 0\s*$/.test(cmd)) throw new Error('Command failed: powershell (exit code 1)');
+      return alive.map((l) => `${l.pid}\t${l.cmd}`).join('\n');
+    }],
     [/Get-ScheduledTask/, `${SERVE_TASK}\n`],
     [/Start-ScheduledTask/, () => { startServer(); return ''; }],
   ]);
@@ -184,6 +189,15 @@ test('bh update: タスクが無い PC では bh serve を切り離して起動�
   assert.equal(r.started, 'spawn');
   assert.equal(r.version, 'bh-v42');
   assert.ok(!calls.some((c) => c.includes('Start-ScheduledTask')));
+});
+
+test('bh update: Windows の実物の PowerShell で、空いているポートを調べると空の一覧になる', { skip: process.platform !== 'win32' && 'Windows でだけ確かめる' }, async () => {
+  // 空いているポートを OS に選ばせ、閉じてから調べる
+  const srv = createServer();
+  await new Promise((r) => srv.listen(0, '127.0.0.1', r));
+  const { port } = srv.address();
+  await new Promise((r) => srv.close(r));
+  assert.deepEqual(await listeners({ platform: 'win32', port }), []);
 });
 
 test('/api/info: そのサーバの起動時刻を返す（問い合わせのたびの時刻ではない）', async () => {
