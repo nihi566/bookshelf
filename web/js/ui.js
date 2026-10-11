@@ -340,7 +340,8 @@ export function kindleSyncLines(ks, now = new Date().toISOString()) {
   const state = kindleSyncState(ks, now);
   if (state === 'none') return ['自動取り込み: まだ拡張から連絡がありません（拡張機能を入れていない場合は、下の手順で設定できます）'];
   const last = ks.lastCheck;
-  const checked = `最終確認 ${timeText(last.at)}`;
+  // 古い拡張は冊数を送らないので、そのときは添えない
+  const checked = `最終確認 ${timeText(last.at)}${Number.isInteger(last.fetched) ? `・${last.fetched} 冊を読み直し` : ''}`;
   const result = { ok: `正常（${checked}）`, login: `Amazon のログインが切れています（${checked}）`, error: `失敗（${checked}）${last.error ? `: ${last.error}` : ''}` };
   const lines = [];
   if (state === 'stale') {

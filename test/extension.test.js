@@ -77,9 +77,12 @@ test('拡張: manifest の host_permissions と URL の判定が食い違って�
 
 test('拡張: PC への確認結果の報告には必要な項目だけを入れる', () => {
   const ok = statusReport({ ok: true, at: 'x', added: 3, fetched: 9, books: [1], error: '', token: 'secret' }, { intervalMin: '30', token: 'secret', companionUrl: 'http://localhost:8787' });
-  assert.deepEqual(ok, { ok: true, needLogin: false, added: 3, intervalMin: 30, error: '' });
+  assert.deepEqual(ok, { ok: true, needLogin: false, added: 3, fetched: 9, intervalMin: 30, error: '' });
   const ng = statusReport({ ok: false, needLogin: true, error: 'あ'.repeat(500) }, { intervalMin: 'abc' });
-  assert.deepEqual(Object.keys(ng).sort(), ['added', 'error', 'intervalMin', 'needLogin', 'ok']);
+  assert.deepEqual(Object.keys(ng).sort(), ['added', 'error', 'fetched', 'intervalMin', 'needLogin', 'ok']);
+  assert.equal(ng.fetched, 0);
+  assert.equal(statusReport({ ok: true, fetched: -2 }, {}).fetched, 0);
+  assert.equal(statusReport({ ok: true, fetched: 1.5 }, {}).fetched, 0);
   assert.equal(ng.intervalMin, 15);
   assert.equal(ng.added, 0);
   assert.equal(ng.needLogin, true);
