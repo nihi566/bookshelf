@@ -73,9 +73,8 @@ export function highlightCard(h, { library, lines = [], query = '', showBook = t
       <div class="hl-actions">
         <button class="icon-btn ${h.favorite ? 'on' : ''}" data-action="fav" data-id="${h.id}" aria-pressed="${String(Boolean(h.favorite))}" aria-label="お気に入り">${h.favorite ? '★' : '☆'}</button>
         <button class="icon-btn" data-action="edit" data-id="${h.id}" aria-label="点を編集">✎</button>
-        <button class="icon-btn" data-action="delete" data-id="${h.id}" aria-label="点を削除" title="点を削除">×</button>
-        <button class="icon-btn" data-action="copy" data-id="${h.id}" aria-label="引用をコピー">⧉</button>
         <a class="icon-btn" href="#/point/${h.id}" aria-label="点のページを開く（永久ノート）">↗</a>
+        <button class="icon-btn" data-action="delete" data-id="${h.id}" aria-label="点を削除" title="点を削除">×</button>
       </div>
     </div>
   </article>`;
@@ -166,7 +165,6 @@ export function thoughtCard(t, { lines = [], query = '', moves = false, assigned
       </div>
       <div class="hl-actions">
         <button class="icon-btn" data-action="edit-thought" data-id="${t.id}" aria-label="メモを編集">✎</button>
-        <button class="icon-btn" data-action="copy" data-id="${t.id}" aria-label="メモをコピー">⧉</button>
         <a class="icon-btn" href="#/point/${t.id}" aria-label="点のページを開く（永久ノート）">↗</a>
       </div>
     </div>
