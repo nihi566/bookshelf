@@ -2,6 +2,9 @@
 import { isUneditedLineDraft, notesForAnalysis, notesOf } from './notes.js';
 import { humanLine } from './analysis/prompts.js';
 import { hash } from './text.js';
+import { analysisPoints } from './points.js';
+import { currentPointId } from './point-ids.js';
+import { isThoughtId, thoughtsOf } from './thoughts.js';
 
 // 既定: 前回の分析のあとに点が 10 件増える・減るか、24 時間たって 1 件以上増えた・減ったら分析する
 export const AUTO_DEFAULTS = { enabled: true, minPoints: 10, maxHours: 24 };
@@ -33,9 +36,46 @@ function analyzedIds(analysis) {
  * 前回が無ければ 0。分析し直すと消えた点は線からも外れるので、分析のあとは 0 に戻る
  */
 export function removedPoints(points, analysis) {
-  if (!analysis || !Array.isArray(analysis.lines)) return 0;
+  return removedIds(points, analysis).length;
+}
+
+/** 前回の分析に入っていて、今は分析の点に無い点の ID（前回が無ければ空） */
+function removedIds(points, analysis) {
+  if (!analysis || !Array.isArray(analysis.lines)) return [];
   const now = new Set(points.map((p) => p.id));
-  return [...analyzedIds(analysis)].filter((id) => !now.has(id)).length;
+  return [...analyzedIds(analysis)].filter((id) => !now.has(id));
+}
+
+/**
+ * @typedef {'technical'|'deleted'|'book-deleted'|'replaced'|'discarded'|'thought-deleted'|'missing'} RemovedReason
+ * @typedef {{ id: string, reason: RemovedReason, point: object|null, book: object|null, replacedBy?: string }} RemovedPoint
+ */
+
+/**
+ * 消えた点（removedPoints が数える点）と、消えた理由（NIH-152）。理由の順（技術書 → 削除 → …）、同じ理由の中は ID 順。
+ * technical: 本を技術書にした / deleted: 点を削除した / book-deleted: 本ごと削除した /
+ * replaced: 取り込みで長い文に置き換わった・つなげた（replacedBy に置き換え先） / discarded: 思いつきを捨てた /
+ * thought-deleted: 思いつきを削除した / missing: この端末に届いていない
+ * @returns {RemovedPoint[]}
+ */
+export function removedPointList(library, analysis) {
+  return removedIds(analysisPoints(library), analysis)
+    .map((id) => removedReason(library, id))
+    .sort((x, y) => REASON_ORDER.indexOf(x.reason) - REASON_ORDER.indexOf(y.reason) || x.id.localeCompare(y.id));
+}
+
+const REASON_ORDER = ['technical', 'deleted', 'book-deleted', 'discarded', 'replaced', 'thought-deleted', 'missing'];
+
+function removedReason(library, id) {
+  const all = isThoughtId(id) ? thoughtsOf(library) : library.highlights || {};
+  const p = Object.hasOwn(all, id) ? all[id] : null;
+  if (!p) return { id, reason: 'missing', point: null, book: null };
+  if (isThoughtId(id)) return { id, reason: p.deleted ? 'thought-deleted' : 'discarded', point: p.deleted ? null : p, book: null };
+  const book = Object.hasOwn(library.books, p.bookId) ? library.books[p.bookId] : null;
+  if (p.supersededBy) return { id, reason: 'replaced', point: p, book, replacedBy: currentPointId(library, id) };
+  if (book?.deleted) return { id, reason: 'book-deleted', point: p, book };
+  if (p.deleted) return { id, reason: 'deleted', point: p, book };
+  return { id, reason: 'technical', point: p, book };
 }
 
 /**
