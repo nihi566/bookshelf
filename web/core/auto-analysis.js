@@ -5,6 +5,7 @@ import { hash } from './text.js';
 import { analysisPoints } from './points.js';
 import { currentPointId } from './point-ids.js';
 import { isThoughtId, thoughtsOf } from './thoughts.js';
+import { dismissalsOf } from './dismissals.js';
 
 // 既定: 前回の分析のあとに点が 10 件増える・減るか、24 時間たって 1 件以上増えた・減ったら分析する
 export const AUTO_DEFAULTS = { enabled: true, minPoints: 10, maxHours: 24 };
@@ -100,6 +101,29 @@ export function notesChanged(library, analysis) {
   return Object.values(notesOf(library)).some((n) => n && !isUneditedLineDraft(n) && Date.parse(n.updatedAt || '') > since);
 }
 
+/**
+ * 消している線・面の指紋（消している物が無ければ空文字。戻した物は入れない: 消して戻しただけなら分析したときと同じ）
+ */
+export function dismissalsKey(library) {
+  const ids = Object.values(dismissalsOf(library))
+    .filter((d) => d?.dismissed === true && typeof d.id === 'string')
+    .map((d) => `${d.kind}:${d.id}`)
+    .sort();
+  return ids.length ? hash(ids.join('|')) : '';
+}
+
+/**
+ * 前回の分析のあとに、線・面を消した・戻したか（NIH-210。立体・おすすめは消した面を前提にした文のまま残るので、作り直す）。
+ * 指紋を持つ分析は指紋で比べる。持たない古い分析は、分析の時刻より後に消した・戻した記録があるかで見る
+ */
+export function dismissalsChanged(library, analysis) {
+  if (!analysis || !Array.isArray(analysis.lines)) return false;
+  if (typeof analysis.dismissalsKey === 'string') return analysis.dismissalsKey !== dismissalsKey(library);
+  const since = Date.parse(analysis.createdAt || '');
+  if (!Number.isFinite(since)) return false;
+  return Object.values(dismissalsOf(library)).some((d) => d && Date.parse(d.updatedAt || '') > since);
+}
+
 /** 数として読める値か（null・空文字・真偽値は既定値に戻す。Number(null) が 0 になるため） */
 function readNumber(v) {
   if (typeof v === 'number') return v;
@@ -149,16 +173,17 @@ function elapsed(now, iso) {
 
 /**
  * 自動の分析を始めるか。
- * - 前回の分析のあとに点が minPoints 件以上増えた・減った / 前回から maxHours 時間以上たって、点が 1 件以上増えた・減ったか永久ノートを書いた・直した
+ * - 前回の分析のあとに点が minPoints 件以上増えた・減った / 前回から maxHours 時間以上たって、点が 1 件以上増えた・減ったか永久ノートを書いた・直したか線・面を消した・戻した
  *   （増えた点と消えた点は合わせて数える。NIH-107）
  * - 前回の分析が失敗してから AUTO_RETRY_MS たっていなければ待つ（次の機会に試し直す）
  * - 利用者が分析を中止してから AUTO_RETRY_MS たっていなければ待つ（止めた直後に始め直さない）
- * @param {{ points: {id:string}[], analysis: object|null, config?: object, now?: Date, lastFailureAt?: string|null, lastCancelledAt?: string|null, notesChanged?: boolean }} p
+ * @param {{ points: {id:string}[], analysis: object|null, config?: object, now?: Date, lastFailureAt?: string|null, lastCancelledAt?: string|null, notesChanged?: boolean, dismissalsChanged?: boolean }} p
  *   notesChanged: 前回の分析のあとに永久ノートを書いた・直したか（notesChanged() の結果）
+ *   dismissalsChanged: 前回の分析のあとに線・面を消した・戻したか（dismissalsChanged() の結果。NIH-210）
  * @returns {{ due: boolean, pending: number, removed: number, reason: string, nextAt: string|null }}
  *   nextAt: 時間を待っているときに始まる見込みの時刻（ISO。その間に点が増えればもっと早く始まる）。待っていない・変化が無いときは null（NIH-112）
  */
-export function autoAnalyzeDue({ points, analysis, config, now = new Date(), lastFailureAt = null, lastCancelledAt = null, notesChanged: notes = false }) {
+export function autoAnalyzeDue({ points, analysis, config, now = new Date(), lastFailureAt = null, lastCancelledAt = null, notesChanged: notes = false, dismissalsChanged: dismissed = false }) {
   const c = autoConfig(config);
   const pending = pendingPoints(points, analysis);
   const removed = removedPoints(points, analysis);
@@ -167,7 +192,7 @@ export function autoAnalyzeDue({ points, analysis, config, now = new Date(), las
   const result = (due, reason, nextAt = null) => ({ due, pending, removed, reason, nextAt: nextAt === null ? null : new Date(nextAt).toISOString() });
   if (!c.enabled) return result(false, '自動の分析は切ってあります');
   if (points.length < MIN_POINTS) return result(false, `点が ${MIN_POINTS} 件未満です`);
-  if (!changed && !notes) return result(false, '前回の分析のあとに増えた点・減った点も、書いた・直した永久ノートもありません');
+  if (!changed && !notes && !dismissed) return result(false, '前回の分析のあとに増えた点・減った点も、書いた・直した永久ノートも、消した・戻した線・面もありません');
   const since = elapsed(at, analysis?.createdAt);
   const hours = since === Infinity ? Infinity : since / 3_600_000;
   // 時間の条件を満たす時刻（いま条件を満たしていれば null）。前回の時刻が読めなければ hours が Infinity で、いま満たしている
@@ -180,10 +205,13 @@ export function autoAnalyzeDue({ points, analysis, config, now = new Date(), las
   const pointsText = counts ? `点が ${counts}ました` : '';
   if (changed >= c.minPoints) return result(true, `前回の分析のあとに${pointsText}`);
   if (hours >= c.maxHours) {
-    const what = [pointsText, notes ? '永久ノートを書いた・直しました' : ''].filter(Boolean).join('。');
+    const what = [pointsText, notes ? '永久ノートを書いた・直しました' : '', dismissed ? '線・面を消した・戻しました' : ''].filter(Boolean).join('。');
     return result(true, `前回の分析から ${Number.isFinite(hours) ? Math.floor(hours) : '–'} 時間たち、${what}`);
   }
-  // 永久ノートは、書いている途中で分析が始まらないように、前回から maxHours たつまで待つ（点の数の条件には数えない）
-  if (!changed) return result(false, `書いた・直した永久ノートは、前回から ${c.maxHours} 時間たつと分析に入れます`, timeAt);
+  // 永久ノート・消した線や面は、書いている・選んでいる途中で分析が始まらないように、前回から maxHours たつまで待つ（点の数の条件には数えない）
+  if (!changed) {
+    const what = [notes ? '書いた・直した永久ノート' : '', dismissed ? '消した・戻した線・面' : ''].filter(Boolean).join('と、');
+    return result(false, `${what}は、前回から ${c.maxHours} 時間たつと分析に入れます`, timeAt);
+  }
   return result(false, `あと ${Math.ceil(c.minPoints - changed)} 件増える・減るか、前回から ${c.maxHours} 時間たつと分析します`, timeAt);
 }

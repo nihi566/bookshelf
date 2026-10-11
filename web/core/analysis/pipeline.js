@@ -14,7 +14,7 @@ import { feedbackByStatus } from '../model.js';
 import { analysisPoints, currentPointId, embedText, isThought, legacyEmbedText, pointLabel } from '../points.js';
 import { notesForAnalysis } from '../notes.js';
 import { lineAssignmentOf, lineAssignmentsOf } from '../line-assignments.js';
-import { notesKey } from '../auto-analysis.js';
+import { dismissalsKey, notesKey } from '../auto-analysis.js';
 import { bookKey, hash, maskSecrets, truncate } from '../text.js';
 import { PROMPT_VERSION, RECOMMEND_KINDS, RELATION_TYPES, farPrompt, humanLine, linePrompt, pickPrompt, planePrompt, recommendPrompt, searchPrompt, solidPrompt } from './prompts.js';
 import { centroid, dot, l2normalize, tfidfEmbed } from './vectors.js';
@@ -328,6 +328,8 @@ export async function analyzeLibrary({ library, llm: rawLlm, cache = emptyCache(
     pointsAtFull: base ? pointsAtFull : points.length,
     // 面・立体に渡した永久ノートの指紋（ノートだけを直したときも、自動の分析が始まるように。NIH-83）
     notesKey: notesKey(notes),
+    // 分析したときに消していた線・面の指紋（消した・戻しただけの日も、自動の分析が立体を作り直すように。NIH-210）
+    dismissalsKey: dismissalsKey(library),
     stats: { points: points.length, thoughts: points.filter(isThought).length, lines: lines.length, planes: planes.length, isolated: isolated.length, calls },
     lines: lines.map(({ vector, ...l }) => l),
     planes,
