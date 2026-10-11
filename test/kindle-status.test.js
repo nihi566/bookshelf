@@ -144,3 +144,11 @@ test('Kindle 状態: ホームの警告欄は PC モードで PC の情報があ
   assert.match(out, /href="#\/import"/);
   assert.match(out, /ログインが切れています/);
 });
+
+test('NIH-160: 設定 → 接続を確認 の Kindle の要約に「最後に新しい点」を出す（まだなら「まだ届いていません」）', async () => {
+  const { kindleLabel } = await import('../web/js/views/settings.js');
+  const lastCheck = { at: T0, ok: true, error: '', needLogin: false, added: 0, intervalMin: 15 };
+  assert.match(kindleLabel({ lastCheck, lastNew: { at: T0, added: 4 } }), /^最後に新しい点 \d+\/\d+ \d+:\d+・4 件$/);
+  assert.equal(kindleLabel({ lastCheck }), '最後に新しい点 まだ届いていません');
+  assert.equal(kindleLabel(null), '最後に新しい点 まだ届いていません', '拡張から連絡が無いときも');
+});
