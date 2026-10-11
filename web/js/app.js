@@ -5,7 +5,7 @@ import { loadCache, loadState, save, saveCache, state } from './state.js';
 import { buildBookmarklet, companion, detectCompanion, download, syncWithPc } from './services.js';
 import { openSheet, serveVersionBlock, toast } from './ui.js';
 import { swVersion } from '../core/serve-version.js';
-import { LAYER_PATHS, PC_INFO_BOXES, PC_INFO_PATHS, THOUGHT_PATHS, matchRoute, parseHash as parseRouteHash } from './routes.js';
+import { JOB_PATHS, LAYER_PATHS, PC_INFO_BOXES, PC_INFO_PATHS, THOUGHT_PATHS, matchRoute, parseHash as parseRouteHash } from './routes.js';
 import { appActions } from './app-actions.js';
 import { applySyncBusy, isSyncing, trackSync } from './sync-busy.js';
 import { noteActions } from './note-actions.js';
@@ -186,7 +186,7 @@ function setJob(patch) {
   state.job = { ...(state.job || {}), ...patch };
   updateStatus();
   const { path } = parseHash();
-  if (path === '/knowledge') {
+  if (JOB_PATHS.includes(path)) {
     const panel = view.querySelector('.steps')?.closest('.card');
     // 進捗だけの更新は画面全体を描き直さない
     if (panel && state.job.running) {
