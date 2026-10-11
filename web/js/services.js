@@ -71,6 +71,8 @@ export const companion = {
   restoreHistory: (id) => call(`/api/history/${encodeURIComponent(id)}/restore`, { method: 'POST' }),
   // 履歴の回に「この回を残す」の印を付け外しする（印の付いた回は直近 12 回を過ぎても消えない。付け外した回の要約が返る）
   pinHistory: (id, pinned) => call(`/api/history/${encodeURIComponent(id)}/pin`, { method: 'POST', body: { pinned } }),
+  // 自動の分析の入切・条件を変える（NIH-162。送った項目だけ変わり、/api/info と同じ形の autoAnalysis が返る）
+  setAutoAnalysis: (patch) => call('/api/config/auto', { method: 'PUT', body: patch }),
 };
 
 /**

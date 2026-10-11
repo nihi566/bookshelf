@@ -22,7 +22,7 @@ import { applyImport } from '../web/core/importing.js';
 import { ACCEPT, parseFiles } from '../web/core/parsers/index.js';
 import { createLlmClient } from '../web/core/analysis/llm.js';
 import { TFIDF_HINT, analyzeLibrary, recommendBooks, recommendationNote } from '../web/core/analysis/pipeline.js';
-import { autoConfig } from '../web/core/auto-analysis.js';
+import { autoConfig, parseAutoSettings } from '../web/core/auto-analysis.js';
 import { visibleFarConnections } from '../web/core/far-reactions.js';
 import { truncate } from '../web/core/text.js';
 
@@ -244,6 +244,11 @@ async function main() {
         console.log(`データ: ${store.dataDir}`);
         break;
       }
+      const setAuto = (patch) => {
+        const r = parseAutoSettings(patch);
+        if (!r.ok) throw new Error(r.error);
+        cfg.autoAnalyze = { ...cfg.autoAnalyze, ...r.value };
+      };
       const setters = {
         url: () => (cfg.llm.baseUrl = value),
         model: () => (cfg.llm.chatModel = value),
@@ -274,16 +279,9 @@ async function main() {
           if (!['on', 'off'].includes(value)) throw new Error('使い方: bh config auto on | off');
           cfg.autoAnalyze = { ...cfg.autoAnalyze, enabled: value === 'on' };
         },
-        'auto-points': () => {
-          const n = Number(value);
-          if (!Number.isInteger(n) || n < 1) throw new Error('1 以上の整数を指定してください');
-          cfg.autoAnalyze = { ...cfg.autoAnalyze, minPoints: n };
-        },
-        'auto-hours': () => {
-          const h = Number(value);
-          if (!Number.isFinite(h) || h <= 0) throw new Error('0 より大きい時間を指定してください');
-          cfg.autoAnalyze = { ...cfg.autoAnalyze, maxHours: h };
-        },
+        // 知識の画面から変えるとき（PUT /api/config/auto）と同じ範囲で確かめる（NIH-162）
+        'auto-points': () => setAuto({ minPoints: value }),
+        'auto-hours': () => setAuto({ maxHours: value }),
       };
       if (!setters[key]) throw new Error(`不明な設定: ${key}`);
       setters[key]();
