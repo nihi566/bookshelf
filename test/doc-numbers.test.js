@@ -1,5 +1,5 @@
-// 文書に書いた数の見張り（NIH-93）。
-// docs/concept.md・README.md に書いた件数（今日の点・発見・意味の近い点など）が、実装の定数と同じかを確かめる。
+// 文書に書いた数の見張り（NIH-93。docs/architecture.md は NIH-129）。
+// docs/concept.md・README.md・docs/architecture.md に書いた件数（今日の点・発見・意味の近い点など）が、実装の定数と同じかを確かめる。
 // 定数を変えて文書を直し忘れると、ここで「どの文書のどの文と、どの定数か」を出して落ちる（NIH-78 で今日の点の件数が古いまま残った）。
 // 文書の言い回しを変えて文が見つからなくなったら、下の照合表の正規表現も直す（数のすぐ前後だけを見ているので、ほかの言い回しは自由に変えてよい）。
 import { test } from 'node:test';
@@ -25,9 +25,13 @@ const AUTO_MIN_POINTS = { file: 'web/core/auto-analysis.js', name: 'minPoints' }
 const AUTO_MAX_HOURS = { file: 'web/core/auto-analysis.js', name: 'maxHours' };
 const PICKS_MAX = { file: 'web/core/outline-draft.js', name: 'PICKS_MAX' };
 const RECENT_PICK_DAYS = { file: 'web/core/model.js', name: 'RECENT_PICK_DAYS' };
+const OUTLINE_TITLE_MAX = { file: 'web/core/outlines.js', name: 'OUTLINE_TITLE_MAX' };
+const OUTLINE_SECTIONS_MAX = { file: 'web/core/outlines.js', name: 'OUTLINE_SECTIONS_MAX' };
+const HEADING_MAX = { file: 'web/core/outlines.js', name: 'HEADING_MAX' };
 
 const CONCEPT = 'docs/concept.md';
 const README = 'README.md';
+const ARCH = 'docs/architecture.md';
 
 // 照合表: 文書の中で、正規表現の 1 つ目のかっこ（数）が定数と同じであること。文書の中に出てくる箇所はすべて照合する
 const CHECKS = [
@@ -54,6 +58,19 @@ const CHECKS = [
   { doc: README, re: /材料を選ぶと（(\d+) つまで）/g, constant: PICKS_MAX },
   { doc: CONCEPT, re: /前の (\d+) 日間にその端末で見せた点/g, constant: RECENT_PICK_DAYS },
   { doc: README, re: /前の (\d+) 日間にこの端末で見せた点/g, constant: RECENT_PICK_DAYS },
+  { doc: ARCH, re: /近い順に最大 (\d+) 件/g, constant: NEIGHBORS_MAX },
+  { doc: ARCH, re: /k ≒ 点の数 \/ (\d+)、/g, constant: LINE_TARGET_SIZE },
+  { doc: ARCH, re: /k ≒ 点の数 \/ \d+、上限 (\d+)。/g, constant: MAX_LINES },
+  { doc: ARCH, re: /点（思いつきを含む）が (\d+) 件以上増えた/g, constant: AUTO_MIN_POINTS },
+  { doc: ARCH, re: /件以上増えた・減ったか、(\d+) 時間以上たって/g, constant: AUTO_MAX_HOURS },
+  { doc: ARCH, re: /同じ点は 1 回の分析で 1 組まで、最大 (\d+) 組/g, constant: FAR_MAX_PAIRS },
+  { doc: ARCH, re: /直近 (\d+) 回/g, constant: HISTORY_KEEP },
+  { doc: ARCH, re: /`HISTORY_PIN_MAX` = (\d+)/g, constant: HISTORY_PIN_MAX },
+  { doc: ARCH, re: /0\.5 以上の点を最大 (\d+) 件/g, constant: ASK_MAX_POINTS },
+  { doc: ARCH, re: /材料は (\d+) つまで/g, constant: PICKS_MAX },
+  { doc: ARCH, re: /上限（題 (\d+) 字/g, constant: OUTLINE_TITLE_MAX },
+  { doc: ARCH, re: /上限（題 \d+ 字・節 (\d+)・/g, constant: OUTLINE_SECTIONS_MAX },
+  { doc: ARCH, re: /上限（題 \d+ 字・節 \d+・見出し (\d+) 字/g, constant: HEADING_MAX },
 ];
 
 const cache = new Map();

@@ -717,9 +717,15 @@ test('NIH-97: リンクの行（点どうし・点とメモ）に、両端の点
   assert.match(block, /<a class="btn small" href="#\/note\/nboth2"[^>]*>ノート: メモと点<\/a>/);
   assert.match(block, /href="#\/note\/nboth1"[^>]*>ノート: 注意は&lt;資源&gt;<\/a>/, '題は文字として出る');
   // 2 冊以上なら直した順の 1 冊と「ほか N」。相手の画面（逆向き）からも同じ
-  assert.match(block, /href="#\/note\/nboth3"[^>]*>ノート: もう 1 冊<\/a><span class="small muted">ほか 1<\/span>/);
+  assert.match(block, /href="#\/note\/nboth3"[^>]*>ノート: もう 1 冊<\/a><details class="link-notes"><summary[^>]*>ほか 1<\/summary>/);
   const other = String(linksBlock(state, h2.id));
-  assert.match(other, /href="#\/note\/nboth3"[^>]*>ノート: もう 1 冊<\/a><span class="small muted">ほか 1<\/span>/);
+  assert.match(other, /href="#\/note\/nboth3"[^>]*>ノート: もう 1 冊<\/a><details class="link-notes"><summary[^>]*>ほか 1<\/summary>/);
+  // NIH-131: 「ほか N」を押すと、両端を根拠にしたノートが直した順にすべて並び、押すとそのノートへ行ける
+  const more = other.match(/<details class="link-notes">[\s\S]*?<\/details>/)[0];
+  assert.deepEqual([...more.matchAll(/href="#\/note\/(\w+)"/g)].map((m) => m[1]), ['nboth3', 'nboth1']);
+  assert.match(more, /href="#\/note\/nboth1"[^>]*>注意は&lt;資源&gt;<\/a>/, '題は文字として出る');
+  // 1 冊だけの行は今どおり（「ほか N」は出ない）
+  assert.equal(count(block, /<details class="link-notes">/g), 1, 'メモとの行（1 冊）には出さない');
   assert.doesNotMatch(other, /data-action="link-to-note"/);
   // 消したノートは数えない（「ノートにする」に戻る）
   deleteNote(lib, 'nboth2', T4);
@@ -741,6 +747,6 @@ test('NIH-97: Kindle で伸ばしたハイライトは、伸ばす前・伸ば�
   assert.deepEqual(notesCitingAll(lib, [h1.id, h2.id]).map((n) => n.id), ['nnew01', 'nold01']);
   assert.deepEqual(notesCitingAll(lib, [longer.id, h2.id]).map((n) => n.id), ['nnew01', 'nold01']);
   const block = String(linksBlock({ library: lib, analysis: null, loaded: true }, h2.id));
-  assert.match(block, /href="#\/note\/nnew01"[^>]*>ノート: 伸ばしたあとに書いた<\/a><span class="small muted">ほか 1<\/span>/);
+  assert.match(block, /href="#\/note\/nnew01"[^>]*>ノート: 伸ばしたあとに書いた<\/a><details class="link-notes"><summary[^>]*>ほか 1<\/summary>/);
   assert.doesNotMatch(block, /data-action="link-to-note"/);
 });
