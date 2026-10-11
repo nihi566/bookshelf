@@ -1,6 +1,6 @@
 // オフラインでも開けるようにするサービスワーカー。
 // ネットワーク優先（更新をすぐ反映）で、つながらないときだけキャッシュを使う。
-const CACHE = 'bh-v31';
+const CACHE = 'bh-v32';
 const SHELL = [
   './',
   'index.html',
@@ -30,6 +30,7 @@ const SHELL = [
   'js/note-actions.js',
   'js/views/links.js',
   'js/link-actions.js',
+  'js/sync-busy.js',
   'js/views/ask.js',
   'js/ask-actions.js',
   'js/views/outlines.js',
