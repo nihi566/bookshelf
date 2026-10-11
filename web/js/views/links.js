@@ -42,11 +42,15 @@ function endRow(library, id, { reason = '', actions = '' } = {}) {
 
 /** 点どうし・点とメモのリンクの行の、ノートへの操作（もう書いたノートがあれば「ノート: <題>」、無ければ「ノートにする」） */
 function linkNoteAction(library, link, id, other, title) {
-  const [first, ...rest] = notesCitingAll(library, [id, other]);
+  const notes = notesCitingAll(library, [id, other]);
+  const [first] = notes;
   if (!first) return html`<button type="button" class="btn small" data-action="link-to-note" data-id="${link.id}" aria-label="「${title}」とのリンクを永久ノートにする">ノートにする</button>`;
-  const fullTitle = first.title || '（題なし）';
+  const noteTitle = (n) => n.title || '（題なし）';
   // 読み上げの名前は見える文字で始める（題は切り詰めずに）
-  return html`<a class="btn small" href="#/note/${first.id}" aria-label="ノート: ${fullTitle}（このリンクの両端を根拠にした永久ノート）">ノート: ${truncate(fullTitle, 30)}</a>${rest.length ? html`<span class="small muted">ほか ${rest.length}</span>` : ''}`;
+  const firstLink = html`<a class="btn small" href="#/note/${first.id}" aria-label="ノート: ${noteTitle(first)}（このリンクの両端を根拠にした永久ノート）">ノート: ${truncate(noteTitle(first), 30)}</a>`;
+  if (notes.length === 1) return firstLink;
+  // 2 冊以上なら「ほか N」を押すと、両端を根拠にしたノートが直した順にすべて並ぶ（NIH-131）
+  return html`${firstLink}<details class="link-notes"><summary class="small" aria-label="ほか ${notes.length - 1}（このリンクの両端を根拠にした永久ノートをすべて見る）">ほか ${notes.length - 1}</summary><ul>${notes.map((n) => html`<li><a href="#/note/${n.id}">${truncate(noteTitle(n), 30)}</a></li>`)}</ul></details>`;
 }
 
 /**
