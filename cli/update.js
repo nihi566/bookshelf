@@ -4,7 +4,7 @@
 //   2. リポジトリで git pull --ff-only origin main（失敗したらここで止め、常駐は止めない）
 //   3. 設定のポートで待ち受けている bh serve を止める（bh serve 以外が使っていたら何も止めない）
 //   4. 起動し直す（Windows でタスク「book-highlights bh serve」があればそれを、無ければ切り離して起動）
-//   5. 止めた後に起動したサーバが応答し、/sw.js の版がディスクの web/sw.js と同じかを確かめる
+//   5. 止めた後に起動したサーバが応答し、起動時に読んだ版（/api/info の server.version。古いサーバなら /sw.js の版）がディスクの web/sw.js と同じかを確かめる
 
 import { execFile, spawn } from 'node:child_process';
 import { copyFile, readFile } from 'node:fs/promises';
@@ -65,12 +65,13 @@ export async function pullMain({ repoDir, run }) {
 }
 
 /** ポートで待ち受けているプロセス（[{ pid, cmd }]） */
-async function listeners({ platform, port, run }) {
+export async function listeners({ platform, port, run = execRun }) {
   let out = '';
   try {
+    // 待ち受けが無いと Get-NetTCPConnection は SilentlyContinue でも終了コードを 1 にするので、最後に exit 0 で「該当なし」を成功にする
     out = platform === 'win32'
       ? await run('powershell', ['-NoProfile', '-NonInteractive', '-Command',
-        `[Console]::OutputEncoding=[Text.Encoding]::UTF8; foreach ($i in (Get-NetTCPConnection -LocalPort ${port} -State Listen -ErrorAction SilentlyContinue | Select-Object -ExpandProperty OwningProcess -Unique)) { "$i\`t$((Get-CimInstance Win32_Process -Filter "ProcessId=$i").CommandLine)" }`])
+        `[Console]::OutputEncoding=[Text.Encoding]::UTF8; foreach ($i in (Get-NetTCPConnection -LocalPort ${port} -State Listen -ErrorAction SilentlyContinue | Select-Object -ExpandProperty OwningProcess -Unique)) { "$i\`t$((Get-CimInstance Win32_Process -Filter "ProcessId=$i").CommandLine)" }; exit 0`])
       : await run('sh', ['-c', `for p in $(lsof -nP -t -iTCP:${port} -sTCP:LISTEN 2>/dev/null); do printf '%s\\t%s\\n' "$p" "$(ps -o args= -p "$p")"; done`]);
   } catch (e) {
     throw new Error(`ポート ${port} を使っているプロセスを調べられませんでした: ${e.message}`);
@@ -147,7 +148,7 @@ function baseUrl(cfg) {
   return `http://${h.includes(':') ? `[${h}]` : h}:${cfg.port}`;
 }
 
-/** 止めた後に起動したサーバが応答し、配っている sw.js がディスクのものと同じ版かを確かめる */
+/** 止めた後に起動したサーバが応答し、起動時に読んだ版（古いサーバなら配っている sw.js の版）がディスクのものと同じかを確かめる */
 async function verifyServe({ cfg, repoDir, fetchFn, stoppedAt, waitMs, sleep, now }) {
   const base = baseUrl(cfg);
   const headers = cfg.token ? { 'X-BH-Token': cfg.token } : {};
@@ -163,9 +164,16 @@ async function verifyServe({ cfg, repoDir, fetchFn, stoppedAt, waitMs, sleep, no
         const started = Date.parse(info.server?.startedAt);
         if (!(started >= stoppedAt)) reason = '止める前に起動したサーバ（古いコード）が応答しています';
         else {
+          // 新しく起動したサーバが違う版なら、待っても変わらないのですぐ失敗にする
+          const running = info.server.version;
+          if (running) {
+            // 起動時に読んだ版（NIH-80）。/sw.js は毎回ディスクから読むので、動いているコードの版はこちらでしか分からない
+            if (running !== expected) return { mismatch: `サーバの版（${running}）がディスクの版（${expected}）と違います` };
+            return { version: running, startedAt: info.server.startedAt };
+          }
+          // server.version を返さない古いサーバは、配っている sw.js で比べる
           const sw = await fetchFn(`${base}/sw.js`, { signal: AbortSignal.timeout(2000) });
           const version = sw.ok ? swVersion(await sw.text()) : '';
-          // 新しく起動したサーバが違う版を配っているなら、待っても変わらないのですぐ失敗にする
           if (version !== expected) return { mismatch: `サーバの sw.js の版（${version || `不明・${sw.status}`}）がディスクの版（${expected}）と違います` };
           return { version, startedAt: info.server.startedAt };
         }
