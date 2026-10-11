@@ -49,7 +49,7 @@ function fakeRun(handlers) {
  * 偽の PC。サーバは「起動」されるまで応答せず（接続できない）、起動した時刻を startedAt として返す。
  * oldServer なら起動しても止める前の時刻を返し続ける（古いコードのまま）
  */
-function setup({ pullFails = false, listeners = [{ pid: 111, cmd: 'node cli\\bh.js serve' }], oldServer = false, servedSw = SW } = {}) {
+function setup({ pullFails = false, listeners = [{ pid: 111, cmd: 'node cli\\bh.js serve' }], oldServer = false, servedSw = SW, serverVersion } = {}) {
   const repoDir = tmp('bh-repo-');
   const dataDir = path.join(repoDir, 'data');
   mkdirSync(path.join(repoDir, 'web'), { recursive: true });
@@ -84,9 +84,12 @@ function setup({ pullFails = false, listeners = [{ pid: 111, cmd: 'node cli\\bh.
     [/Get-ScheduledTask/, `${SERVE_TASK}\n`],
     [/Start-ScheduledTask/, () => { startServer(); return ''; }],
   ]);
+  const fetched = [];
   const fetchFn = async (url) => {
     if (!serverStartedAt) throw new TypeError('fetch failed');
-    if (url.endsWith('/api/info')) return new Response(JSON.stringify({ app: 'book-highlights', server: { startedAt: serverStartedAt } }));
+    fetched.push(new URL(url).pathname);
+    // serverVersion を渡さなければ、server.version を返さない古いサーバ（NIH-80 より前）として振る舞う
+    if (url.endsWith('/api/info')) return new Response(JSON.stringify({ app: 'book-highlights', server: { startedAt: serverStartedAt, version: serverVersion } }));
     if (url.endsWith('/sw.js')) return new Response(servedSw);
     return new Response('', { status: 404 });
   };
@@ -106,7 +109,7 @@ function setup({ pullFails = false, listeners = [{ pid: 111, cmd: 'node cli\\bh.
     sleep: async (ms) => { clock += ms; },
     log: () => {},
   };
-  return { opts, calls, killed, events, dataDir, startServer };
+  return { opts, calls, killed, events, dataDir, startServer, fetched };
 }
 
 test('bh update: 退避 → 取り込み → 止める → タスク起動 → 新しい版を確かめる', async () => {
@@ -168,6 +171,19 @@ test('bh update: 起動したサーバが止める前のもの（古いコード
 test('bh update: 起動したサーバの sw.js の版がディスクと違えば失敗にする', async () => {
   const { opts } = setup({ servedSw: "const CACHE = 'bh-v41';\n" });
   await assert.rejects(runUpdate(opts), /sw\.js の版（bh-v41）がディスクの版（bh-v42）と違います/);
+});
+
+test('bh update: 起動したサーバの起動時の版（server.version）がディスクと違えば失敗にする', async () => {
+  // /sw.js はディスクから読んで配るので新しい版が返るが、プロセスは古い版のコードで動いている
+  const { opts } = setup({ serverVersion: 'bh-v41' });
+  await assert.rejects(runUpdate(opts), /サーバの版（bh-v41）がディスクの版（bh-v42）と違います/);
+});
+
+test('bh update: server.version を返すサーバは、その版で確かめて /sw.js を取らない', async () => {
+  const { opts, fetched } = setup({ serverVersion: 'bh-v42', servedSw: "const CACHE = 'bh-v41';\n" });
+  const r = await runUpdate(opts);
+  assert.equal(r.version, 'bh-v42');
+  assert.ok(!fetched.includes('/sw.js'), fetched.join(','));
 });
 
 test('bh update: main 以外のブランチでは取り込まない', async () => {
