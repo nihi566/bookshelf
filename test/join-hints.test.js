@@ -91,3 +91,47 @@ test('本の画面: 候補の点のカードにだけ「次の点とくっつけ
   assert.deepEqual(hints, [id('求められるのは：')]);
   assert.match(out, />次の点とくっつける\?<\/button>/);
 });
+
+// NIH-164 読んだ本の一覧に、本ごとの「くっつける候補」の件数を出す
+async function twoBooks() {
+  const { bookIdFor, emptyLibrary, mergeParsed } = await import('../web/core/model.js');
+  const lib = emptyLibrary();
+  mergeParsed(lib, [
+    {
+      title: '切れた本',
+      source: 'kindle',
+      highlights: [
+        { text: '求められるのは：', location: 100, locationEnd: 101 },
+        { text: '自分で考えることだ。', location: 102, locationEnd: 103 },
+        { text: '小さく始めるほど', location: 200, locationEnd: 201 },
+        { text: '続きやすい。', location: 202, locationEnd: 203 },
+        { text: '離れた場所の線', location: 900, locationEnd: 901 },
+      ],
+    },
+    { title: '整った本', source: 'kindle', highlights: [{ text: '書くことは考えることである。', location: 1 }, { text: '問いを持って読む。', location: 2 }] },
+  ], { now: '2025-01-01T00:00:00.000Z' });
+  const state = { library: lib, analysis: null, settings: { ai: { mode: 'direct', companionUrl: '' } }, servedByCompanion: false, pcInfo: null, job: null };
+  return { lib, state, cut: bookIdFor('切れた本'), whole: bookIdFor('整った本') };
+}
+
+test('本ごとの候補の件数は、本の画面の印の数と同じ（同じ関数・同じ並びで数える）', async () => {
+  const { bookHighlights, bookJoinCandidateCounts } = await import('../web/core/model.js');
+  const { lib, cut, whole } = await twoBooks();
+  const counts = bookJoinCandidateCounts(lib);
+  assert.equal(counts.get(cut), 2);
+  assert.equal(counts.get(cut), joinCandidateIds(bookHighlights(lib, cut)).size);
+  assert.equal(counts.has(whole), false, '候補の無い本は入れない');
+});
+
+test('読んだ本の一覧: 候補が 1 件以上ある本の行にだけ「くっつける候補 N」を出し、件数は本の画面の印の数と一致する', async () => {
+  const { books, book } = await import('../web/js/views/library.js');
+  const { state, cut } = await twoBooks();
+  const out = String(books.render({ state, query: new URLSearchParams() }));
+  const rows = out.split('<li>').slice(1);
+  const cutRow = rows.find((r) => r.includes('切れた本'));
+  const wholeRow = rows.find((r) => r.includes('整った本'));
+  const marks = [...String(book.render({ state, params: { id: cut } })).matchAll(/class="badge join-hint"/g)].length;
+  assert.equal(marks, 2);
+  assert.match(cutRow, new RegExp(`くっつける候補 ${marks}<`));
+  assert.doesNotMatch(wholeRow, /くっつける候補/);
+});
