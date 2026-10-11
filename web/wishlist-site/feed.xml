@@ -1,239 +1,311 @@
 <?xml version="1.0" encoding="utf-8"?>
 <feed xmlns="http://www.w3.org/2005/Atom">
  <id>https://nihi566.github.io/book-highlights/wishlist-site/feed.xml</id>
- <title>欲しい本の値下がり・読み放題入り</title>
+ <title>欲しい本の値下がり・読み放題・キャンペーン</title>
  <link rel="self" href="https://nihi566.github.io/book-highlights/wishlist-site/feed.xml" />
  <link rel="alternate" href="https://nihi566.github.io/book-highlights/wishlist-site/" />
- <updated>2026-10-04T10:25:04+09:00</updated>
+ <updated>2026-10-11T09:13:14+09:00</updated>
  <author>
   <name>kindle_system</name>
  </author>
  <entry>
+  <id>https://nihi566.github.io/book-highlights/wishlist-site/feed.xml#drop:B00PSE2X1W:2026-10-11T09:13:14.345797</id>
+  <title>値下がり（過去最安値） ¥464 → ¥462: カフェと日本人 (講談社現代新書 2287)</title>
+  <updated>2026-10-11T09:13:14+09:00</updated>
+  <link rel="alternate" href="https://www.amazon.co.jp/dp/B00PSE2X1W" />
+ </entry>
+ <entry>
+  <id>https://nihi566.github.io/book-highlights/wishlist-site/feed.xml#campaign:B00PSE2X1W:2026-10-11T09:13:14.345797</id>
+  <title>キャンペーン「期間限定キャンペーン」（5 pt 還元）: カフェと日本人 (講談社現代新書 2287)</title>
+  <updated>2026-10-11T09:13:14+09:00</updated>
+  <link rel="alternate" href="https://www.amazon.co.jp/dp/B00PSE2X1W" />
+ </entry>
+ <entry>
+  <id>https://nihi566.github.io/book-highlights/wishlist-site/feed.xml#drop:B08W4X9KHX:2026-10-11T09:08:35.929319</id>
+  <title>値下がり ¥2,015 → ¥1,986: 生まれてこないほうが良かったのか？ ――生命の哲学へ！ (筑摩選書)</title>
+  <updated>2026-10-11T09:08:35+09:00</updated>
+  <link rel="alternate" href="https://www.amazon.co.jp/dp/B08W4X9KHX" />
+ </entry>
+ <entry>
+  <id>https://nihi566.github.io/book-highlights/wishlist-site/feed.xml#campaign:B0FNPVDMC3:2026-10-11T09:06:51.603949</id>
+  <title>キャンペーン「クーポン: 36% OFF 規約 | 36% OFF 規約」（31 pt 還元）: ウソが勝者となる時代 (祥伝社新書)</title>
+  <updated>2026-10-11T09:06:51+09:00</updated>
+  <link rel="alternate" href="https://www.amazon.co.jp/dp/B0FNPVDMC3" />
+ </entry>
+ <entry>
+  <id>https://nihi566.github.io/book-highlights/wishlist-site/feed.xml#drop:B08YF7RZ6C:2026-10-11T09:06:20.961438</id>
+  <title>値下がり（過去最安値） ¥894 → ¥893: リベラルとは何か　17世紀の自由主義から現代日本まで (中公新書)</title>
+  <updated>2026-10-11T09:06:20+09:00</updated>
+  <link rel="alternate" href="https://www.amazon.co.jp/dp/B08YF7RZ6C" />
+ </entry>
+ <entry>
+  <id>https://nihi566.github.io/book-highlights/wishlist-site/feed.xml#drop:B0BQ3MLFW2:2026-10-11T09:06:11.161899</id>
+  <title>値下がり（過去最安値） ¥1,568 → ¥1,501: 激動のビジネストレンドを俯瞰する　「働き方改革」の人類史</title>
+  <updated>2026-10-11T09:06:11+09:00</updated>
+  <link rel="alternate" href="https://www.amazon.co.jp/dp/B0BQ3MLFW2" />
+ </entry>
+ <entry>
+  <id>https://nihi566.github.io/book-highlights/wishlist-site/feed.xml#drop:B09RMWPZ5W:2026-10-11T09:04:40.147088</id>
+  <title>値下がり（過去最安値） ¥1,470 → ¥817: 名著の話　僕とカフカのひきこもり (角川学芸出版単行本)</title>
+  <updated>2026-10-11T09:04:40+09:00</updated>
+  <link rel="alternate" href="https://www.amazon.co.jp/dp/B09RMWPZ5W" />
+ </entry>
+ <entry>
+  <id>https://nihi566.github.io/book-highlights/wishlist-site/feed.xml#campaign:B09RMWPZ5W:2026-10-11T09:04:40.147088</id>
+  <title>キャンペーン「期間限定キャンペーン」（8 pt 還元）: 名著の話　僕とカフカのひきこもり (角川学芸出版単行本)</title>
+  <updated>2026-10-11T09:04:40+09:00</updated>
+  <link rel="alternate" href="https://www.amazon.co.jp/dp/B09RMWPZ5W" />
+ </entry>
+ <entry>
+  <id>https://nihi566.github.io/book-highlights/wishlist-site/feed.xml#drop:B0F8N69VGJ:2026-10-11T09:04:12.636072</id>
+  <title>値下がり（過去最安値） ¥1,764 → ¥980: 教養としての数学史</title>
+  <updated>2026-10-11T09:04:12+09:00</updated>
+  <link rel="alternate" href="https://www.amazon.co.jp/dp/B0F8N69VGJ" />
+ </entry>
+ <entry>
+  <id>https://nihi566.github.io/book-highlights/wishlist-site/feed.xml#campaign:B0F8N69VGJ:2026-10-11T09:04:12.636072</id>
+  <title>キャンペーン「期間限定キャンペーン」（10 pt 還元）: 教養としての数学史</title>
+  <updated>2026-10-11T09:04:12+09:00</updated>
+  <link rel="alternate" href="https://www.amazon.co.jp/dp/B0F8N69VGJ" />
+ </entry>
+ <entry>
+  <id>https://nihi566.github.io/book-highlights/wishlist-site/feed.xml#drop:B0CW1FMS9B:2026-10-11T09:03:41.227393</id>
+  <title>値下がり（過去最安値） ¥1,683 → ¥1,673: センスの哲学 (文春e-book)</title>
+  <updated>2026-10-11T09:03:41+09:00</updated>
+  <link rel="alternate" href="https://www.amazon.co.jp/dp/B0CW1FMS9B" />
+ </entry>
+ <entry>
+  <id>https://nihi566.github.io/book-highlights/wishlist-site/feed.xml#drop:B0FKFM1YHR:2026-10-11T09:03:39.806693</id>
+  <title>値下がり（過去最安値） ¥1,777 → ¥926: きちんと伝わる説明の「型」と「コツ」: アナウンサーが教える「言葉の力」を磨く技術 (三笠書房　電子書籍)</title>
+  <updated>2026-10-11T09:03:39+09:00</updated>
+  <link rel="alternate" href="https://www.amazon.co.jp/dp/B0FKFM1YHR" />
+ </entry>
+ <entry>
+  <id>https://nihi566.github.io/book-highlights/wishlist-site/feed.xml#campaign:B0FKFM1YHR:2026-10-11T09:03:39.806693</id>
+  <title>キャンペーン「期間限定キャンペーン」（9 pt 還元）: きちんと伝わる説明の「型」と「コツ」: アナウンサーが教える「言葉の力」を磨く技術 (三笠書房　電子書籍)</title>
+  <updated>2026-10-11T09:03:39+09:00</updated>
+  <link rel="alternate" href="https://www.amazon.co.jp/dp/B0FKFM1YHR" />
+ </entry>
+ <entry>
+  <id>https://nihi566.github.io/book-highlights/wishlist-site/feed.xml#drop:B0FGX2ZFV3:2026-10-11T09:02:26.540264</id>
+  <title>値下がり（過去最安値） ¥1,777 → ¥926: 原子爆弾〈新装改訂版〉　核分裂の発見から、マンハッタン計画、投下まで (ブルーバックス)</title>
+  <updated>2026-10-11T09:02:26+09:00</updated>
+  <link rel="alternate" href="https://www.amazon.co.jp/dp/B0FGX2ZFV3" />
+ </entry>
+ <entry>
+  <id>https://nihi566.github.io/book-highlights/wishlist-site/feed.xml#campaign:B0FGX2ZFV3:2026-10-11T09:02:26.540264</id>
+  <title>キャンペーン「お得」（9 pt 還元）: 原子爆弾〈新装改訂版〉　核分裂の発見から、マンハッタン計画、投下まで (ブルーバックス)</title>
+  <updated>2026-10-11T09:02:26+09:00</updated>
+  <link rel="alternate" href="https://www.amazon.co.jp/dp/B0FGX2ZFV3" />
+ </entry>
+ <entry>
+  <id>https://nihi566.github.io/book-highlights/wishlist-site/feed.xml#campaign:B06ZZH149Y:2026-10-11T09:01:39.729490</id>
+  <title>キャンペーン「クーポン: 36% OFF 規約 | 36% OFF 規約」（26 pt 還元）: あらすじで読むシェイクスピア全作品 (祥伝社新書)</title>
+  <updated>2026-10-11T09:01:39+09:00</updated>
+  <link rel="alternate" href="https://www.amazon.co.jp/dp/B06ZZH149Y" />
+ </entry>
+ <entry>
+  <id>https://nihi566.github.io/book-highlights/wishlist-site/feed.xml#campaign:B00799V39C:2026-10-11T09:00:32.118719</id>
+  <title>キャンペーン「クーポン: 33% OFF 規約 | 33% OFF 規約」（9 pt 還元）: 道をひらく</title>
+  <updated>2026-10-11T09:00:32+09:00</updated>
+  <link rel="alternate" href="https://www.amazon.co.jp/dp/B00799V39C" />
+ </entry>
+ <entry>
+  <id>https://nihi566.github.io/book-highlights/wishlist-site/feed.xml#drop:B00ZTOJ210:2026-10-11T09:00:24.572505</id>
+  <title>値下がり（過去最安値） ¥1,525 → ¥1,372: ナナメ読み日本文化論　名著25冊で読み解く日本人のアイデンティティ</title>
+  <updated>2026-10-11T09:00:24+09:00</updated>
+  <link rel="alternate" href="https://www.amazon.co.jp/dp/B00ZTOJ210" />
+ </entry>
+ <entry>
+  <id>https://nihi566.github.io/book-highlights/wishlist-site/feed.xml#drop:B0DGT2C21C:2026-10-11T08:59:52.021536</id>
+  <title>値下がり（過去最安値） ¥1,960 → ¥1,089: NEXUS 情報の人類史 上　人間のネットワーク</title>
+  <updated>2026-10-11T08:59:52+09:00</updated>
+  <link rel="alternate" href="https://www.amazon.co.jp/dp/B0DGT2C21C" />
+ </entry>
+ <entry>
+  <id>https://nihi566.github.io/book-highlights/wishlist-site/feed.xml#campaign:B0DGT2C21C:2026-10-11T08:59:52.021536</id>
+  <title>キャンペーン「期間限定キャンペーン」（11 pt 還元）: NEXUS 情報の人類史 上　人間のネットワーク</title>
+  <updated>2026-10-11T08:59:52+09:00</updated>
+  <link rel="alternate" href="https://www.amazon.co.jp/dp/B0DGT2C21C" />
+ </entry>
+ <entry>
+  <id>https://nihi566.github.io/book-highlights/wishlist-site/feed.xml#drop:B085XPPMFV:2026-10-11T08:55:22.991012</id>
+  <title>値下がり（過去最安値） ¥1,470 → ¥817: 人を心から愛したことがないのだと気づいてしまっても (角川書店単行本)</title>
+  <updated>2026-10-11T08:55:22+09:00</updated>
+  <link rel="alternate" href="https://www.amazon.co.jp/dp/B085XPPMFV" />
+ </entry>
+ <entry>
+  <id>https://nihi566.github.io/book-highlights/wishlist-site/feed.xml#campaign:B085XPPMFV:2026-10-11T08:55:22.991012</id>
+  <title>キャンペーン「期間限定キャンペーン」（8 pt 還元）: 人を心から愛したことがないのだと気づいてしまっても (角川書店単行本)</title>
+  <updated>2026-10-11T08:55:22+09:00</updated>
+  <link rel="alternate" href="https://www.amazon.co.jp/dp/B085XPPMFV" />
+ </entry>
+ <entry>
+  <id>https://nihi566.github.io/book-highlights/wishlist-site/feed.xml#drop:B00DKX4C4Y:2026-10-11T08:51:14.991990</id>
+  <title>値下がり（過去最安値） ¥747 → ¥353: 憂鬱でなければ、仕事じゃない (講談社＋α文庫)</title>
+  <updated>2026-10-11T08:51:14+09:00</updated>
+  <link rel="alternate" href="https://www.amazon.co.jp/dp/B00DKX4C4Y" />
+ </entry>
+ <entry>
+  <id>https://nihi566.github.io/book-highlights/wishlist-site/feed.xml#campaign:B00DKX4C4Y:2026-10-11T08:51:14.991990</id>
+  <title>キャンペーン「期間限定キャンペーン」（4 pt 還元）: 憂鬱でなければ、仕事じゃない (講談社＋α文庫)</title>
+  <updated>2026-10-11T08:51:14+09:00</updated>
+  <link rel="alternate" href="https://www.amazon.co.jp/dp/B00DKX4C4Y" />
+ </entry>
+ <entry>
+  <id>https://nihi566.github.io/book-highlights/wishlist-site/feed.xml#drop:B00DKX4CH6:2026-10-11T08:51:13.100469</id>
+  <title>値下がり（過去最安値） ¥731 → ¥353: 絶望しきって死ぬために、今を熱狂して生きろ (講談社＋α文庫)</title>
+  <updated>2026-10-11T08:51:13+09:00</updated>
+  <link rel="alternate" href="https://www.amazon.co.jp/dp/B00DKX4CH6" />
+ </entry>
+ <entry>
+  <id>https://nihi566.github.io/book-highlights/wishlist-site/feed.xml#campaign:B00DKX4CH6:2026-10-11T08:51:13.100469</id>
+  <title>キャンペーン「期間限定キャンペーン」（4 pt 還元）: 絶望しきって死ぬために、今を熱狂して生きろ (講談社＋α文庫)</title>
+  <updated>2026-10-11T08:51:13+09:00</updated>
+  <link rel="alternate" href="https://www.amazon.co.jp/dp/B00DKX4CH6" />
+ </entry>
+ <entry>
+  <id>https://nihi566.github.io/book-highlights/wishlist-site/feed.xml#drop:B0FVL5RQ7X:2026-10-11T08:49:37.610055</id>
+  <title>値下がり（過去最安値） ¥1,198 → ¥599: そのうちなんとかなるだろう（マガジンハウス新書）</title>
+  <updated>2026-10-11T08:49:37+09:00</updated>
+  <link rel="alternate" href="https://www.amazon.co.jp/dp/B0FVL5RQ7X" />
+ </entry>
+ <entry>
+  <id>https://nihi566.github.io/book-highlights/wishlist-site/feed.xml#campaign:B0FVL5RQ7X:2026-10-11T08:49:37.610055</id>
+  <title>キャンペーン「期間限定キャンペーン」（6 pt 還元）: そのうちなんとかなるだろう（マガジンハウス新書）</title>
+  <updated>2026-10-11T08:49:37+09:00</updated>
+  <link rel="alternate" href="https://www.amazon.co.jp/dp/B0FVL5RQ7X" />
+ </entry>
+ <entry>
+  <id>https://nihi566.github.io/book-highlights/wishlist-site/feed.xml#drop:B07R33HGCQ:2026-10-11T08:49:25.049182</id>
+  <title>値下がり（過去最安値） ¥1,862 → ¥1,035: 世界のエリートが学んでいるＭＢＡ必読書５０冊を１冊にまとめてみた</title>
+  <updated>2026-10-11T08:49:25+09:00</updated>
+  <link rel="alternate" href="https://www.amazon.co.jp/dp/B07R33HGCQ" />
+ </entry>
+ <entry>
+  <id>https://nihi566.github.io/book-highlights/wishlist-site/feed.xml#campaign:B07R33HGCQ:2026-10-11T08:49:25.049182</id>
+  <title>キャンペーン「期間限定キャンペーン」（10 pt 還元）: 世界のエリートが学んでいるＭＢＡ必読書５０冊を１冊にまとめてみた</title>
+  <updated>2026-10-11T08:49:25+09:00</updated>
+  <link rel="alternate" href="https://www.amazon.co.jp/dp/B07R33HGCQ" />
+ </entry>
+ <entry>
+  <id>https://nihi566.github.io/book-highlights/wishlist-site/feed.xml#drop:B091T7S6SX:2026-10-11T08:48:06.824004</id>
+  <title>値下がり ¥806 → ¥726: 愛国心を裏切られた天才　ノーベル賞科学者ハーバーの栄光と悲劇 (朝日文庫)</title>
+  <updated>2026-10-11T08:48:06+09:00</updated>
+  <link rel="alternate" href="https://www.amazon.co.jp/dp/B091T7S6SX" />
+ </entry>
+ <entry>
+  <id>https://nihi566.github.io/book-highlights/wishlist-site/feed.xml#drop:B0FZFXG2LP:2026-10-11T08:47:44.327008</id>
+  <title>値下がり（過去最安値） ¥2,156 → ¥1,187: 国家の生贄</title>
+  <updated>2026-10-11T08:47:44+09:00</updated>
+  <link rel="alternate" href="https://www.amazon.co.jp/dp/B0FZFXG2LP" />
+ </entry>
+ <entry>
+  <id>https://nihi566.github.io/book-highlights/wishlist-site/feed.xml#drop:B07DHJ46TQ:2026-10-11T08:46:49.299756</id>
+  <title>値下がり（過去最安値） ¥1,046 → ¥544: 科学者はなぜ神を信じるのか　コペルニクスからホーキングまで (ブルーバックス)</title>
+  <updated>2026-10-11T08:46:49+09:00</updated>
+  <link rel="alternate" href="https://www.amazon.co.jp/dp/B07DHJ46TQ" />
+ </entry>
+ <entry>
+  <id>https://nihi566.github.io/book-highlights/wishlist-site/feed.xml#campaign:B07DHJ46TQ:2026-10-11T08:46:49.299756</id>
+  <title>キャンペーン「お得」（6 pt 還元）: 科学者はなぜ神を信じるのか　コペルニクスからホーキングまで (ブルーバックス)</title>
+  <updated>2026-10-11T08:46:49+09:00</updated>
+  <link rel="alternate" href="https://www.amazon.co.jp/dp/B07DHJ46TQ" />
+ </entry>
+ <entry>
+  <id>https://nihi566.github.io/book-highlights/wishlist-site/feed.xml#drop:B06X6H7RPS:2026-10-11T08:46:16.309059</id>
+  <title>値下がり（過去最安値） ¥961 → ¥501: 人類と気候の１０万年史　過去に何が起きたのか、これから何が起こるのか (ブルーバックス)</title>
+  <updated>2026-10-11T08:46:16+09:00</updated>
+  <link rel="alternate" href="https://www.amazon.co.jp/dp/B06X6H7RPS" />
+ </entry>
+ <entry>
+  <id>https://nihi566.github.io/book-highlights/wishlist-site/feed.xml#drop:B07227T5TG:2026-10-11T08:46:12.491012</id>
+  <title>値下がり（過去最安値） ¥1,024 → ¥534: 生物はウイルスが進化させた　巨大ウイルスが語る新たな生命像 (ブルーバックス)</title>
+  <updated>2026-10-11T08:46:12+09:00</updated>
+  <link rel="alternate" href="https://www.amazon.co.jp/dp/B07227T5TG" />
+ </entry>
+ <entry>
+  <id>https://nihi566.github.io/book-highlights/wishlist-site/feed.xml#drop:B075G9QTBR:2026-10-11T08:44:03.400147</id>
+  <title>値下がり（過去最安値） ¥479 → ¥473: 正しい本の読み方 (講談社現代新書)</title>
+  <updated>2026-10-11T08:44:03+09:00</updated>
+  <link rel="alternate" href="https://www.amazon.co.jp/dp/B075G9QTBR" />
+ </entry>
+ <entry>
+  <id>https://nihi566.github.io/book-highlights/wishlist-site/feed.xml#campaign:B075G9QTBR:2026-10-11T08:44:03.400147</id>
+  <title>キャンペーン「期間限定キャンペーン」（5 pt 還元）: 正しい本の読み方 (講談社現代新書)</title>
+  <updated>2026-10-11T08:44:03+09:00</updated>
+  <link rel="alternate" href="https://www.amazon.co.jp/dp/B075G9QTBR" />
+ </entry>
+ <entry>
+  <id>https://nihi566.github.io/book-highlights/wishlist-site/feed.xml#drop:B09T94D62K:2026-10-11T08:36:42.630594</id>
+  <title>値下がり（過去最安値） ¥1,600 → ¥1,568: いかにして問題をとくか</title>
+  <updated>2026-10-11T08:36:42+09:00</updated>
+  <link rel="alternate" href="https://www.amazon.co.jp/dp/B09T94D62K" />
+ </entry>
+ <entry>
+  <id>https://nihi566.github.io/book-highlights/wishlist-site/feed.xml#drop:B0D5CDRC9B:2026-10-11T08:35:08.918881</id>
+  <title>値下がり（過去最安値） ¥1,470 → ¥817: 光と影のTSMC誘致 (かや書房)</title>
+  <updated>2026-10-11T08:35:08+09:00</updated>
+  <link rel="alternate" href="https://www.amazon.co.jp/dp/B0D5CDRC9B" />
+ </entry>
+ <entry>
+  <id>https://nihi566.github.io/book-highlights/wishlist-site/feed.xml#campaign:B0D5CDRC9B:2026-10-11T08:35:08.918881</id>
+  <title>キャンペーン「お得」（8 pt 還元）: 光と影のTSMC誘致 (かや書房)</title>
+  <updated>2026-10-11T08:35:08+09:00</updated>
+  <link rel="alternate" href="https://www.amazon.co.jp/dp/B0D5CDRC9B" />
+ </entry>
+ <entry>
+  <id>https://nihi566.github.io/book-highlights/wishlist-site/feed.xml#drop:B08HYWXSW1:2026-10-11T08:33:55.511205</id>
+  <title>値下がり（過去最安値） ¥1,046 → ¥544: 「意思決定」の科学　なぜ、それを選ぶのか (ブルーバックス)</title>
+  <updated>2026-10-11T08:33:55+09:00</updated>
+  <link rel="alternate" href="https://www.amazon.co.jp/dp/B08HYWXSW1" />
+ </entry>
+ <entry>
+  <id>https://nihi566.github.io/book-highlights/wishlist-site/feed.xml#drop:B0B1DBWG6T:2026-10-11T08:33:24.263296</id>
+  <title>値下がり（過去最安値） ¥1,777 → ¥843: 新　失敗学　正解をつくる技術</title>
+  <updated>2026-10-11T08:33:24+09:00</updated>
+  <link rel="alternate" href="https://www.amazon.co.jp/dp/B0B1DBWG6T" />
+ </entry>
+ <entry>
+  <id>https://nihi566.github.io/book-highlights/wishlist-site/feed.xml#campaign:B0B1DBWG6T:2026-10-11T08:33:24.263296</id>
+  <title>キャンペーン「期間限定キャンペーン」（9 pt 還元）: 新　失敗学　正解をつくる技術</title>
+  <updated>2026-10-11T08:33:24+09:00</updated>
+  <link rel="alternate" href="https://www.amazon.co.jp/dp/B0B1DBWG6T" />
+ </entry>
+ <entry>
+  <id>https://nihi566.github.io/book-highlights/wishlist-site/feed.xml#drop:B0794MQD8B:2026-10-11T08:31:16.913114</id>
+  <title>値下がり ¥719 → ¥710: 終わりなき日常を生きろ　──オウム完全克服マニュアル (ちくま文庫)</title>
+  <updated>2026-10-11T08:31:16+09:00</updated>
+  <link rel="alternate" href="https://www.amazon.co.jp/dp/B0794MQD8B" />
+ </entry>
+ <entry>
   <id>https://nihi566.github.io/book-highlights/wishlist-site/feed.xml#drop:B0BXL7NHP1:2026-10-04T10:25:04.322893</id>
-  <title>値下がり ¥1,004 → ¥982: 東大生、教育格差を学ぶ (光文社新書)</title>
+  <title>値下がり（過去最安値） ¥1,004 → ¥982: 東大生、教育格差を学ぶ (光文社新書)</title>
   <updated>2026-10-04T10:25:04+09:00</updated>
   <link rel="alternate" href="https://www.amazon.co.jp/dp/B0BXL7NHP1" />
  </entry>
  <entry>
-  <id>https://nihi566.github.io/book-highlights/wishlist-site/feed.xml#drop:B0CQJJ6F34:2026-10-04T10:19:45.626254</id>
-  <title>値下がり ¥2,300 → ¥494: エンジニアが知っておきたい思考の整理術　複雑な情報を【理解する】【伝える】テクニック</title>
-  <updated>2026-10-04T10:19:45+09:00</updated>
-  <link rel="alternate" href="https://www.amazon.co.jp/dp/B0CQJJ6F34" />
- </entry>
- <entry>
   <id>https://nihi566.github.io/book-highlights/wishlist-site/feed.xml#drop:B0F73PF32F:2026-10-04T10:04:29.874830</id>
-  <title>値下がり ¥1,764 → ¥1,494: 本は人生を生き抜く最強の武器である 問いから始める「自分を変える読書」のすすめ</title>
+  <title>値下がり（過去最安値） ¥1,764 → ¥1,494: 本は人生を生き抜く最強の武器である 問いから始める「自分を変える読書」のすすめ</title>
   <updated>2026-10-04T10:04:29+09:00</updated>
   <link rel="alternate" href="https://www.amazon.co.jp/dp/B0F73PF32F" />
  </entry>
  <entry>
-  <id>https://nihi566.github.io/book-highlights/wishlist-site/feed.xml#drop:B009GXM53C:2026-10-04T09:50:26.147648</id>
-  <title>値下がり ¥926 → ¥494: 今こそアーレントを読み直す (講談社現代新書)</title>
-  <updated>2026-10-04T09:50:26+09:00</updated>
-  <link rel="alternate" href="https://www.amazon.co.jp/dp/B009GXM53C" />
- </entry>
- <entry>
-  <id>https://nihi566.github.io/book-highlights/wishlist-site/feed.xml#drop:B0811Y5FFY:2026-10-04T09:49:55.838562</id>
-  <title>値下がり ¥882 → ¥494: 韓国　行き過ぎた資本主義　「無限競争社会」の苦悩 (講談社現代新書)</title>
-  <updated>2026-10-04T09:49:55+09:00</updated>
-  <link rel="alternate" href="https://www.amazon.co.jp/dp/B0811Y5FFY" />
- </entry>
- <entry>
-  <id>https://nihi566.github.io/book-highlights/wishlist-site/feed.xml#drop:B09N3KHQVZ:2026-10-04T09:49:26.150994</id>
-  <title>値下がり ¥947 → ¥494: ブルシット・ジョブの謎　クソどうでもいい仕事はなぜ増えるか (講談社現代新書)</title>
-  <updated>2026-10-04T09:49:26+09:00</updated>
-  <link rel="alternate" href="https://www.amazon.co.jp/dp/B09N3KHQVZ" />
- </entry>
- <entry>
-  <id>https://nihi566.github.io/book-highlights/wishlist-site/feed.xml#drop:B0DY1FT1ZV:2026-10-04T09:48:45.504801</id>
-  <title>値下がり ¥1,960 → ¥1,089: ゲームフルデザイン 「やりたくなる」を生み出すゲーミフィケーションの進化</title>
-  <updated>2026-10-04T09:48:45+09:00</updated>
-  <link rel="alternate" href="https://www.amazon.co.jp/dp/B0DY1FT1ZV" />
- </entry>
- <entry>
-  <id>https://nihi566.github.io/book-highlights/wishlist-site/feed.xml#drop:B08M5NWSTN:2026-10-04T09:47:34.883649</id>
-  <title>値下がり ¥1,862 → ¥1,035: 世界のエリートが学んでいるＭＢＡマーケティング必読書５０冊を１冊にまとめてみた</title>
-  <updated>2026-10-04T09:47:34+09:00</updated>
-  <link rel="alternate" href="https://www.amazon.co.jp/dp/B08M5NWSTN" />
- </entry>
- <entry>
-  <id>https://nihi566.github.io/book-highlights/wishlist-site/feed.xml#drop:B0DHX1FVWN:2026-10-04T09:47:09.213912</id>
-  <title>値下がり ¥1,764 → ¥980: 法とは何か　法思想史入門</title>
-  <updated>2026-10-04T09:47:09+09:00</updated>
-  <link rel="alternate" href="https://www.amazon.co.jp/dp/B0DHX1FVWN" />
- </entry>
- <entry>
   <id>https://nihi566.github.io/book-highlights/wishlist-site/feed.xml#drop:B0BWRN23W4:2026-10-04T09:46:07.887513</id>
-  <title>値下がり ¥1,030 → ¥198: ＮＨＫ「１００分ｄｅ名著」ブックス　マルクス・アウレリウス　自省録　他者との共生はいかに可能か</title>
+  <title>値下がり（過去最安値） ¥1,030 → ¥198: ＮＨＫ「１００分ｄｅ名著」ブックス　マルクス・アウレリウス　自省録　他者との共生はいかに可能か</title>
   <updated>2026-10-04T09:46:07+09:00</updated>
   <link rel="alternate" href="https://www.amazon.co.jp/dp/B0BWRN23W4" />
  </entry>
  <entry>
-  <id>https://nihi566.github.io/book-highlights/wishlist-site/feed.xml#drop:B07DHK21YP:2026-10-04T09:40:59.834827</id>
-  <title>値下がり ¥926 → ¥494: はじめての経済思想史　アダム・スミスから現代まで (講談社現代新書)</title>
-  <updated>2026-10-04T09:40:59+09:00</updated>
-  <link rel="alternate" href="https://www.amazon.co.jp/dp/B07DHK21YP" />
+  <id>https://nihi566.github.io/book-highlights/wishlist-site/feed.xml#campaign:B0BWRN23W4:2026-10-04T09:46:07.887513</id>
+  <title>キャンペーン「お得」（2 pt 還元）: ＮＨＫ「１００分ｄｅ名著」ブックス　マルクス・アウレリウス　自省録　他者との共生はいかに可能か</title>
+  <updated>2026-10-04T09:46:07+09:00</updated>
+  <link rel="alternate" href="https://www.amazon.co.jp/dp/B0BWRN23W4" />
  </entry>
  <entry>
-  <id>https://nihi566.github.io/book-highlights/wishlist-site/feed.xml#drop:B00CU8JRG8:2026-10-04T09:38:56.738553</id>
-  <title>値下がり ¥860 → ¥395: タテ社会の人間関係　単一社会の理論 (講談社現代新書)</title>
-  <updated>2026-10-04T09:38:56+09:00</updated>
-  <link rel="alternate" href="https://www.amazon.co.jp/dp/B00CU8JRG8" />
- </entry>
- <entry>
-  <id>https://nihi566.github.io/book-highlights/wishlist-site/feed.xml#drop:B08MZMY9H1:2026-10-04T09:37:23.926150</id>
-  <title>値下がり ¥904 → ¥494: はじめてのスピノザ　自由へのエチカ (講談社現代新書)</title>
-  <updated>2026-10-04T09:37:23+09:00</updated>
-  <link rel="alternate" href="https://www.amazon.co.jp/dp/B08MZMY9H1" />
- </entry>
- <entry>
-  <id>https://nihi566.github.io/book-highlights/wishlist-site/feed.xml#drop:B017GPG6XG:2026-10-04T09:36:06.577346</id>
-  <title>値下がり ¥860 → ¥494: 世界史を変えた薬 (講談社現代新書)</title>
-  <updated>2026-10-04T09:36:06+09:00</updated>
-  <link rel="alternate" href="https://www.amazon.co.jp/dp/B017GPG6XG" />
- </entry>
- <entry>
-  <id>https://nihi566.github.io/book-highlights/wishlist-site/feed.xml#ku:B07KP2BNZT:2026-10-04T09:35:14.668640</id>
-  <title>読み放題（Kindle Unlimited）に入りました: 空の青さをみつめていると　谷川俊太郎詩集Ｉ (角川文庫)</title>
-  <updated>2026-10-04T09:35:14+09:00</updated>
-  <link rel="alternate" href="https://www.amazon.co.jp/dp/B07KP2BNZT" />
- </entry>
- <entry>
-  <id>https://nihi566.github.io/book-highlights/wishlist-site/feed.xml#drop:B0FGX4J839:2026-10-04T09:34:44.516875</id>
-  <title>値下がり ¥1,089 → ¥494: 「あの戦争」は何だったのか (講談社現代新書)</title>
-  <updated>2026-10-04T09:34:44+09:00</updated>
-  <link rel="alternate" href="https://www.amazon.co.jp/dp/B0FGX4J839" />
- </entry>
- <entry>
-  <id>https://nihi566.github.io/book-highlights/wishlist-site/feed.xml#drop:B0BRR4N7SM:2026-10-04T09:34:02.745633</id>
-  <title>値下がり ¥2,464 → ¥1,383: 1冊ですべて身につくJavaScript入門講座</title>
-  <updated>2026-10-04T09:34:02+09:00</updated>
-  <link rel="alternate" href="https://www.amazon.co.jp/dp/B0BRR4N7SM" />
- </entry>
- <entry>
-  <id>https://nihi566.github.io/book-highlights/wishlist-site/feed.xml#drop:B00BLDN98K:2026-10-04T09:33:07.107215</id>
-  <title>値下がり ¥947 → ¥494: 「空気」と「世間」 (講談社現代新書)</title>
-  <updated>2026-10-04T09:33:07+09:00</updated>
-  <link rel="alternate" href="https://www.amazon.co.jp/dp/B00BLDN98K" />
- </entry>
- <entry>
-  <id>https://nihi566.github.io/book-highlights/wishlist-site/feed.xml#drop:B0D7VSQ813:2026-10-04T09:32:38.021212</id>
-  <title>値下がり ¥1,078 → ¥198: ＮＨＫ「１００分ｄｅ名著」ブックス　カフカ　変身　「弱さ」という巨大な力</title>
-  <updated>2026-10-04T09:32:38+09:00</updated>
-  <link rel="alternate" href="https://www.amazon.co.jp/dp/B0D7VSQ813" />
- </entry>
- <entry>
-  <id>https://nihi566.github.io/book-highlights/wishlist-site/feed.xml#drop:B0776MG6DS:2026-10-04T09:31:38.257768</id>
-  <title>値下がり ¥860 → ¥494: じぶん・この不思議な存在 (講談社現代新書)</title>
-  <updated>2026-10-04T09:31:38+09:00</updated>
-  <link rel="alternate" href="https://www.amazon.co.jp/dp/B0776MG6DS" />
- </entry>
- <entry>
-  <id>https://nihi566.github.io/book-highlights/wishlist-site/feed.xml#drop:B0FFGQPMSX:2026-10-04T09:30:49.346138</id>
-  <title>値下がり ¥3,929 → ¥2,206: 改訂新版 これからはじめるReact実践入門　コンポーネントの基本からNext.jsによるアプリ開発まで</title>
-  <updated>2026-10-04T09:30:49+09:00</updated>
-  <link rel="alternate" href="https://www.amazon.co.jp/dp/B0FFGQPMSX" />
- </entry>
- <entry>
-  <id>https://nihi566.github.io/book-highlights/wishlist-site/feed.xml#drop:B0CVQCNN6W:2026-10-04T09:28:27.574390</id>
-  <title>値下がり ¥2,920 → ¥1,623: つくって、壊して、直して学ぶ Kubernetes入門</title>
-  <updated>2026-10-04T09:28:27+09:00</updated>
-  <link rel="alternate" href="https://www.amazon.co.jp/dp/B0CVQCNN6W" />
- </entry>
- <entry>
-  <id>https://nihi566.github.io/book-highlights/wishlist-site/feed.xml#drop:B0BN9XD2NQ:2026-10-04T09:28:01.855326</id>
-  <title>値下がり ¥2,940 → ¥1,633: AWSではじめるインフラ構築入門 第2版 安全で堅牢な本番環境のつくり方</title>
-  <updated>2026-10-04T09:28:01+09:00</updated>
-  <link rel="alternate" href="https://www.amazon.co.jp/dp/B0BN9XD2NQ" />
- </entry>
- <entry>
-  <id>https://nihi566.github.io/book-highlights/wishlist-site/feed.xml#drop:B079JLW5YN:2026-10-04T09:26:38.743951</id>
-  <title>値下がり ¥2,156 → ¥1,198: プログラマの数学 第2版</title>
-  <updated>2026-10-04T09:26:38+09:00</updated>
-  <link rel="alternate" href="https://www.amazon.co.jp/dp/B079JLW5YN" />
- </entry>
- <entry>
-  <id>https://nihi566.github.io/book-highlights/wishlist-site/feed.xml#drop:B0FSHN6Q8K:2026-10-04T09:26:32.068804</id>
-  <title>値下がり ¥2,332 → ¥1,296: 実務で役立つ ログの教科書 基礎知識から収集方法・分析手法・トラブルシューティング・パフォーマンス最適化・機械学習での活用まで 実務で役立つ教科書</title>
-  <updated>2026-10-04T09:26:32+09:00</updated>
-  <link rel="alternate" href="https://www.amazon.co.jp/dp/B0FSHN6Q8K" />
- </entry>
- <entry>
-  <id>https://nihi566.github.io/book-highlights/wishlist-site/feed.xml#drop:B0DSCKVHX2:2026-10-04T09:25:06.790210</id>
-  <title>値下がり ¥1,388 → ¥1,359: ご冗談でしょう、ファインマンさん（上） (岩波現代文庫)</title>
-  <updated>2026-10-04T09:25:06+09:00</updated>
-  <link rel="alternate" href="https://www.amazon.co.jp/dp/B0DSCKVHX2" />
- </entry>
- <entry>
-  <id>https://nihi566.github.io/book-highlights/wishlist-site/feed.xml#drop:B06WPBHFNN:2026-10-04T09:21:20.287137</id>
-  <title>値下がり ¥1,056 → ¥494: ケインズとハイエク―貨幣と市場への問い (講談社現代新書)</title>
-  <updated>2026-10-04T09:21:20+09:00</updated>
-  <link rel="alternate" href="https://www.amazon.co.jp/dp/B06WPBHFNN" />
- </entry>
- <entry>
-  <id>https://nihi566.github.io/book-highlights/wishlist-site/feed.xml#drop:B00ICHRNQM:2026-10-04T09:20:48.871857</id>
-  <title>値下がり ¥784 → ¥436: 自由をいかに守るか ハイエクを読み直す (PHP新書)</title>
-  <updated>2026-10-04T09:20:48+09:00</updated>
-  <link rel="alternate" href="https://www.amazon.co.jp/dp/B00ICHRNQM" />
- </entry>
- <entry>
-  <id>https://nihi566.github.io/book-highlights/wishlist-site/feed.xml#drop:B0BQQQPDD9:2026-10-04T09:20:19.551226</id>
-  <title>値下がり ¥1,307 → ¥653: 物語のつむぎ方入門: 〈プロット〉をおもしろくする25の方法 アルケミスト双書</title>
-  <updated>2026-10-04T09:20:19+09:00</updated>
-  <link rel="alternate" href="https://www.amazon.co.jp/dp/B0BQQQPDD9" />
- </entry>
- <entry>
-  <id>https://nihi566.github.io/book-highlights/wishlist-site/feed.xml#drop:B09PY8DKQX:2026-10-04T09:16:56.192523</id>
-  <title>値下がり ¥941 → ¥686: ヘーゲル哲学に学ぶ　考え抜く力 (光文社新書)</title>
-  <updated>2026-10-04T09:16:56+09:00</updated>
-  <link rel="alternate" href="https://www.amazon.co.jp/dp/B09PY8DKQX" />
- </entry>
- <entry>
-  <id>https://nihi566.github.io/book-highlights/wishlist-site/feed.xml#ku:B0DNLKS5TD:2026-10-04T09:14:06.573063</id>
-  <title>読み放題（Kindle Unlimited）に入りました: 反逆罪　近代国家成立の裏面史 (岩波新書)</title>
-  <updated>2026-10-04T09:14:06+09:00</updated>
-  <link rel="alternate" href="https://www.amazon.co.jp/dp/B0DNLKS5TD" />
- </entry>
- <entry>
-  <id>https://nihi566.github.io/book-highlights/wishlist-site/feed.xml#drop:B08L3JY5B2:2026-10-04T09:13:43.536531</id>
-  <title>値下がり ¥969 → ¥494: 民主主義とは何か (講談社現代新書)</title>
-  <updated>2026-10-04T09:13:43+09:00</updated>
-  <link rel="alternate" href="https://www.amazon.co.jp/dp/B08L3JY5B2" />
- </entry>
- <entry>
-  <id>https://nihi566.github.io/book-highlights/wishlist-site/feed.xml#drop:B0CSCG6FKK:2026-10-04T09:11:25.629251</id>
-  <title>値下がり ¥1,427 → ¥792: 静かに退職する若者たち 部下との1on1の前に知っておいてほしいこと</title>
-  <updated>2026-10-04T09:11:25+09:00</updated>
-  <link rel="alternate" href="https://www.amazon.co.jp/dp/B0CSCG6FKK" />
- </entry>
- <entry>
-  <id>https://nihi566.github.io/book-highlights/wishlist-site/feed.xml#drop:B084G2XWSW:2026-10-03T21:57:54.901797</id>
-  <title>値下がり ¥882 → ¥494: 人生は苦である、でも死んではいけない (講談社現代新書 2561)</title>
-  <updated>2026-10-03T21:57:54+09:00</updated>
-  <link rel="alternate" href="https://www.amazon.co.jp/dp/B084G2XWSW" />
- </entry>
- <entry>
-  <id>https://nihi566.github.io/book-highlights/wishlist-site/feed.xml#drop:B0DF2JFJTH:2026-10-03T21:55:53.634835</id>
-  <title>値下がり ¥1,078 → ¥198: NHK「100分de名著」ブックス アリストテレス ニコマコス倫理学: 「よく生きる」ための哲学</title>
-  <updated>2026-10-03T21:55:53+09:00</updated>
-  <link rel="alternate" href="https://www.amazon.co.jp/dp/B0DF2JFJTH" />
- </entry>
- <entry>
-  <id>https://nihi566.github.io/book-highlights/wishlist-site/feed.xml#drop:B07GYMDBCM:2026-10-03T19:48:14.365971</id>
-  <title>値下がり ¥672 → ¥659: コンビニ人間 (文春文庫)</title>
-  <updated>2026-10-03T19:48:14+09:00</updated>
-  <link rel="alternate" href="https://www.amazon.co.jp/dp/B07GYMDBCM" />
- </entry>
- <entry>
-  <id>https://nihi566.github.io/book-highlights/wishlist-site/feed.xml#drop:B09V1134H7:2026-10-03T19:46:06.758261</id>
-  <title>値下がり ¥926 → ¥494: 現代思想入門 (講談社現代新書)</title>
-  <updated>2026-10-03T19:46:06+09:00</updated>
-  <link rel="alternate" href="https://www.amazon.co.jp/dp/B09V1134H7" />
- </entry>
- <entry>
-  <id>https://nihi566.github.io/book-highlights/wishlist-site/feed.xml#ku:B0DRC68N3V:2026-10-03T10:31:52.468235</id>
-  <title>読み放題（Kindle Unlimited）に入りました: 本なら売るほど １ (HARTA COMIX)</title>
-  <updated>2026-10-03T10:31:52+09:00</updated>
-  <link rel="alternate" href="https://www.amazon.co.jp/dp/B0DRC68N3V" />
+  <id>https://nihi566.github.io/book-highlights/wishlist-site/feed.xml#ku-ended:B009GPM8LE:2026-10-04T09:39:51.894521</id>
+  <title>読み放題が終わりました（Kindle Unlimited）: 新版　悪魔の飽食　日本細菌戦部隊の恐怖の実像！ (角川文庫)</title>
+  <updated>2026-10-04T09:39:51+09:00</updated>
+  <link rel="alternate" href="https://www.amazon.co.jp/dp/B009GPM8LE" />
  </entry>
 </feed>
