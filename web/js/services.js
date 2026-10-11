@@ -64,8 +64,8 @@ export const companion = {
   ask: (question) => call('/api/ask', { method: 'POST', body: { question }, timeoutMs: ASK_TIMEOUT_MS }),
   // 文章の骨組みを作る（材料の面・線・永久ノートの ID を送り、保存前の下書きが返る）
   outline: (sources) => call('/api/outline', { method: 'POST', body: { sources }, timeoutMs: ASK_TIMEOUT_MS }),
-  // 分析の履歴は PC にだけ置く（一覧は要約だけ。開いたときに 1 回分を取りに行く）
-  history: () => call('/api/history').then((r) => r?.items || []),
+  // 分析の履歴は PC にだけ置く（一覧は要約だけ。開いたときに 1 回分を取りに行く）。pinMax: 「残す」の印の上限（古い PC は返さないので null）
+  history: () => call('/api/history').then((r) => ({ items: r?.items || [], pinMax: Number.isInteger(r?.pinMax) ? r.pinMax : null })),
   historyEntry: (id) => call(`/api/history/${encodeURIComponent(id)}`),
   // 過去の分析に戻す（PC が今の時刻の分析として保存し、戻した分析が返る）
   restoreHistory: (id) => call(`/api/history/${encodeURIComponent(id)}/restore`, { method: 'POST' }),

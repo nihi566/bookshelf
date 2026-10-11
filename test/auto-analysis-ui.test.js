@@ -71,7 +71,7 @@ test('G5-4: 知識の画面で「前回から増えた線・大きくなった�
   assert.match(out, /大きくなった線\(グループ\) 1[\s\S]*?仕組みの線 (<span class="nowrap">)?＋1/);
   assert.match(out, /消えた線\(グループ\) 1<\/h3><p class="small muted">消えた&lt;線&gt;<\/p>/);
   assert.match(out, /新しくつながった点 1[\s\S]*?href="#\/knowledge\/line\/l1">仕組みの線に (<span class="nowrap">)?1 点/);
-  assert.match(out, /<h2>分析の履歴<\/h2>[\s\S]*?id="analysis-history"/);
+  assert.match(out, /<h2>分析の履歴 [\s\S]*?<\/h2>[\s\S]*?id="analysis-history"/);
   assert.match(out, /前回の分析のあとに増えた点 <a [^>]*><b>44<\/b> 件<\/a>（まだ線につながっていません）/);
   const rebuilt = String(knowledge.render({ state: st(lib, analysisOf(lib, { changes: { previousAt: 'x', rebuilt: true, addedLines: [], grownLines: [], removedLines: [], connectedPoints: [] } })) }));
   assert.match(rebuilt, /今回は最初から作り直しました/);

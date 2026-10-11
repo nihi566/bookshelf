@@ -172,10 +172,10 @@ export const knowledge = {
         <p class="help">どの線(グループ)にも入らなかった点です。読書を重ねると、いつか線になるかもしれません。</p>
         <a class="btn small" href="#/knowledge/isolated">見る</a>` : ''}
 
-      ${pcConfigured(state) ? html`<div class="section"><h2>分析の履歴</h2><span class="small muted">PC に直近 12 回分（「残す」の回は消えない）</span></div><div id="analysis-history"><p class="small muted">PC に問い合わせています…</p></div>` : ''}`;
+      ${pcConfigured(state) ? html`<div class="section"><h2>分析の履歴 <span class="small muted pin-count" id="history-pin-count"></span></h2><span class="small muted">PC に直近 12 回分（「残す」の回は消えない）</span></div><div id="analysis-history"><p class="small muted">PC に問い合わせています…</p></div>` : ''}`;
   },
   mount(root, ctx) {
-    if (ctx?.state && pcConfigured(ctx.state)) renderHistoryList(root.querySelector('#analysis-history'), ctx.state);
+    if (ctx?.state && pcConfigured(ctx.state)) renderHistoryList(root.querySelector('#analysis-history'), root.querySelector('#history-pin-count'), ctx.state);
     // おすすめの本がすでに欲しい本（web/wishlist-site/wishlist.json）に入っていれば印を付ける。読めなければ何もしない
     const cards = [...root.querySelectorAll('.rec[data-title]')];
     if (!cards.length) return;
@@ -221,20 +221,30 @@ export function historyListHtml(items, state) {
     : html`<p class="small muted">まだ履歴がありません（PC で分析すると残ります）。</p>`;
 }
 
+/** 「残す」の印の数と上限（履歴の見出しの横に出す。NIH-127）。pinMax: 上限（古い PC で分からなければ null で、数だけ出す） */
+export function pinCountText(items, pinMax) {
+  const n = items.filter((h) => h.pinned === true).length;
+  return Number.isInteger(pinMax) ? `残す ${n} / ${pinMax} 回` : `残す ${n} 回`;
+}
+
 /**
  * 分析の履歴（PC にだけある）。前に取った一覧をすぐ出し（描き直しで位置がずれないように）、PC から取り直して差し替える。
- * PC とつながらなければその旨を出す
+ * 見出しの横には「残す」の印の数と上限を出す。PC とつながらなければその旨を出す
  */
 let historyToken = 0;
 let lastHistory = null;
-function renderHistoryList(box, state) {
+function renderHistoryList(box, count, state) {
   if (!box) return;
+  const show = ({ items, pinMax }) => {
+    box.innerHTML = String(historyListHtml(items, state));
+    if (count) count.textContent = pinCountText(items, pinMax);
+  };
   const token = ++historyToken;
-  if (lastHistory) box.innerHTML = String(historyListHtml(lastHistory, state));
+  if (lastHistory) show(lastHistory);
   companion.history().then(
-    (items) => {
-      lastHistory = items;
-      if (token === historyToken && box.isConnected) box.innerHTML = String(historyListHtml(items, state));
+    (h) => {
+      lastHistory = h;
+      if (token === historyToken && box.isConnected) show(h);
     },
     (e) => {
       if (token === historyToken && box.isConnected && !lastHistory) box.innerHTML = String(html`<p class="small muted">履歴は PC にあります。PC とつながっていないので出せません（${e.message}）。</p>`);
@@ -248,15 +258,17 @@ const historyIdOf = (a) => String(a?.createdAt || '').replace(/[^0-9TZ]/g, '');
 /**
  * 過去の分析 1 回分の中身。線・面の画面は今の分析のものなので、リンクは張らない。
  * current: いま表示している分析か（そうでなければ「この分析に戻す」を出す）。
- * pinned: 「この回を残す」の印が付いているか（NIH-102。PC の一覧が読めず分からないときは undefined で、付け外しを出さない）
+ * pinned: 「この回を残す」の印が付いているか（NIH-102。PC の一覧が読めず分からないときは undefined で、付け外しを出さない）。
+ * pinCount / pinMax: 印の付いた回の数と上限。この回に印が無く上限に達していれば、ほかの回の印を外すよう案内する（NIH-127）
  */
-export function historyBody(a, { current, pinned }) {
+export function historyBody(a, { current, pinned, pinCount, pinMax }) {
+  const full = pinned === false && Number.isInteger(pinMax) && pinCount >= pinMax;
   const id = historyIdOf(a);
   return html`<section class="card stack">${current
       ? html`<p class="small muted">いま表示している分析です。</p>`
       : html`<div class="row"><button type="button" class="btn small primary" data-action="restore-analysis" data-id="${id}">この分析に戻す</button><span class="small muted">知識の画面の線(グループ)・面・立体がこの回のものになり、次の分析はこの回から引き継ぎます</span></div>`}
       ${typeof pinned === 'boolean'
-        ? html`<div class="row"><button type="button" class="btn small" data-action="pin-history" data-id="${id}" data-pinned="${String(pinned)}" aria-pressed="${String(pinned)}">${pinned ? '残すのをやめる' : 'この回を残す'}</button><span class="small muted">${pinned ? html`<span class="pin-mark">残す</span> 印が付いています。直近 12 回を過ぎても消えません` : '履歴は直近 12 回分だけ残ります。印を付けた回は、それを過ぎても消えません'}</span></div>`
+        ? html`<div class="row"><button type="button" class="btn small" data-action="pin-history" data-id="${id}" data-pinned="${String(pinned)}" aria-pressed="${String(pinned)}">${pinned ? '残すのをやめる' : 'この回を残す'}</button><span class="small muted">${pinned ? html`<span class="pin-mark">残す</span> 印が付いています。直近 12 回を過ぎても消えません` : full ? html`残せるのは ${pinMax} 回までで、いま ${pinCount} 回に印が付いています。<a href="#/knowledge">知識の画面の分析の履歴</a>から「残す」の回を開き、ほかの回の「残すのをやめる」を押すと、この回を残せます` : '履歴は直近 12 回分だけ残ります。印を付けた回は、それを過ぎても消えません'}</span></div>`
         : ''}</section>
     ${changesBlock(a, { links: false })}
     <div class="section"><h2>立体</h2></div>
@@ -282,14 +294,14 @@ export const historyView = {
     const sub = root.querySelector('#history-sub');
     // 印（「この回を残す」）は一覧にだけある。一覧が読めなくても、中身は出す
     const pinOf = companion.history().then(
-      (items) => items.find((h) => h.id === params.id)?.pinned === true,
-      () => undefined,
+      ({ items, pinMax }) => ({ pinned: items.find((h) => h.id === params.id)?.pinned === true, pinCount: items.filter((h) => h.pinned === true).length, pinMax }),
+      () => ({}),
     );
     Promise.all([companion.historyEntry(params.id), pinOf]).then(
-      ([a, pinned]) => {
+      ([a, pins]) => {
         if (!body.isConnected) return;
         sub.textContent = `${when(a.createdAt)}・${a.model?.chat || ''}${a.model?.embed ? ' / ' + a.model.embed : ''}・点 ${a.stats?.points ?? '–'} → 線 ${a.lines.length} → 面 ${a.planes.length}`;
-        body.innerHTML = String(historyBody(a, { current: a.createdAt === state?.analysis?.createdAt, pinned }));
+        body.innerHTML = String(historyBody(a, { current: a.createdAt === state?.analysis?.createdAt, ...pins }));
       },
       (e) => {
         if (body.isConnected) body.innerHTML = String(html`<p class="notice err">過去の分析を読めませんでした: ${e.message}</p>`);

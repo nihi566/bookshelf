@@ -111,8 +111,9 @@ test('NIH-102: PC の POST /api/history/<id>/pin で付け外しでき、上限�
     const res = await pin(idAt(0), { pinned: true });
     assert.equal(res.status, 200);
     assert.equal((await res.json()).pinned, true);
-    const { items } = await (await fetch(`${base}/api/history`)).json();
+    const { items, pinMax } = await (await fetch(`${base}/api/history`)).json();
     assert.equal(items.find((h) => h.id === idAt(0)).pinned, true, '一覧で印の付いた回が分かる');
+    assert.equal(pinMax, HISTORY_PIN_MAX, '印の上限も一覧と一緒に返す（NIH-127。画面に数を書き写さない）');
     assert.equal((await pin(idAt(0), { pinned: false })).status, 200);
     assert.equal((await store.history()).find((h) => h.id === idAt(0)).pinned, undefined);
     assert.equal((await pin(idAt(0), { pinned: 'yes' })).status, 400);
@@ -162,4 +163,28 @@ test('NIH-102: 過去の分析の画面に「この回を残す」の付け外�
   await failing.actions['pin-history'](btn);
   assert.deepEqual([failing.toasts[0].message, btn.disabled, failing.log], ['印は 20 回までです', false, ['toast']]);
   assert.match(readFileSync(path.join(ROOT, 'web/js/services.js'), 'utf8'), /pinHistory: \(id, pinned\) => call\(`\/api\/history\/\$\{encodeURIComponent\(id\)\}\/pin`, \{ method: 'POST', body: \{ pinned \} \}\)/);
+});
+
+test('NIH-127: 履歴の見出しに印の数と上限を出し、上限のときは過去の分析の画面でほかの回の印を外すよう案内する', async () => {
+  const { historyBody, pinCountText } = await import('../web/js/views/knowledge.js');
+  const items = [{ pinned: true }, {}, { pinned: true }, { pinned: false }];
+  assert.equal(pinCountText(items, 12), '残す 2 / 12 回');
+  assert.equal(pinCountText([], 12), '残す 0 / 12 回');
+  // 上限が分からない（古い PC）ときは数だけ出す
+  assert.equal(pinCountText(items, null), '残す 2 回');
+
+  const a = analysisAt('2026-10-04T10:00:00.000Z');
+  const guide = /ほかの回の「残すのをやめる」を押す/;
+  const full = String(historyBody(a, { current: false, pinned: false, pinCount: 12, pinMax: 12 }));
+  assert.match(full, guide);
+  assert.match(full, /<a href="#\/knowledge">知識の画面の分析の履歴<\/a>/, '履歴の一覧へ戻れる');
+  assert.match(full, /data-action="pin-history"[^>]*>この回を残す<\/button>/, 'ボタンは残す（押せば PC が理由を返す）');
+  // 上限に達していない・この回に印がある・上限が分からないときは案内しない
+  assert.doesNotMatch(String(historyBody(a, { current: false, pinned: false, pinCount: 11, pinMax: 12 })), guide);
+  assert.doesNotMatch(String(historyBody(a, { current: false, pinned: true, pinCount: 12, pinMax: 12 })), guide);
+  assert.doesNotMatch(String(historyBody(a, { current: false, pinned: false, pinCount: 12 })), guide);
+
+  const src = readFileSync(path.join(ROOT, 'web/js/views/knowledge.js'), 'utf8');
+  assert.match(src, /<h2>分析の履歴 <span class="small muted pin-count" id="history-pin-count"><\/span><\/h2>/, '見出しの横に数を出す場所がある');
+  assert.match(readFileSync(path.join(ROOT, 'web/js/services.js'), 'utf8'), /history: \(\) => call\('\/api\/history'\)\.then\(\(r\) => \(\{ items: r\?\.items \|\| \[\], pinMax: Number\.isInteger\(r\?\.pinMax\) \? r\.pinMax : null \}\)\)/);
 });

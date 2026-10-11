@@ -230,7 +230,8 @@ export function createCompanionServer({ store, log = console.log, catalogFetch, 
         });
       }
       case 'GET /api/history':
-        return send(res, 200, { items: await store.history() });
+        // pinMax: 「この回を残す」の印の上限（画面が見出しに「残す N / 上限 回」と出す。NIH-127）
+        return send(res, 200, { items: await store.history(), pinMax: HISTORY_PIN_MAX });
       case 'GET /api/library':
         return send(res, 200, await store.library());
       case 'POST /api/library/merge': {
