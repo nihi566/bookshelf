@@ -2,6 +2,7 @@
 import { state, save } from './state.js';
 import { mergeLibraries } from '../core/model.js';
 import { analysisStamp } from '../core/importing.js';
+import { withoutDismissed } from '../core/dismissals.js';
 
 // ---- コンパニオンサーバ ----
 
@@ -137,6 +138,12 @@ export async function syncWithPc() {
   } else if (local && stamp(local) > stamp(remote)) {
     await companion.putAnalysis(local);
     analysisDir = 'この端末→pc';
+  }
+  // 消した線(グループ)・面（ほかの端末で消したものを含む）は、PC の分析にあっても出さない（NIH-193）
+  const shown = withoutDismissed(state.analysis, state.library);
+  if (shown !== state.analysis) {
+    state.analysis = shown;
+    await save.analysis();
   }
   state.lastSync = startedAt;
   await save.lastSync();
