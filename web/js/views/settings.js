@@ -113,15 +113,18 @@ function importHelpLinks(name) {
 }
 
 /**
- * 新しい点が入ったときの、分析への導線（知識の画面の「分析し直す」へ）。PC の自動の分析がオンなら、自動で分析される旨を添える
+ * 新しい点が入ったときの、分析への導線（知識の画面の「分析し直す」へ）。PC の自動の分析がオンなら、自動で分析される旨を添える。
+ * 前回の分析があれば、増えた点の一覧（分析する前にメモ・タグ・★を付けられる）へのボタンも添える
  * @param {number} added 新しい点の数
- * @param {object} [state] 自動の分析の状態を見るため（無ければ自動の一言は出さない）
+ * @param {object} [state] 自動の分析・前回の分析の有無を見るため（無ければ自動の一言・増えた点の一覧は出さない）
  */
 function analyzeLink(added, state) {
   if (!added) return { button: '', note: '' };
   const auto = state?.settings?.ai?.mode === 'companion' && state.pcInfo?.autoAnalysis?.enabled === true;
+  // 増えた点の一覧は前回の分析との差で数えるので、分析がまだ無いときは出さない
+  const pending = state?.analysis ? html`<a class="btn small" href="#/knowledge/pending">増えた点を見る</a>` : '';
   return {
-    button: html`<a class="btn small primary" href="#/knowledge">分析する</a>`,
+    button: html`<a class="btn small primary" href="#/knowledge">分析する</a>${pending}`,
     note: auto ? html`<p class="small muted">PC の自動の分析がオンです。条件を満たすと PC が分析し直します。すぐに線につなぐなら「分析する」から。</p>` : '',
   };
 }

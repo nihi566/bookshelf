@@ -297,7 +297,7 @@ test('wishlistSummary: ホームに出す件数と Kindle Unlimited で読める
   assert.equal(s.kuCount, filterWishlist(items, { ku: true }).items.length);
   assert.equal(s.kuCount, 8);
   assert.deepEqual(s.picks.map((b) => b.asin), ['B0AAAAAAA7', 'B0AAAAAAA8', 'B0AAAAAAA1']);
-  assert.deepEqual(wishlistSummary([]), { total: 0, kuCount: 0, picks: [] });
+  assert.deepEqual(wishlistSummary([]), { total: 0, kuCount: 0, dropCount: 0, picks: [] });
 });
 
 const TAGGED = { format: 'kindle-wishlist', version: 1, books: [
@@ -454,6 +454,31 @@ test('openWishlistFilters: リンクから開いたときは価格の印の条�
   const s = openWishlistFilters({ q: '', ku: false, price: 'drop' }, null, { q: '本' });
   assert.equal(s.filters.price, 'all');
   assert.equal(s.normal.price, 'drop', '普通に開き直したら戻す');
+});
+
+test('openWishlistFilters: ホームの「値下がりした N 冊を見る」（price=drop）は価格の印だけで絞って開き、普通に開き直したら戻す（NIH-158）', () => {
+  const normal = { shelf: 'kindle', q: '自分の語', sort: 'price-asc', ku: true, min: '100', max: '900', tag: 'seen', kind: 'manga', label: 'x', price: 'missing' };
+  const s = openWishlistFilters(normal, null, { price: 'drop' });
+  assert.deepEqual(s.filters, { shelf: 'all', reading: 'all', q: '', sort: 'default', ku: false, min: '', max: '', tag: 'all', kind: 'all', label: '', price: 'drop' });
+  assert.equal(s.normal, normal);
+  assert.deepEqual(openWishlistFilters(s.filters, s.normal, {}), { filters: normal, normal: null }, '普通に開き直すとリンク前の条件');
+  // 知らない値・all はリンクとして扱わない（いまの条件のまま）
+  assert.deepEqual(openWishlistFilters(normal, null, { price: 'all' }), { filters: normal, normal: null });
+  assert.deepEqual(openWishlistFilters(normal, null, { price: '不明な値' }), { filters: normal, normal: null });
+});
+
+test('wishlistSummary: dropCount は価格の印「値下がりした」で絞った価格チェックの件数と同じ（NIH-158）', () => {
+  const w = parseWishlist(data([
+    book({ asin: 'B0AAAAAAA1', title: '値下がり', price: 500, price_prev: 800 }),
+    book({ asin: 'B0AAAAAAA2', title: '値上がり', price: 1200, price_prev: 1000 }),
+    book({ asin: 'B0AAAAAAA3', title: '購入済みで値下がり', price: 700, price_prev: 900, purchased: true }),
+    book({ asin: 'B0AAAAAAA4', title: 'KU', price: null, ku: true }),
+  ]));
+  const items = w.books.map((b) => ({ book: b, marks: loadMarks(b, memoryStore()) }));
+  const s = wishlistSummary(items);
+  assert.equal(s.dropCount, 2);
+  const opened = openWishlistFilters({}, null, { price: 'drop' }).filters;
+  assert.equal(filterWishlist(items, opened).items.length, s.dropCount, 'リンクに出した件数と開いた件数が一致する');
 });
 
 test('積読: 購入済みの本を本棚と ASIN（無ければ書名）で照合し、「まだ線が無い」「読書中」に分けて絞り込む', async () => {

@@ -44,11 +44,12 @@ export const wishlist = {
     const store = browserStore();
     const marksStore = store.canStore ? store : fallbackStore;
     // 検索の「欲しい本で見る」・おすすめの印から来たときは、その語だけで絞り込んで開く。
-    // ホームの「Kindle Unlimited 対象をすべて見る」（ku=1）は KU だけで絞り込んで開く
+    // ホームの「Kindle Unlimited 対象をすべて見る」（ku=1）は KU だけで、「値下がりした N 冊を見る」（price=drop）は価格の印だけで絞り込んで開く
     //（ほかの条件が残っていると、リンクに出した件数と合わない）。次に普通に開いたときはリンク前の条件に戻す
     const q = ctx?.query?.get('q') || '';
     const ku = ctx?.query?.get('ku') === '1';
-    ({ filters, normal: normalFilters } = openWishlistFilters(filters, normalFilters, { q, ku, refresh: Boolean(ctx?.refresh) }));
+    const price = ctx?.query?.get('price') || 'all';
+    ({ filters, normal: normalFilters } = openWishlistFilters(filters, normalFilters, { q, ku, price, refresh: Boolean(ctx?.refresh) }));
     if (!ctx?.refresh) shown = WISHLIST_PAGE_SIZE;
     const show = (w) => {
       // 購入済みの本を読み始めたか（本棚に線があるか）を引く
