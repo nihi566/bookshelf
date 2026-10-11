@@ -30,6 +30,12 @@ export function notesCiting(library, ids) {
   return liveNotes(library).filter((n) => n.pointIds.some((id) => set.has(id) || set.has(currentPointId(library, id))));
 }
 
+/** 根拠の点が 1 つでも重なる、ほかの永久ノート（直した順。ノートの画面から似たノートへ行くため） */
+export function notesSharingEvidence(library, note) {
+  if (!note) return [];
+  return notesCiting(library, note.pointIds || []).filter((n) => n.id !== note.id);
+}
+
 /**
  * その点（ID の集まり）のすべてを根拠にしている永久ノート（直した順。リンクの両端の点から、もう書いたノートを引くため）。
  * 伸ばす前・伸ばしたあとの点の ID は、どちらも今の点で比べる

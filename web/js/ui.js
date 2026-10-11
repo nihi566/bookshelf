@@ -360,6 +360,8 @@ export function kindleSyncLines(ks, now = new Date().toISOString()) {
     lines.push(`自動取り込み: ${result.error}`);
   }
   lines.push(ks.lastNew?.at ? `最後に新しい点: ${timeText(ks.lastNew.at)}・${ks.lastNew.added} 件` : '最後に新しい点: まだ届いていません');
+  // 冊数を送らないのは古い拡張。拡張は手で読み込む形なので、リポジトリを更新しても自動では新しくならない
+  if (!Number.isInteger(last.fetched)) lines.push('拡張機能が古いようです。chrome://extensions で再読み込みしてください');
   return lines;
 }
 

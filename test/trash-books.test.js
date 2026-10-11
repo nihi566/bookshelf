@@ -162,3 +162,38 @@ test('一覧の「元に戻す」（本）: 本が見つからない・もう戻
   await assert.rejects(() => app.actions['restore-book'](button({ id: 'bnone' })), /この本はもう見つかりません/);
   assert.deepEqual(app.log, []);
 });
+
+test('NIH-154: 本を削除した直後の通知に「元に戻す」が出て、押すと本と点がメモ・タグ・★ごと戻り、本の画面へ移って同期する', async () => {
+  const { fakeApp, button } = await import('./helpers/app-actions.js');
+  const lib = sample();
+  const book = listBooks(lib)[0];
+  const points = liveHighlights(lib).filter((h) => h.bookId === book.id);
+  updateHighlight(lib, points[0].id, { userNote: '自分のメモ', tags: ['習慣'], favorite: true }, T1);
+  const app = fakeApp({ library: lib, loaded: true });
+  await app.actions['delete-book'](button({ id: book.id }));
+  assert.equal(lib.books[book.id].deleted, true);
+  assert.deepEqual(app.log, ['persist', 'go #/books', 'toast', 'sync']);
+  const [deleted] = app.toasts;
+  assert.deepEqual([deleted.message, deleted.ms, deleted.action.label], ['削除しました', 6000, '元に戻す']);
+
+  app.log.length = 0;
+  await deleted.action.run();
+  assert.ok(!lib.books[book.id].deleted);
+  const back = lib.highlights[points[0].id];
+  assert.deepEqual([back.userNote, back.tags, back.favorite], ['自分のメモ', ['習慣'], true]);
+  for (const h of points) assert.ok(!lib.highlights[h.id].deleted);
+  assert.deepEqual(app.log, ['persist', `go #/book/${book.id}`, 'sync', 'toast']);
+  assert.equal(app.toasts[1].message, `『${book.title}』と点 ${points.length} 件を元に戻しました`);
+});
+
+test('NIH-154: 通知の「元に戻す」を押す前に同期で本が戻っていたら、理由を投げて何もしない', async () => {
+  const { fakeApp, button } = await import('./helpers/app-actions.js');
+  const lib = sample();
+  const book = listBooks(lib)[0];
+  const app = fakeApp({ library: lib, loaded: true });
+  await app.actions['delete-book'](button({ id: book.id }));
+  restoreBook(lib, book.id, T4);
+  app.log.length = 0;
+  await assert.rejects(() => app.toasts[0].action.run(), /この本はもう見つかりません/);
+  assert.deepEqual(app.log, []);
+});

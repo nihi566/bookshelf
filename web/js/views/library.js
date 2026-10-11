@@ -122,6 +122,7 @@ function renderHomeWishlist(box) {
           <p class="small muted">欲しい本 ${s.total} 冊${s.kuCount ? ` ・ Kindle Unlimited 対象 ${s.kuCount} 冊` : ''}</p>
           ${s.picks.length ? html`<ul class="book-list">${s.picks.map(wishlistHitRow)}</ul>` : ''}
           ${s.kuCount ? html`<a class="small" href="#/wishlist?ku=1">Kindle Unlimited 対象をすべて見る（${s.kuCount} 冊）</a>` : ''}
+          ${s.dropCount ? html`<p class="small"><a href="#/wishlist?price=drop">値下がりした ${s.dropCount} 冊を見る</a></p>` : ''}
         </section>`);
     })
     .catch(() => {

@@ -14,7 +14,7 @@ import { askResultBlock, semanticAvailability } from './views/ask.js';
 import { askActions } from './ask-actions.js';
 import { outlineStatusBlock } from './views/outlines.js';
 import { outlineActions } from './outline-actions.js';
-import { googleLabel, importOutcome, importResultBlock } from './views/settings.js';
+import { googleLabel, importOutcome, importResultBlock, kindleLabel } from './views/settings.js';
 import { addHighlight, emptyLibrary, listBooks, mergeParsed, parseSeenPicks, parseShuffleRecord, recentPickIds, recordSeenPicks, shuffleRecord, shuffleSeedFor } from '../core/model.js';
 import { COVER_MAX_LENGTH } from '../core/covers.js';
 import { parseFiles } from '../core/parsers/index.js';
@@ -659,7 +659,7 @@ const forms = {
         out.innerHTML = String(html`<p class="notice ok">接続できました。モデル: ${models.join('、') || '（なし）'}</p>`);
       } else {
         const [info, appVersion] = await Promise.all([companion.info(), ownSwVersion()]);
-        out.innerHTML = String(html`<p class="notice ${info.llm.configured ? 'ok' : ''}">PC に接続できました。点 ${info.stats.points ?? info.stats.highlights} 件・チャットモデル: ${info.llm.chatModel || '未設定（PC で bh config model …）'}・埋め込み: ${info.llm.embedModel || '文字 n-gram'}・Play ブックスの自動取り込み: ${googleLabel(info.google)}</p>
+        out.innerHTML = String(html`<p class="notice ${info.llm.configured ? 'ok' : ''}">PC に接続できました。点 ${info.stats.points ?? info.stats.highlights} 件・チャットモデル: ${info.llm.chatModel || '未設定（PC で bh config model …）'}・埋め込み: ${info.llm.embedModel || '文字 n-gram'}・Play ブックスの自動取り込み: ${googleLabel(info.google)}・Kindle の自動取り込み: ${kindleLabel(info.kindleSync)}</p>
           ${serveVersionBlock(info.server, appVersion)}`);
       }
     } catch (e) {

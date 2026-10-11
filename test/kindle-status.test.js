@@ -101,7 +101,18 @@ test('Kindle 状態: 画面に出す文言', async () => {
   const err = kindleSyncLines(mk({ ok: false, error: '3 冊を読み取れませんでした' }), at(1));
   assert.match(err[0], /^自動取り込み: 失敗（最終確認 .+）: 3 冊を読み取れませんでした$/);
 
-  const stale = kindleSyncLines(mk(), at(150));
+  // 古い拡張（冊数なし）は、最後に拡張の再読み込みを促す。冊数があれば出さない
+  const OLD_EXT = '拡張機能が古いようです。chrome://extensions で再読み込みしてください';
+  assert.equal(ok.at(-1), OLD_EXT);
+  assert.equal(ok.length, 3);
+  assert.equal(login.at(-1), OLD_EXT);
+  assert.equal(kindleSyncLines(mk(), at(150)).at(-1), OLD_EXT);
+  assert.equal(fetched.length, 2);
+  assert.ok(!fetched.includes(OLD_EXT));
+  assert.ok(!kindleSyncLines(mk({ fetched: 0 }), at(1)).includes(OLD_EXT));
+  assert.ok(!kindleSyncLines(null, T0).includes(OLD_EXT));
+
+  const stale = kindleSyncLines(mk({ fetched: 1 }), at(150));
   assert.equal(stale[0], '自動取り込み: 拡張から 2 時間 30 分 連絡がありません。PC のブラウザが閉じているか、PC に送れていない可能性があります');
   assert.match(stale[1], /^最後の結果: 正常（最終確認 .+）$/);
   assert.equal(stale.length, 3);
@@ -132,4 +143,12 @@ test('Kindle 状態: ホームの警告欄は PC モードで PC の情報があ
   const out = String(kindleAlertBlock(st('companion', pcInfo)));
   assert.match(out, /href="#\/import"/);
   assert.match(out, /ログインが切れています/);
+});
+
+test('NIH-160: 設定 → 接続を確認 の Kindle の要約に「最後に新しい点」を出す（まだなら「まだ届いていません」）', async () => {
+  const { kindleLabel } = await import('../web/js/views/settings.js');
+  const lastCheck = { at: T0, ok: true, error: '', needLogin: false, added: 0, intervalMin: 15 };
+  assert.match(kindleLabel({ lastCheck, lastNew: { at: T0, added: 4 } }), /^最後に新しい点 \d+\/\d+ \d+:\d+・4 件$/);
+  assert.equal(kindleLabel({ lastCheck }), '最後に新しい点 まだ届いていません');
+  assert.equal(kindleLabel(null), '最後に新しい点 まだ届いていません', '拡張から連絡が無いときも');
 });
