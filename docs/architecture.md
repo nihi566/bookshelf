@@ -81,7 +81,7 @@ Outline   = { id: 'o'+時刻+乱数, title, sources: [{ kind: 'plane'|'line'|'no
 - **点の共通の形**（`web/core/points.js`）: 分析の点 = 技術書を除くハイライト + 捨てていない思いつき（`analysisPoints`）。分析結果の `highlightIds` には思いつきの ID も入る（`pointById` で引く）。Kindle で伸ばしたハイライトに置き換わった点は `currentPointId` で置き換わった先をたどる（永久ノートの根拠に書いた点を見失わない）
 - **永久ノート（Note）**（`web/core/notes.js`）は「1 ノート = 1 アイデア」を自分の言葉で書いたもの。題・本文・根拠の点（0 件以上）を持つ。AI は書き換えない（分析は library を書かない）
   - 線から作る（`noteDraftFromLine`: 名前を題に、説明と問いを本文に、線の点を根拠に写す）・受け箱のメモから作る（`noteFromThought`: メモを根拠にし、メモは整理済みにする）・点の画面から作る／根拠に足す
-  - 根拠の点が消えたら、ノートは残したまま「根拠の点が消えた」と出す（`note-evidence.js` の `missingEvidence`）。点・線・面の画面には、その点を根拠にしているノートを出す（`notesCiting`）
+  - 根拠の点が消えたら、ノートは残したまま「根拠の点が消えた」と出す（`note-evidence.js` の `missingEvidence`）。点・線・面の画面には、その点を根拠にしているノートを出す（`notesCiting`）。ノートの画面には、根拠の点が重なるほかのノートを出す（`notesSharingEvidence`）
   - 同期では `updatedAt` が新しい方を採り、消したものはどちらから来ても消えたまま（`mergeCollections` の `stickyDelete`）。外から来たノートは形を確かめる（ID・題か本文のどちらか・点の ID の形・最大 200 点）。古い版のデータ（`notes` が無い）は空として読む（`notesOf()`）
 - **リンク（Link）**（`web/core/links.js`）は点・メモ・永久ノートのどれどうしでも人間が張るつながり（AI は張らない。候補の「意味の近い点」を出すまで）。理由は 1 行（120 字まで。制御文字・幅の無い文字は落とす）
   - ID は 2 つの端から決まる（`linkId`。どの端末で張っても 1 つにまとまる）。逆向きにも見える（`linksFor` は両方向。Kindle で伸ばしたハイライトは置き換わった先として数え、同じ相手は 1 つにまとめる）。伸ばす前と後の点どうしは張れない
