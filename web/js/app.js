@@ -26,6 +26,7 @@ import { analyzeLibrary, recommendBooks, recommendationNote } from '../core/anal
 import { followJob, pcJobOutcome } from '../core/jobs.js';
 import { browserStore, loadMarks, toRecommendWishlist } from '../core/wishlist.js';
 import { loadWishlist } from './wishlist-data.js';
+import { notifyJobEnd } from './job-notice.js';
 
 const view = document.getElementById('view');
 // 今日の点の「別の点」で選び直した種。この端末に残し、その日のうちは開き直しても同じ組を出す（NIH-89）
@@ -186,9 +187,13 @@ function listenBookmarklet() {
 // ---- AI 分析 ----
 
 function setJob(patch) {
-  state.job = { ...(state.job || {}), ...patch };
+  const prev = state.job;
+  // 新しく走り始めたら、前の分析の「中止を押した」印を外す
+  const restart = patch.running && !prev?.running ? { cancelling: false } : {};
+  state.job = { ...(state.job || {}), ...restart, ...patch };
   updateStatus();
   const { path } = parseHash();
+  notifyJobEnd({ prev, job: state.job, path, toast, go: (hash) => (location.hash = hash) });
   if (JOB_PATHS.includes(path)) {
     const panel = view.querySelector('.steps')?.closest('.card');
     // 進捗だけの更新は画面全体を描き直さない
@@ -328,6 +333,8 @@ function checkPcJob() {
 }
 
 async function cancelAnalysis() {
+  // 自分で中止した分析は、終わっても「失敗しました」と知らせない（NIH-227）
+  if (state.job?.running) state.job = { ...state.job, cancelling: true };
   if (state.job?.where === 'pc') await companion.cancel().catch(() => {});
   abort?.abort();
 }
