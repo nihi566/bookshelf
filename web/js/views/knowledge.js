@@ -112,10 +112,10 @@ const REBUILT = {
  * links: 線の画面へのリンクを張るか（過去の分析では、今の分析に無い線を指すことがあるので張らない）
  */
 function changesBlock(a, { links = true } = {}) {
-  if (a.restoredFrom) return html`<div class="section"><h2>前回からの変化</h2></div><p class="card small">${when(a.restoredFrom)} の分析に戻しました（線 ${a.lines.length} 本・面 ${a.planes.length}）。次の分析は、この回から引き継ぎます。</p>`;
+  if (a.restoredFrom) return html`<div class="section" id="changes"><h2>前回からの変化</h2></div><p class="card small">${when(a.restoredFrom)} の分析に戻しました（線 ${a.lines.length} 本・面 ${a.planes.length}）。次の分析は、この回から引き継ぎます。</p>`;
   const c = a.changes;
   if (!c) return '';
-  const head = html`<div class="section"><h2>前回からの変化</h2><span class="small muted">${isoDate(c.previousAt)} から</span></div>`;
+  const head = html`<div class="section" id="changes"><h2>前回からの変化</h2><span class="small muted">${isoDate(c.previousAt)} から</span></div>`;
   if (c.rebuilt) return html`${head}<p class="card small">${REBUILT[c.reason] || REBUILT.format}（線 ${a.lines.length} 本・面 ${a.planes.length}）。次からは、変わったところだけを作り直します。</p>`;
   // Kindle で伸ばしただけの点は変化に数えないが、取り込みが届いたことは件数で分かるようにする（NIH-94。過去の分析には無い）
   const extended = c.extendedPoints > 0 ? `Kindle で伸ばした点 ${c.extendedPoints}（変化には数えていません）` : '';
@@ -210,6 +210,8 @@ export const knowledge = {
       // 絞った一覧を開いたら履歴の見出しまで送る（過去の分析の画面の案内から来たとき。画面の先頭へ戻すのは mount の後なので次の番で）
       if (pinnedOnly && !ctx.refresh) setTimeout(() => root.querySelector('#history-pin-count')?.closest('.section')?.scrollIntoView({ block: 'start' }));
     }
+    // 増えた点の一覧の「前回からの変化を見る」から来たら、その見出しまで送る（NIH-179。履歴の絞り込みと同じく次の番で）
+    if (changesFocused(ctx?.query) && !ctx.refresh) setTimeout(() => root.querySelector('#changes')?.scrollIntoView({ block: 'start' }));
     // おすすめの本がすでに欲しい本（web/wishlist-site/wishlist.json）に入っていれば印を付ける。読めなければ何もしない
     const cards = [...root.querySelectorAll('.rec[data-title]')];
     if (!cards.length) return;
@@ -250,6 +252,9 @@ const pcConfigured = (state) => state.settings.ai.mode === 'companion' && Boolea
 
 /** 履歴の一覧を印の付いた回だけに絞っているか（URL の #/knowledge?history=pinned。NIH-161） */
 export const historyPinnedOnly = (query) => query?.get('history') === 'pinned';
+
+/** 前回からの変化の見出しまで送って開くか（URL の #/knowledge?focus=changes。NIH-179） */
+export const changesFocused = (query) => query?.get('focus') === 'changes';
 
 /**
  * 履歴の一覧（「この回を残す」の印が付いた回には「残す」と出す。NIH-102）。
@@ -479,7 +484,7 @@ function runResultBlock(state) {
   const lines = c?.rebuilt ? html`最初から作り直しました（線(グループ) ${a.lines.length} 本）` : html`新しく線(グループ)につながった点 <b>${c.connectedPoints?.length ?? 0}</b>`;
   return html`<section class="card stack run-result" aria-live="polite">
     <p>この分析の結果: ${lines}・発見 <b>${found}</b> 件</p>
-    <div class="row"><a class="btn small" href="#/knowledge">知識の画面で前回からの変化を見る</a>${found ? html`<a class="btn small" href="#/discoveries">発見を見る</a>` : ''}</div>
+    <div class="row"><a class="btn small" href="#/knowledge?focus=changes">知識の画面で前回からの変化を見る</a>${found ? html`<a class="btn small" href="#/discoveries">発見を見る</a>` : ''}</div>
   </section>`;
 }
 
