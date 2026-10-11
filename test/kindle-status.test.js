@@ -12,6 +12,17 @@ test('Kindle 状態: 報告を検証し、知らないキーは捨てる', () =>
   assert.equal(normalizeKindleReport({ ok: false, error: 'あ'.repeat(500) }).error.length, 300);
 });
 
+test('Kindle 状態: 読み直した冊数は届いたときだけ持つ（古い拡張は送らない）', () => {
+  assert.equal(normalizeKindleReport({ ok: true, fetched: 7 }).fetched, 7);
+  assert.equal(normalizeKindleReport({ ok: true, fetched: 0 }).fetched, 0);
+  assert.equal('fetched' in normalizeKindleReport({ ok: true }), false);
+  assert.equal('fetched' in normalizeKindleReport({ ok: true, fetched: null }), false);
+  for (const fetched of [-1, 1.5, 100001, '3']) assert.throws(() => normalizeKindleReport({ ok: true, fetched }), Error, String(fetched));
+  const rep = { ok: true, needLogin: false, added: 0, intervalMin: 15, error: '' };
+  assert.equal(mergeKindleSync(undefined, { ...rep, fetched: 4 }, T0).lastCheck.fetched, 4);
+  assert.equal('fetched' in mergeKindleSync(undefined, rep, T0).lastCheck, false);
+});
+
 test('Kindle 状態: 不正な報告は例外にする', () => {
   const bad = [
     null,
@@ -73,6 +84,13 @@ test('Kindle 状態: 画面に出す文言', async () => {
   const ok = kindleSyncLines(mk(), at(1));
   assert.match(ok[0], /^自動取り込み: 正常（最終確認 .+）。線がノートブックに反映されるまで数分かかることがあります$/);
   assert.equal(ok[1], '最後に新しい点: まだ届いていません');
+
+  const fetched = kindleSyncLines(mk({ fetched: 3 }), at(1));
+  assert.match(fetched[0], /^自動取り込み: 正常（最終確認 .+・3 冊を読み直し）。線がノートブックに反映されるまで数分かかることがあります$/);
+  assert.match(kindleSyncLines(mk({ fetched: 0 }), at(1))[0], /・0 冊を読み直し）/);
+  assert.match(kindleSyncLines(mk({ ok: false, error: 'x', fetched: 2 }), at(1))[0], /^自動取り込み: 失敗（最終確認 .+・2 冊を読み直し）: x$/);
+  // 古い拡張（冊数なし）は今までどおり
+  assert.doesNotMatch(ok[0], /冊を読み直し/);
 
   const withNew = kindleSyncLines(mk({}, { lastNew: { at: T0, added: 4 } }), at(1));
   assert.match(withNew[1], /^最後に新しい点: .+・4 件$/);

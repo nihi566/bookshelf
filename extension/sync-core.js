@@ -50,12 +50,15 @@ export function isReachableCompanionUrl(url) {
   }
 }
 
-/** PC の /api/kindle-status に送る本文（確認の結果だけ。トークン・URL・本の一覧は含めない） */
+const countOrZero = (n) => (Number.isInteger(n) && n >= 0 ? n : 0);
+
+/** PC の /api/kindle-status に送る本文（確認の結果だけ。トークン・URL・本の一覧は含めない。読み直した本は冊数だけ） */
 export function statusReport(status, settings) {
   return {
     ok: Boolean(status.ok),
     needLogin: Boolean(status.needLogin),
-    added: Number.isInteger(status.added) && status.added >= 0 ? status.added : 0,
+    added: countOrZero(status.added),
+    fetched: countOrZero(status.fetched),
     intervalMin: Number(settings.intervalMin) || DEFAULTS.intervalMin,
     error: String(status.error || '').slice(0, 300),
   };

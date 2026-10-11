@@ -302,8 +302,8 @@ test('edge sync-core: 取り込む本の選択・本文・URL・報告の境界'
   for (const ok of ['http://localhost:8787', 'http://127.0.0.1', 'https://pc.tail1234.ts.net']) assert.equal(isReachableCompanionUrl(ok), true, ok);
   for (const bad of ['https://localhost', 'http://pc.ts.net', 'https://ts.net.evil.com', 'https://evil.com/.ts.net', 'http://0.0.0.0', '', null, 'not a url']) assert.equal(isReachableCompanionUrl(bad), false, String(bad));
 
-  assert.deepEqual(statusReport({ ok: 1, added: -3, error: 'e'.repeat(500) }, { intervalMin: 'abc' }), { ok: true, needLogin: false, added: 0, intervalMin: 15, error: 'e'.repeat(300) });
-  assert.deepEqual(statusReport({ added: 2.5, error: null }, { intervalMin: '30' }), { ok: false, needLogin: false, added: 0, intervalMin: 30, error: '' });
+  assert.deepEqual(statusReport({ ok: 1, added: -3, error: 'e'.repeat(500) }, { intervalMin: 'abc' }), { ok: true, needLogin: false, added: 0, fetched: 0, intervalMin: 15, error: 'e'.repeat(300) });
+  assert.deepEqual(statusReport({ added: 2.5, fetched: 3, error: null }, { intervalMin: '30' }), { ok: false, needLogin: false, added: 0, fetched: 3, intervalMin: 30, error: '' });
   assert.deepEqual(chunk([], 3), []);
   assert.deepEqual(chunk([1, 2, 3, 4, 5], 2), [[1, 2], [3, 4], [5]]);
 });

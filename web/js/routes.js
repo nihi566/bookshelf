@@ -1,4 +1,5 @@
 // 画面のルート表と、画面ごとに描き直し方を決める表。DOM に触れないので Node のテストからも import できる
+import { html } from './html.js';
 import { homeAlertBlock } from './ui.js';
 import { book, books, home, search } from './views/library.js';
 import { autoStatusBlock, historyView, isolatedView, knowledge, lineView, pendingView, planeView } from './views/knowledge.js';
@@ -71,13 +72,21 @@ export function parseHash(hash) {
   return { path, query: new URLSearchParams(qs || '') };
 }
 
-/** パスに合う画面・タブ・URL の中の値。どれにも合わなければホーム */
+/** どのルートにも合わない URL の画面。ホームの先頭に、開いた URL が無いことを知らせる（NIH-123） */
+function notFoundView(path) {
+  return {
+    render: (ctx) => html`<p class="notice err" role="alert" style="margin-bottom:12px">このページはありません（URL: #${path}）。古いブックマークか、消えた画面へのリンクかもしれません。ホームを出しています</p>${home.render(ctx)}`,
+    mount: (root, ctx) => home.mount(root, ctx),
+  };
+}
+
+/** パスに合う画面・タブ・URL の中の値。どれにも合わなければ、案内つきのホーム（notFound に開いたパス） */
 export function matchRoute(path) {
   for (const [re, view, tab] of ROUTES) {
     const m = path.match(re);
     if (m) return { view, tab, params: m.groups || {} };
   }
-  return { view: home, tab: 'home', params: {} };
+  return { view: notFoundView(path), tab: 'home', params: {}, notFound: path };
 }
 
 // 思いつきを出している画面（受け箱・メモの一覧・点の検索）
@@ -85,6 +94,9 @@ export const THOUGHT_PATHS = ['/', '/thoughts', '/search'];
 
 // 分析の結果を出す線・面・立体のページ（分析が終わったら描き直す）
 export const LAYER_PATHS = ['/lines', '/planes', '/solid'];
+
+// 「分析し直す」と分析の進み具合を出すページ（進み具合が変わるたびに描き直す）
+export const JOB_PATHS = ['/knowledge', '/knowledge/pending'];
 
 // PC の状態（拡張の確認結果など）を表示する画面
 export const PC_INFO_PATHS = ['/settings', '/import', '/', '/knowledge'];

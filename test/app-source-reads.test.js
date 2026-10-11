@@ -30,6 +30,6 @@ test('ルート表と操作は、DOM の無い Node で import して呼べる',
   const { path, query } = parseHash('#/book/b-1?q=x');
   assert.deepEqual([path, query.get('q'), matchRoute(path).params.id, matchRoute(path).tab], ['/book/b-1', 'x', 'b-1', 'books']);
   assert.equal(parseHash('').path, '/');
-  assert.equal(matchRoute('/no-such-page').tab, 'home', '知らない URL はホーム');
+  assert.equal(matchRoute('/no-such-page').tab, 'home', '知らない URL はホーム（案内つき。NIH-123）');
   assert.equal(typeof appActions({ state: {} }).actions.fav, 'function');
 });

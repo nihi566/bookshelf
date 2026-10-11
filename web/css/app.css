@@ -291,6 +291,14 @@ a.link-target:hover { text-decoration: none; }
 .link-sub, .link-reason { font-size: 0.78rem; color: var(--ink-3); overflow-wrap: anywhere; }
 .link-row.gone .link-title { color: var(--ink-3); }
 .link-actions { flex: none; gap: 6px; }
+/* リンクの行の「ほか N」（両端を根拠にした永久ノートをすべて出す）。開いたら操作の行の中で 1 行を使う */
+.link-notes, .link-notes:last-child { border: 0; padding: 0; }
+.link-notes summary { font-weight: normal; color: var(--ink-2); min-height: 32px; }
+.link-actions:has(.link-notes[open]) { flex: 1 1 100%; }
+.link-notes[open] { flex-basis: 100%; }
+.link-notes ul { margin: 2px 0 0; }
+.link-notes li { margin: 0; }
+.link-notes li a { display: inline-flex; align-items: center; min-height: 32px; }
 
 /* 遠いつながり（別の本・別の面の点の組に、AI が共通する考えを見つけたもの） */
 .layer-label.far, .disc-item.far .disc-kind { color: var(--layer-solid); }

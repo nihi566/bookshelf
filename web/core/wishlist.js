@@ -10,6 +10,8 @@ export const WISHLIST_FORMAT = 'kindle-wishlist';
 export const TAG_LABELS = { wanted: '読みたい', purchased: '購入済み', seen: '読んだ' };
 export const KIND_LABELS = { manga: 'マンガ', book: '本' };
 export const TAG_FILTER_LABELS = { all: 'すべて', wanted: '読みたい', purchased: '購入済み', seen: '読んだ', untagged: 'タグなし' };
+// 価格の印の絞り込み。値下がり・最安値はカードのバッジと同じ判定、取得できずはカードの「価格情報なし」（KU は除く）
+export const PRICE_MARK_LABELS = { all: 'すべて', drop: '値下がりした', lowest: '最安値', missing: '取得できず' };
 
 export const KEYS = {
   tag: 'book-tag:',
@@ -229,7 +231,7 @@ export function cleanupSyncedMarks(store, book) {
 export function openWishlistFilters(filters, normal, { q = '', ku = false, refresh = false } = {}) {
   if (q || ku) {
     if (refresh && normal) return { filters, normal };
-    return { filters: { ...filters, q, ku, shelf: 'all', reading: 'all', sort: 'default', min: '', max: '', tag: 'all', kind: 'all', label: '' }, normal: normal ?? filters };
+    return { filters: { ...filters, q, ku, shelf: 'all', reading: 'all', sort: 'default', min: '', max: '', tag: 'all', kind: 'all', label: '', price: 'all' }, normal: normal ?? filters };
   }
   return { filters: normal ?? filters, normal: null };
 }
@@ -252,6 +254,19 @@ export function tagCounts(items) {
     for (const filter of Object.keys(counts)) if (matchesTag(marks.tag, filter)) counts[filter]++;
   }
   return counts;
+}
+
+/** 価格の印（PRICE_MARK_LABELS のキー）に当たるか。知らない値は絞り込まない */
+export function matchesPriceMark(book, mark = 'all') {
+  if (mark === 'missing') return book.price === null && !book.ku;
+  if (mark !== 'drop' && mark !== 'lowest') return true;
+  const c = priceChange(book);
+  return Boolean(c && (mark === 'drop' ? c.diff < 0 : c.lowest));
+}
+
+/** 価格の印の選択肢ごとに、選ぶと残る件数。items: [{ book }] */
+export function priceMarkCounts(items) {
+  return Object.fromEntries(Object.keys(PRICE_MARK_LABELS).map((k) => [k, items.filter(({ book }) => matchesPriceMark(book, k)).length]));
 }
 
 /**
@@ -345,7 +360,7 @@ export function priceSparkline(history, { width = 120, height = 28, pad = 3 } = 
 }
 
 /**
- * items: [{ book, marks, reading? }]。f: { shelf: all|kindle|bookmeter|purchased, reading: all|unread|reading（購入済みのときだけ使う）, q, ku, min, max, tag, kind, label（空なら絞り込まない）, sort }
+ * items: [{ book, marks, reading? }]。f: { shelf: all|kindle|bookmeter|purchased, reading: all|unread|reading（購入済みのときだけ使う）, q, ku, min, max, tag, kind, label（空なら絞り込まない）, price（PRICE_MARK_LABELS のキー）, sort }
  * 戻り値の priceRangeInvalid は下限 > 上限（そのときは価格帯を無視する）
  */
 export function filterWishlist(items, f = {}) {
@@ -366,6 +381,7 @@ export function filterWishlist(items, f = {}) {
     if (f.label && book.label !== f.label) return false;
     if (!matchesTag(marks.tag, f.tag || 'all')) return false;
     if (kind !== 'all' && marks.kind !== kind) return false;
+    if (!matchesPriceMark(book, f.price)) return false;
     if (!Number.isNaN(min) && (book.price === null || book.price < min)) return false;
     if (!Number.isNaN(max) && (book.price === null || book.price > max)) return false;
     return true;

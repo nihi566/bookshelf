@@ -58,6 +58,14 @@ function when(iso) {
   return `${d.getMonth() + 1}/${d.getDate()} ${d.toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' })}`;
 }
 
+/** 次の自動の分析がいつ・何を待って始まるか（オフのとき・分析の最中・古い PC で判断が届かないときは出さない。NIH-112） */
+function nextLine(au) {
+  const n = au.next;
+  if (!au.enabled || au.running || !n?.reason) return '';
+  const text = n.due ? `まもなく始めます（${n.reason}）` : `${n.reason}${n.nextAt ? `（始まる見込み: ${when(n.nextAt)}）` : ''}`;
+  return html`<p class="small muted">次の自動の分析: ${text}</p>`;
+}
+
 /**
  * 自動の分析の状態（PC の bh serve が、点が増えたら人の操作なしに分析し直す）。
  * PC の情報（/api/info）を取り直したときに、この欄だけ差し替える（app.js の PC_INFO_BOXES）
@@ -72,6 +80,7 @@ export function autoStatusBlock(state) {
   const cancelled = au.lastCancelledAt && (!au.lastSuccessAt || au.lastCancelledAt > au.lastSuccessAt);
   return html`<p class="small">自動の分析: ${au.enabled ? html`<b>オン</b> — ${rule}` : html`<b>オフ</b>（PC で <span class="code">bh config auto on</span> で入れられます）`}</p>
     <p class="small muted">最後に成功: ${when(okAt)}${au.lastTrigger === 'auto' && au.lastSuccessAt && !au.lastError && !cancelled ? '（自動）' : ''}</p>
+    ${nextLine(au)}
     ${au.enabled && au.notesChanged ? html`<p class="small muted">前回の分析のあとに書いた・直した永久ノートがあります。次の分析で面・立体に入ります。</p>` : ''}
     ${cancelled ? html`<p class="small muted">${when(au.lastCancelledAt)} に分析を中止しました。少し時間をおいてから、PC が自動で始め直します。</p>` : ''}
     ${au.lastError ? html`<p class="notice err">${when(au.lastErrorAt)} の分析に失敗しました: ${au.lastError}。前回の結果はそのまま残っています。次の機会に PC がもう一度試します。</p>` : ''}`;
@@ -111,13 +120,19 @@ function changesBlock(a, { links = true } = {}) {
     </section>`;
 }
 
+/** 分析を始めるボタン（知識の画面と増えた点の一覧で同じもの。分析中・点 4 件未満は押せない） */
+function runAnalysisButton(state) {
+  const disabled = state.job?.running || libraryStats(state.library).points < 4;
+  return html`<button class="btn primary" data-action="run-analysis" ${disabled ? 'disabled' : ''}>${state.analysis ? '分析し直す' : '点をつないで分析する'}</button>`;
+}
+
 export const knowledge = {
   render({ state }) {
     const a = state.analysis;
     const s = libraryStats(state.library);
     const job = state.job;
     const summary = aiSummary(state.settings, state.servedByCompanion);
-    const runBtn = html`<button class="btn primary" data-action="run-analysis" ${job?.running || s.points < 4 ? 'disabled' : ''}>${a ? '分析し直す' : '点をつないで分析する'}</button>`;
+    const runBtn = runAnalysisButton(state);
     const head = html`<div class="page-head"><div><h1>知識</h1><div class="sub">点 ${s.points} → 線 ${a?.lines.length ?? '–'} → 面 ${a?.planes.length ?? '–'} → 立体</div></div><a class="btn small" href="#/ask">問いかける</a></div>
       <div class="card stack">
         <p class="small">AI: ${summary || html`<b>未設定</b> — <a href="#/settings">AI の接続を設定する</a>`}</p>
@@ -408,10 +423,14 @@ export const pendingView = {
     const head = html`<a class="back" href="#/knowledge">‹ 知識</a><div class="page-head"><h1>前回の分析のあとに増えた点</h1></div>`;
     if (!state.analysis) return html`${head}<p class="card small muted">まだ分析していません。</p>`;
     const hs = pendingPointList(analysisPoints(state.library), state.analysis);
-    if (!hs.length) return html`${head}<p class="card small muted">前回の分析のあとに増えた点はありません。</p>`;
+    // 分析し直して増えた点が無くなっても、終わったこと（失敗ならその理由）が見えるように進み具合は残す
+    if (!hs.length) return html`${head}<p class="card small muted">前回の分析のあとに増えた点はありません。</p>${jobPanel(state.job)}`;
+    // NIH-121: メモ・タグ・★を付け終えたら、知識の画面へ戻らずに分析し直せる
     return html`${head}
       <p class="help">${hs.length} 件。まだどの線(グループ)にも入っていません。分析し直す前に、自分のメモ・タグ・★を付けておくと、次の分析の線に反映されます。</p>
-      ${hs.map((h) => pointCard(h, { library: state.library }))}`;
+      ${hs.map((h) => pointCard(h, { library: state.library }))}
+      <div class="row">${runAnalysisButton(state)}</div>
+      ${jobPanel(state.job)}`;
   },
 };
 

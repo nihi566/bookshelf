@@ -388,7 +388,7 @@ test('openWishlistFilters: リンクから開いた条件は描き直しで戻�
   const normal = { shelf: 'kindle', q: '自分の語', sort: 'price-asc', ku: false, min: '100', max: '900', tag: 'seen', kind: 'manga' };
   // ホームの「Kindle Unlimited 対象をすべて見る」から開く: KU だけで絞り込み、それまでの条件は取っておく
   let s = openWishlistFilters(normal, null, { ku: true });
-  assert.deepEqual(s.filters, { shelf: 'all', reading: 'all', q: '', sort: 'default', ku: true, min: '', max: '', tag: 'all', kind: 'all', label: '' });
+  assert.deepEqual(s.filters, { shelf: 'all', reading: 'all', q: '', sort: 'default', ku: true, min: '', max: '', tag: 'all', kind: 'all', label: '', price: 'all' });
   assert.equal(s.normal, normal);
   // リンク先で利用者が条件を変えた後、同期などで同じ画面を描き直しても変えた条件のまま
   const changed = { ...s.filters, shelf: 'kindle', q: '猫' };
@@ -422,6 +422,38 @@ test('filterWishlist: 値下がり額が大きい順（値下がりした本が�
   ]));
   const list = w.books.map((b) => ({ book: b, marks: loadMarks(b, memoryStore()) }));
   assert.equal(asins(filterWishlist(list, { sort: 'price-drop' })), '426135', '同じ下げ幅は元の順');
+});
+
+test('filterWishlist: 価格の印（値下がりした・最安値・取得できず）で絞り込み、選択肢ごとの件数を数える（NIH-138）', async () => {
+  const { PRICE_MARK_LABELS, priceMarkCounts } = await import('../web/core/wishlist.js');
+  const w = parseWishlist(data([
+    book({ asin: 'B0AAAAAAA1', title: '値下がりして最安値', price: 500, price_prev: 800, price_low: 500 }),
+    book({ asin: 'B0AAAAAAA2', title: '値上がり', price: 1200, price_prev: 1000, price_low: 900 }),
+    book({ asin: 'B0AAAAAAA3', title: '値下がりしたが最安値ではない', price: 700, price_prev: 900, price_low: 600 }),
+    book({ asin: 'B0AAAAAAA4', title: '取得に失敗', price: null, price_reason: 'blocked' }),
+    book({ asin: 'B0AAAAAAA5', title: 'KU', price: null, ku: true }),
+    book({ asin: 'B0AAAAAAA6', title: '値動きなし', price: 800 }),
+    book({ asin: 'B0AAAAAAA7', title: '理由なしの価格なし', price: null }),
+  ]));
+  const list = w.books.map((b) => ({ book: b, marks: loadMarks(b, memoryStore()) }));
+  assert.deepEqual(Object.keys(PRICE_MARK_LABELS), ['all', 'drop', 'lowest', 'missing']);
+  assert.equal(asins(filterWishlist(list, { price: 'drop' })), '13', '前回より安い本だけ（値上がり・値動きなしは出ない）');
+  assert.equal(asins(filterWishlist(list, { price: 'lowest' })), '1', 'カードの「最安値」バッジと同じ本');
+  assert.equal(asins(filterWishlist(list, { price: 'missing' })), '47', 'KU でなく価格の無い本（KU は出さない）');
+  assert.equal(asins(filterWishlist(list, { price: 'all' })), '1234567');
+  assert.equal(asins(filterWishlist(list, { price: '不明な値' })), '1234567', '知らない値は絞り込まない');
+  assert.equal(asins(filterWishlist(list, { price: 'drop', sort: 'price-desc' })), '31', 'ほかの並べ替えと組み合わせられる');
+  assert.deepEqual(priceMarkCounts(list), { all: 7, drop: 2, lowest: 1, missing: 2 });
+  for (const [mark, n] of Object.entries(priceMarkCounts(list))) {
+    assert.equal(filterWishlist(list, { price: mark }).items.length, n, `件数と絞り込みの結果が一致する: ${mark}`);
+  }
+  assert.deepEqual(priceTotal(filterWishlist(list, { price: 'drop' }).items), { total: 1200, priced: 2, unpriced: 0 }, '合計金額は絞り込んだ本だけで出る');
+});
+
+test('openWishlistFilters: リンクから開いたときは価格の印の条件も外す（NIH-138）', () => {
+  const s = openWishlistFilters({ q: '', ku: false, price: 'drop' }, null, { q: '本' });
+  assert.equal(s.filters.price, 'all');
+  assert.equal(s.normal.price, 'drop', '普通に開き直したら戻す');
 });
 
 test('積読: 購入済みの本を本棚と ASIN（無ければ書名）で照合し、「まだ線が無い」「読書中」に分けて絞り込む', async () => {

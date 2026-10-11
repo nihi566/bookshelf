@@ -99,3 +99,15 @@ test('NIH-75: 取り込み画面の Play ブックス欄に「最後に新しい
   assert.match(onlyUpdated, /最後に新しい点: \S+.*・0 件（更新 4 件）/);
   assert.match(String(playbooksSyncBlock(state({ ...base, lastNew: null }))), /最後に新しい点: まだ届いていません/);
 });
+
+test('NIH-119: 設定 → 接続を確認 の Play ブックスの要約にも、state.json の「最後に新しい点」を出す（メモリの lastImport は使わない）', async () => {
+  const { googleLabel } = await import('../web/js/views/settings.js');
+  const base = { active: true, lastCheck: '2026-10-10T00:00:00.000Z', lastImport: null, error: '', problems: [] };
+  const withNew = googleLabel({ ...base, lastNew: { at: '2026-10-01T03:00:00.000Z', added: 5, updated: 2 } });
+  assert.match(withNew, /最後に新しい点 \S+.*・5 件（更新 2 件）/);
+  assert.doesNotMatch(withNew, /最終取り込み/);
+  assert.match(googleLabel({ ...base, lastImport: '2026-10-10T00:00:00.000Z', lastNew: null }), /最後に新しい点 まだ届いていません/);
+  assert.match(googleLabel({ ...base, lastNew: null, problemCount: 2 }), /取り込めない本 2 冊/);
+  assert.equal(googleLabel(null), '未対応（PC の bh を更新してください）');
+  assert.equal(googleLabel({ active: false, error: '' }), '未設定');
+});
