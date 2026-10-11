@@ -14,7 +14,7 @@ import { askResultBlock, semanticAvailability } from './views/ask.js';
 import { askActions } from './ask-actions.js';
 import { outlineStatusBlock } from './views/outlines.js';
 import { outlineActions } from './outline-actions.js';
-import { importOutcome, importResultBlock } from './views/settings.js';
+import { googleLabel, importOutcome, importResultBlock } from './views/settings.js';
 import { addHighlight, emptyLibrary, listBooks, mergeParsed, parseSeenPicks, parseShuffleRecord, recentPickIds, recordSeenPicks, shuffleRecord, shuffleSeedFor } from '../core/model.js';
 import { COVER_MAX_LENGTH } from '../core/covers.js';
 import { parseFiles } from '../core/parsers/index.js';
@@ -423,14 +423,6 @@ async function pullIfNewer() {
   } finally {
     pulling = false;
   }
-}
-
-function googleLabel(g) {
-  if (!g) return '未対応（PC の bh を更新してください）';
-  if (!g.active) return g.error || '未設定';
-  const time = (iso) => (iso ? new Date(iso).toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' }) : '—');
-  const problems = g.problemCount ?? g.problems?.length ?? 0;
-  return `有効（最終確認 ${time(g.lastCheck)}・最終取り込み ${time(g.lastImport)}）${problems ? ` ／ 取り込めない本 ${problems} 冊（取り込みの画面に理由）` : ''}${g.error ? ` ／ ${g.error}` : ''}`;
 }
 
 const OWN_VERSION_TIMEOUT_MS = 3000;
