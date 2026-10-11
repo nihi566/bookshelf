@@ -4,6 +4,7 @@ import { highlightEditSheet } from './ui.js';
 import { TECHNICAL_VALUES, editBookSheet, registerBookSheet } from './views/library.js';
 import { editThoughtSheet, lineSheet, newThoughtSheet } from './views/thoughts.js';
 import { toggleLineStar } from '../core/line-stars.js';
+import { dismiss, undoDismiss, withoutDismissed } from '../core/dismissals.js';
 import { markDiscoveryRead } from '../core/discovery-reads.js';
 import { FAR_REACTIONS, farConnectionById, reactFar } from '../core/far-reactions.js';
 import { assignThoughtToLine, lineAssignmentOf, unassignThought } from '../core/line-assignments.js';
@@ -253,6 +254,42 @@ export function appActions({ state, openSheet, toast, persist, saveAnalysis, syn
       render({ keepScroll: true });
       sync();
     },
+    // 線(グループ)・面を消す（NIH-193。点は消さない。次の分析でも同じものは作らない）
+    async 'dismiss-concept'(el) {
+      if (notLoaded()) return;
+      const kind = el.dataset.kind === 'plane' ? 'plane' : 'line';
+      const before = state.analysis;
+      const target = (kind === 'plane' ? before?.planes : before?.lines)?.find((x) => x.id === el.dataset.id);
+      if (!target) return render({ keepScroll: true });
+      const message = kind === 'plane'
+        ? `面「${target.name}」を消しますか？ 線(グループ)と点は消えません。次の分析で、線(グループ)はほかの面に入り、同じ面は作りません`
+        : `線(グループ)「${target.name}」を消しますか？ 点は消えません（まだつながらない点になります）。次の分析でも、同じ線(グループ)は作りません`;
+      if (!confirm(message)) return;
+      dismiss(state.library, before, kind, target.id);
+      const after = withoutDismissed(before, state.library);
+      state.analysis = after;
+      await persist();
+      await saveAnalysis();
+      const listHash = kind === 'plane' ? '#/planes' : '#/lines';
+      go(listHash);
+      toast('消しました', 6000, {
+        label: '元に戻す',
+        run: async () => {
+          undoDismiss(state.library, target.id);
+          // 消したあとに分析が差し替わっていなければ、消す前の分析に戻す（差し替わっていたら次の分析から戻る）。
+          // その間に同期で届いた、ほかの端末で消したものは出さない
+          if (state.analysis === after) state.analysis = withoutDismissed(before, state.library);
+          await persist();
+          await saveAnalysis();
+          // 分析が差し替わって戻せなかったときは、次の分析を待つので一覧へ
+          const back = (kind === 'plane' ? state.analysis?.planes : state.analysis?.lines)?.some((x) => x.id === target.id);
+          go(back ? `#/knowledge/${kind}/${target.id}` : listHash);
+          sync();
+          toast('元に戻しました');
+        },
+      });
+      sync();
+    },
     async 'thought-unline'(el) {
       // ほかの端末の同期で先に外れていたら、何もしない
       if (!lineAssignmentOf(state.library, el.dataset.id)) return render({ keepScroll: true });
@@ -285,7 +322,8 @@ export function appActions({ state, openSheet, toast, persist, saveAnalysis, syn
       if (!confirm('この分析に戻しますか？ 知識の画面の線(グループ)・面・立体が、この回のものになります（今の分析も履歴に残っているので、あとで戻せます）')) return;
       el.disabled = true;
       try {
-        state.analysis = await restoreHistory(el.dataset.id);
+        // 消した線(グループ)・面は、戻した回にあっても出さない（NIH-193）
+        state.analysis = withoutDismissed(await restoreHistory(el.dataset.id), state.library);
         await saveAnalysis();
       } finally {
         el.disabled = false;

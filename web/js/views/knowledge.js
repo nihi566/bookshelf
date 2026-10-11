@@ -419,6 +419,7 @@ export const lineView = {
         <div class="row"><button type="button" class="btn small" data-action="line-star" data-id="${l.id}" aria-pressed="${String(starred)}">${starred ? '★ ★を外す' : '☆ ★をつける'}</button><a class="small" href="#/stars">★の一覧</a></div>
         <div class="row"><button type="button" class="btn small primary" data-action="line-to-note" data-id="${l.id}">この線を永久ノートにする</button><span class="small muted">AI の線を下書きにして、自分の言葉に直せます</span></div>
         <div class="row"><a class="btn small" href="#/outline/new?line=${l.id}">文章の骨組みを作る</a></div>
+        <div class="row"><button type="button" class="btn small" data-action="dismiss-concept" data-kind="line" data-id="${l.id}">この線(グループ)を消す</button><span class="small muted">点は消えません。次の分析でも同じ線(グループ)は作りません</span></div>
       </section>
       ${citingNotesBlock(state.library, new Set([...l.highlightIds, ...manual]), 'この線の点を根拠にしている永久ノート')}
       <div class="section"><h2>つながっている点</h2><span class="small muted">${hs.length}</span></div>
@@ -445,6 +446,7 @@ export const planeView = {
       <h1 style="margin:4px 0 12px">${p.name}</h1>
       <section class="card stack"><p style="font-family:var(--serif);line-height:1.9">${p.summary}</p>
         <div class="row"><a class="btn small" href="#/outline/new?plane=${p.id}">文章の骨組みを作る</a><span class="small muted">この面から、人に読ませる文章の見出し・要点・引用を作ります</span></div>
+        <div class="row"><button type="button" class="btn small" data-action="dismiss-concept" data-kind="plane" data-id="${p.id}">この面を消す</button><span class="small muted">線(グループ)と点は消えません。次の分析でも同じ面は作りません</span></div>
       </section>
       <div class="section"><h2>線(グループ)</h2><span class="small muted">${lines.length}</span></div>
       <div class="lines-of-plane">${lines.map((l) => html`<a class="line-row" href="#/knowledge/line/${l.id}"><b>${l.name}</b><span>${l.summary}</span><em>点 ${l.highlightIds.length}</em></a>`)}</div>

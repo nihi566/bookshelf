@@ -19,6 +19,7 @@ import { addHighlight, emptyLibrary, listBooks, mergeParsed, parseSeenPicks, par
 import { COVER_MAX_LENGTH } from '../core/covers.js';
 import { parseFiles } from '../core/parsers/index.js';
 import { applyImport, makeBackup } from '../core/importing.js';
+import { withoutDismissed } from '../core/dismissals.js';
 import { isNotebookJson, parseNotebookJson } from '../core/parsers/kindle-notebook.js';
 import { createLlmClient } from '../core/analysis/llm.js';
 import { analyzeLibrary, recommendBooks, recommendationNote } from '../core/analysis/pipeline.js';
@@ -147,8 +148,10 @@ async function importFiles(files) {
     const { stats } = r;
     state.library = r.library;
     await persistLibrary();
-    if (r.analysisChanged) {
-      state.analysis = r.analysis;
+    // 消した線(グループ)・面は、取り込んだ分析にあっても、バックアップで消した記録だけが届いても出さない（NIH-193）
+    const shown = withoutDismissed(r.analysisChanged ? r.analysis : state.analysis, state.library);
+    if (r.analysisChanged || shown !== state.analysis) {
+      state.analysis = shown;
       await save.analysis();
     }
     // 自動同期で画面を描き直しても結果欄を出し直せるよう、画面を離れるか次に取り込むまで覚えておく
@@ -241,7 +244,8 @@ async function runAnalysis(mode = 'analyze') {
         try {
           // 前回の線・面を引き継ぎ、変わったところだけ AI を呼ぶ（full: 最初から作り直す）
           const { analysis } = await analyzeLibrary({ library: state.library, llm, cache, previous: state.analysis, signal: abort.signal, onProgress, options: { wishlist, full: mode === 'full' } });
-          state.analysis = analysis;
+          // 分析の最中に消した線(グループ)・面は出さない（NIH-193）
+          state.analysis = withoutDismissed(analysis, state.library);
         } finally {
           await saveCache(cache);
         }
@@ -305,7 +309,8 @@ async function pollPcJob() {
       return setJob({ running: false, lost: true, where: 'pc', error: '', message: '' });
     }
     if (analysis) {
-      state.analysis = analysis;
+      // PC の分析の最中に消した線(グループ)・面は、届いた分析にあっても出さない（NIH-193）
+      state.analysis = withoutDismissed(analysis, state.library);
       await save.analysis();
     }
     setJob({ running: false, lost: false, stage: 'done', message: '完了しました', analysisAt: state.analysis?.createdAt });

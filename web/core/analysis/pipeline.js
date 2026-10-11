@@ -24,6 +24,7 @@ import { diffAnalyses } from './changes.js';
 import { farDiscovery, findDiscoveries, mergeDiscoveries } from './discoveries.js';
 import { FAR_MAX_UNREADABLE, farCandidates, farId, judgeFarPairs, mergeFarConnections, pickReps } from './far.js';
 import { farReactionsOf, wrongFarIds } from '../far-reactions.js';
+import { dismissedPointSets, skipDismissedLines, skipDismissedPlanes, withoutDismissed } from '../dismissals.js';
 import { EMBED_BATCH_SIZE } from './llm.js';
 import { isAnalysisShape } from './shape.js';
 import { searchBooks, verifyBooks } from './recommend.js';
@@ -117,7 +118,8 @@ function promptPoint(library, p) {
  */
 export async function analyzeLibrary({ library, llm: rawLlm, cache = emptyCache(), previous: rawPrevious = null, onProgress = () => {}, signal, options = {} }) {
   // 形の壊れた前回の結果（ほかの端末・バックアップから届いたもの）は使わない（毎回の失敗にしない）
-  const previous = rawPrevious && isAnalysisShape(rawPrevious) ? rawPrevious : null;
+  // 消した線・面は前回から外して引き継ぐ（消した線の点は「まだつながらない点」として、増えた点と見なさない。NIH-193）
+  const previous = rawPrevious && isAnalysisShape(rawPrevious) ? withoutDismissed(rawPrevious, library) : null;
   const { granularity = LINE_TARGET_SIZE, maxLines = MAX_LINES, maxPlanes = MAX_PLANES, full = false, recommend = true, verify = true, recommendCount = 6, fetchImpl, wishlist } = options;
   // 点 = 本に引いた線（技術書は除く）+ 思いつき（捨てたものは除く）
   const points = analysisPoints(library);
@@ -188,7 +190,8 @@ export async function analyzeLibrary({ library, llm: rawLlm, cache = emptyCache(
   }
   // 自分で入れた思いつきは、入れた線の点にする（線を作る AI に見せ、指紋にも入る。NIH-84）
   const pinned = new Map(points.map((p, i) => [i, lineAssignmentOf(library, p.id)?.lineId]).filter(([, lineId]) => lineId));
-  const { groups, isolated } = placeAssigned(carried.lines, carried.isolated, pinned);
+  // 消した線と同じとみなせる線は作らない（最初から作り直して ID が変わっても。NIH-193）
+  const { groups, isolated } = skipDismissedLines(placeAssigned(carried.lines, carried.isolated, pinned), points.map((p) => p.id), dismissedPointSets(library, 'line'));
   const prevLines = new Map((base?.lines || []).map((l) => [l.id, l]));
   const prevPlanes = new Map((base?.planes || []).map((p) => [p.id, p]));
   const lines = [];
@@ -228,6 +231,7 @@ export async function analyzeLibrary({ library, llm: rawLlm, cache = emptyCache(
     });
   }
   onProgress({ stage: 'lines', done: groups.length, total: groups.length, message: `線を ${lines.length} 本引きました` });
+  if (!lines.length && carried.lines.length) throw new Error('消した線(グループ)と同じもののほかに、点どうしのつながりが見つかりませんでした。ハイライトを増やしてから試してください。');
   if (!lines.length) throw new Error('点どうしのつながりが見つかりませんでした。ハイライトを増やしてから試してください。');
   dedupeNames(lines);
   // 線の点の中心（面を作るときは線の説明文の埋め込みを混ぜるので、その前に取っておく。意味の近い点・関わる点に使う）
@@ -244,7 +248,9 @@ export async function analyzeLibrary({ library, llm: rawLlm, cache = emptyCache(
     }
     lines.forEach((l, i) => (l.vector = l2normalize(l.vector.map((x, j) => x + emb.vectors[summaryKeys[i]][j]))));
   }
-  const planeGroups = carryPlanes({ lineIds: lines.map((l) => l.id), vectors: lines.map((l) => l.vector), previousPlanes: base?.planes || [], maxPlanes });
+  // 消した面と同じとみなせる面は作らず、その線はほかの面に入れる（NIH-193）
+  const linePlaneGroups = carryPlanes({ lineIds: lines.map((l) => l.id), vectors: lines.map((l) => l.vector), previousPlanes: base?.planes || [], maxPlanes });
+  const planeGroups = skipDismissedPlanes(linePlaneGroups, lines, lines.map((l) => l.vector), dismissedPointSets(library, 'plane'));
   // 永久ノート（人間がまとめた線）。根拠の点が入っている面と、立体を作る AI に見せる（G3-5。線から作って直していない下書きは除く）。
   // AI に見せる文を指紋にも入れて、ノートを書き直したら面・立体を作り直す（ノートが無ければ指紋は前と同じ）
   const notes = notesForAnalysis(library);

@@ -19,6 +19,7 @@ import { mergeLinks } from './links.js';
 import { normalizeOutline } from './outlines.js';
 import { mergeLineAssignments } from './line-assignments.js';
 import { mergeLineStars } from './line-stars.js';
+import { mergeDismissals } from './dismissals.js';
 
 export const SOURCES = {
   kindle: 'Kindle',
@@ -454,6 +455,8 @@ export function mergeLibraries(base, incoming) {
   out.lineAssignments = mergeLineAssignments(base.lineAssignments, incoming.lineAssignments, now);
   // 線(グループ)の★は、つけた・外した時刻が新しい方
   out.lineStars = mergeLineStars(base.lineStars, incoming.lineStars, now);
+  // 消した線(グループ)・面は、消した・戻した時刻が新しい方
+  out.dismissals = mergeDismissals(base.dismissals, incoming.dismissals, now);
   out.updatedAt = later(base.updatedAt, incoming.updatedAt);
   return out;
 }
