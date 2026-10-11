@@ -534,7 +534,6 @@ const appOps = appActions({
   go: (hash) => (location.hash = hash),
   confirm: (message) => confirm(message),
   coverDataUrl,
-  clipboard: () => navigator.clipboard,
   restoreHistory: (id) => companion.restoreHistory(id),
   pinHistory: (id, pinned) => companion.pinHistory(id, pinned),
   setAutoAnalysis: (patch) => companion.setAutoAnalysis(patch),
