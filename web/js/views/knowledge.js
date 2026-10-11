@@ -120,13 +120,19 @@ function changesBlock(a, { links = true } = {}) {
     </section>`;
 }
 
+/** 分析を始めるボタン（知識の画面と増えた点の一覧で同じもの。分析中・点 4 件未満は押せない） */
+function runAnalysisButton(state) {
+  const disabled = state.job?.running || libraryStats(state.library).points < 4;
+  return html`<button class="btn primary" data-action="run-analysis" ${disabled ? 'disabled' : ''}>${state.analysis ? '分析し直す' : '点をつないで分析する'}</button>`;
+}
+
 export const knowledge = {
   render({ state }) {
     const a = state.analysis;
     const s = libraryStats(state.library);
     const job = state.job;
     const summary = aiSummary(state.settings, state.servedByCompanion);
-    const runBtn = html`<button class="btn primary" data-action="run-analysis" ${job?.running || s.points < 4 ? 'disabled' : ''}>${a ? '分析し直す' : '点をつないで分析する'}</button>`;
+    const runBtn = runAnalysisButton(state);
     const head = html`<div class="page-head"><div><h1>知識</h1><div class="sub">点 ${s.points} → 線 ${a?.lines.length ?? '–'} → 面 ${a?.planes.length ?? '–'} → 立体</div></div><a class="btn small" href="#/ask">問いかける</a></div>
       <div class="card stack">
         <p class="small">AI: ${summary || html`<b>未設定</b> — <a href="#/settings">AI の接続を設定する</a>`}</p>
@@ -417,10 +423,14 @@ export const pendingView = {
     const head = html`<a class="back" href="#/knowledge">‹ 知識</a><div class="page-head"><h1>前回の分析のあとに増えた点</h1></div>`;
     if (!state.analysis) return html`${head}<p class="card small muted">まだ分析していません。</p>`;
     const hs = pendingPointList(analysisPoints(state.library), state.analysis);
-    if (!hs.length) return html`${head}<p class="card small muted">前回の分析のあとに増えた点はありません。</p>`;
+    // 分析し直して増えた点が無くなっても、終わったこと（失敗ならその理由）が見えるように進み具合は残す
+    if (!hs.length) return html`${head}<p class="card small muted">前回の分析のあとに増えた点はありません。</p>${jobPanel(state.job)}`;
+    // NIH-121: メモ・タグ・★を付け終えたら、知識の画面へ戻らずに分析し直せる
     return html`${head}
       <p class="help">${hs.length} 件。まだどの線(グループ)にも入っていません。分析し直す前に、自分のメモ・タグ・★を付けておくと、次の分析の線に反映されます。</p>
-      ${hs.map((h) => pointCard(h, { library: state.library }))}`;
+      ${hs.map((h) => pointCard(h, { library: state.library }))}
+      <div class="row">${runAnalysisButton(state)}</div>
+      ${jobPanel(state.job)}`;
   },
 };
 

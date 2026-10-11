@@ -95,6 +95,9 @@ export const THOUGHT_PATHS = ['/', '/thoughts', '/search'];
 // 分析の結果を出す線・面・立体のページ（分析が終わったら描き直す）
 export const LAYER_PATHS = ['/lines', '/planes', '/solid'];
 
+// 「分析し直す」と分析の進み具合を出すページ（進み具合が変わるたびに描き直す）
+export const JOB_PATHS = ['/knowledge', '/knowledge/pending'];
+
 // PC の状態（拡張の確認結果など）を表示する画面
 export const PC_INFO_PATHS = ['/settings', '/import', '/', '/knowledge'];
 // 描き直さず、欄だけ差し替える画面（描き直すと取り込み結果の表示・開いた説明・今日の点の「別の点」が消える）
