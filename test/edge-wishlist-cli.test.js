@@ -190,7 +190,7 @@ test('edge wishlist: 検索・照合・要約の空入力', () => {
   assert.equal(findWishlistBook([], 'x'), undefined);
   assert.equal(titleKey(null), '');
   assert.equal(titleKey(undefined), '');
-  assert.deepEqual(wishlistSummary([]), { total: 0, kuCount: 0, picks: [] });
+  assert.deepEqual(wishlistSummary([]), { total: 0, kuCount: 0, dropCount: 0, picks: [] });
   const look = readingLookup([{ asin: 'nope', title: '', count: 1 }]);
   assert.equal(look({ asin: '', title: '' }), null);
 });

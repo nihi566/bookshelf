@@ -181,12 +181,13 @@ export function pointCard(p, opts = {}) {
   return isThought(p) ? thoughtCard(p, opts) : highlightCard(p, opts);
 }
 
-export function bookRow(b) {
+/** 読んだ本の一覧の行。joinCandidates: 本の画面に出る「次の点とくっつける?」の印の数（1 件以上のときだけ出す。NIH-164） */
+export function bookRow(b, { joinCandidates = 0 } = {}) {
   return html`<li><a class="book-item" href="#/book/${b.id}">
     ${bookSpine(b)}
     <span class="grow">
       <span class="title">${b.title}</span>
-      <span class="meta">${b.author || '著者不明'} ${b.sources.map(sourceBadge)}${b.isTechnical ? html` <span class="badge tech">技術書</span>` : ''}</span>
+      <span class="meta">${b.author || '著者不明'} ${b.sources.map(sourceBadge)}${b.isTechnical ? html` <span class="badge tech">技術書</span>` : ''}${joinCandidates > 0 ? html` <span class="badge join-hint">くっつける候補 ${joinCandidates}</span>` : ''}</span>
     </span>
     <span class="count">${b.count}<span class="unit"> ${b.isTechnical ? '件' : '点'}</span><small>${isoDate(b.lastHighlightedAt) || '-'}</small></span>
   </a></li>`;
@@ -359,6 +360,8 @@ export function kindleSyncLines(ks, now = new Date().toISOString()) {
     lines.push(`自動取り込み: ${result.error}`);
   }
   lines.push(ks.lastNew?.at ? `最後に新しい点: ${timeText(ks.lastNew.at)}・${ks.lastNew.added} 件` : '最後に新しい点: まだ届いていません');
+  // 冊数を送らないのは古い拡張。拡張は手で読み込む形なので、リポジトリを更新しても自動では新しくならない
+  if (!Number.isInteger(last.fetched)) lines.push('拡張機能が古いようです。chrome://extensions で再読み込みしてください');
   return lines;
 }
 
