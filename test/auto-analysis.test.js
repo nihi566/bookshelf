@@ -208,6 +208,7 @@ test('G5-3: 自動の分析が失敗しても前回の結果は残り、失敗�
     assert.ok(info.autoAnalysis.lastErrorAt);
     assert.equal(info.autoAnalysis.lastSuccessAt, okAt);
     assert.equal(info.autoAnalysis.pending, 10);
+    assert.equal(info.autoAnalysis.removed, 0, '消えた点の数も返す（NIH-135）');
     assert.equal(info.autoAnalysis.failureCount, 1, '続けて失敗した回数（NIH-53: ホームの警告に出す）');
     // すぐには試し直さないが、時間がたてば試し直す（LLM が戻っていなければ、続けて失敗した回数が増える）
     assert.equal((await server.checkAutoAnalyze()).started, false);

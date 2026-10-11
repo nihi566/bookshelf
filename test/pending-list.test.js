@@ -76,3 +76,36 @@ test('NIH-103: 一覧の画面のルートがある', async () => {
   const { pendingView } = await import('../web/js/views/knowledge.js');
   assert.deepEqual([matchRoute('/knowledge/pending').view, matchRoute('/knowledge/pending').tab], [pendingView, 'knowledge']);
 });
+
+// NIH-121: 一覧の画面から、そのまま「分析し直す」を押せる（知識の画面のボタンと同じ data-action）
+const RERUN = /<button class="btn primary" data-action="run-analysis" (disabled)?>分析し直す<\/button>/;
+
+test('NIH-121: 一覧の画面の下に「分析し直す」がある（分析中・点 4 件未満は押せない）', async () => {
+  const { pendingView } = await import('../web/js/views/knowledge.js');
+  const lib = sample();
+  const a = analysisOf(lib, 3);
+  const out = String(pendingView.render({ state: st(lib, a) }));
+  assert.ok(RERUN.test(out), 'ボタンがある');
+  assert.equal(out.match(RERUN)[1], undefined, '押せる');
+  assert.ok(out.indexOf('data-action="run-analysis"') > out.lastIndexOf('#/point/'), '一覧の下に置く');
+  const job = { running: true, stage: 'embed', message: '埋め込みを作っています', done: 1, total: 4 };
+  const running = String(pendingView.render({ state: { ...st(lib, a), job } }));
+  assert.equal(running.match(RERUN)?.[1], 'disabled', '分析中は押せない');
+  assert.match(running, /埋め込みを作っています/, '進み具合が見える');
+  const few = emptyLibrary();
+  for (const text of ['一つ目の思いつき', '二つ目の思いつき', '三つ目の思いつき']) addThought(few, { text }, '2026-10-10T00:00:00.000Z');
+  const fewOut = String(pendingView.render({ state: st(few, analysisOf(few, 2)) }));
+  assert.equal(fewOut.match(RERUN)?.[1], 'disabled', '点が 4 件未満なら押せない');
+});
+
+test('NIH-121: 増えた点が 0 件・未分析なら「分析し直す」を出さない', async () => {
+  const { pendingView } = await import('../web/js/views/knowledge.js');
+  const lib = sample();
+  assert.doesNotMatch(String(pendingView.render({ state: st(lib, analysisOf(lib, 0)) })), /data-action="run-analysis"/);
+  assert.doesNotMatch(String(pendingView.render({ state: st(lib, null) })), /data-action="run-analysis"/);
+});
+
+test('NIH-121: 分析の進み具合が変わると、知識の画面と一覧の画面を描き直す', async () => {
+  const { JOB_PATHS } = await import('../web/js/routes.js');
+  assert.deepEqual(JOB_PATHS, ['/knowledge', '/knowledge/pending']);
+});

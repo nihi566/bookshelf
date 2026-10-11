@@ -5,7 +5,7 @@ import { loadCache, loadState, save, saveCache, state } from './state.js';
 import { buildBookmarklet, companion, detectCompanion, download, syncWithPc } from './services.js';
 import { openSheet, serveVersionBlock, toast } from './ui.js';
 import { swVersion } from '../core/serve-version.js';
-import { LAYER_PATHS, PC_INFO_BOXES, PC_INFO_PATHS, THOUGHT_PATHS, matchRoute, parseHash as parseRouteHash } from './routes.js';
+import { JOB_PATHS, LAYER_PATHS, PC_INFO_BOXES, PC_INFO_PATHS, THOUGHT_PATHS, matchRoute, parseHash as parseRouteHash } from './routes.js';
 import { appActions } from './app-actions.js';
 import { applySyncBusy, isSyncing, trackSync } from './sync-busy.js';
 import { noteActions } from './note-actions.js';
@@ -14,7 +14,7 @@ import { askResultBlock, semanticAvailability } from './views/ask.js';
 import { askActions } from './ask-actions.js';
 import { outlineStatusBlock } from './views/outlines.js';
 import { outlineActions } from './outline-actions.js';
-import { importOutcome, importResultBlock } from './views/settings.js';
+import { googleLabel, importOutcome, importResultBlock } from './views/settings.js';
 import { addHighlight, emptyLibrary, listBooks, mergeParsed, parseSeenPicks, parseShuffleRecord, recentPickIds, recordSeenPicks, shuffleRecord, shuffleSeedFor } from '../core/model.js';
 import { COVER_MAX_LENGTH } from '../core/covers.js';
 import { parseFiles } from '../core/parsers/index.js';
@@ -155,11 +155,11 @@ async function importFiles(files) {
     state.lastImport = { results, stats, analysisChanged: r.analysisChanged };
     const outcome = importOutcome(results, stats);
     toast(outcome.message, outcome.failed ? 5000 : undefined);
-    showResult(String(importResultBlock(state.lastImport)));
+    showResult(String(importResultBlock(state.lastImport, state)));
     autoSyncAfterChange();
   } catch (e) {
     state.lastImport = { error: e.message };
-    showResult(String(importResultBlock(state.lastImport)));
+    showResult(String(importResultBlock(state.lastImport, state)));
   }
 }
 
@@ -186,7 +186,7 @@ function setJob(patch) {
   state.job = { ...(state.job || {}), ...patch };
   updateStatus();
   const { path } = parseHash();
-  if (path === '/knowledge') {
+  if (JOB_PATHS.includes(path)) {
     const panel = view.querySelector('.steps')?.closest('.card');
     // 進捗だけの更新は画面全体を描き直さない
     if (panel && state.job.running) {
@@ -423,14 +423,6 @@ async function pullIfNewer() {
   } finally {
     pulling = false;
   }
-}
-
-function googleLabel(g) {
-  if (!g) return '未対応（PC の bh を更新してください）';
-  if (!g.active) return g.error || '未設定';
-  const time = (iso) => (iso ? new Date(iso).toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' }) : '—');
-  const problems = g.problemCount ?? g.problems?.length ?? 0;
-  return `有効（最終確認 ${time(g.lastCheck)}・最終取り込み ${time(g.lastImport)}）${problems ? ` ／ 取り込めない本 ${problems} 冊（取り込みの画面に理由）` : ''}${g.error ? ` ／ ${g.error}` : ''}`;
 }
 
 const OWN_VERSION_TIMEOUT_MS = 3000;

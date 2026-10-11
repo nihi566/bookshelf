@@ -1,6 +1,6 @@
 // 取り込み・設定の画面
 import { html } from '../html.js';
-import { deletedHighlights, libraryStats } from '../../core/model.js';
+import { deletedBooks, deletedHighlights, libraryStats } from '../../core/model.js';
 import { ACCEPT } from '../../core/parsers/index.js';
 import { isoDate } from '../../core/text.js';
 import { kindleSyncLines } from '../ui.js';
@@ -19,6 +19,19 @@ function shortTime(iso) {
   return Number.isNaN(d.getTime()) ? '—' : `${d.getMonth() + 1}/${d.getDate()} ${d.toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' })}`;
 }
 
+/** Play ブックスで最後に新しい点が届いた時刻・件数（PC の state.json に残るので、bh serve を起動し直しても消えない） */
+function lastNewText(n) {
+  return n?.at ? `${shortTime(n.at)}・${Number(n.added) || 0} 件${n.updated ? `（更新 ${n.updated} 件）` : ''}` : 'まだ届いていません';
+}
+
+/** 設定 → 接続を確認 の Play ブックスの要約（取り込み画面と同じ「最後に新しい点」を出す） */
+export function googleLabel(g) {
+  if (!g) return '未対応（PC の bh を更新してください）';
+  if (!g.active) return g.error || '未設定';
+  const problems = g.problemCount ?? g.problems?.length ?? 0;
+  return `有効（最終確認 ${shortTime(g.lastCheck)}・最後に新しい点 ${lastNewText(g.lastNew)}）${problems ? ` ／ 取り込めない本 ${problems} 冊（取り込みの画面に理由）` : ''}${g.error ? ` ／ ${g.error}` : ''}`;
+}
+
 /**
  * 取り込み画面の Play ブックス自動取り込みの状態欄の中身（PC がドライブを見張っている結果）。
  * 取り込めない本は、文書が直るまで出し続ける（PC の記録に残っている）
@@ -30,9 +43,8 @@ export function playbooksSyncBlock(state) {
   if (!g.active) return html`<p class="small">自動取り込み: ${g.error || '未設定'}</p>`;
   const problems = Array.isArray(g.problems) ? g.problems : [];
   const count = Number.isInteger(g.problemCount) ? g.problemCount : problems.length;
-  const n = g.lastNew;
   return html`<p class="small">自動取り込み: 有効（最終確認 ${shortTime(g.lastCheck)}）</p>
-    <p class="small">最後に新しい点: ${n?.at ? `${shortTime(n.at)}・${Number(n.added) || 0} 件${n.updated ? `（更新 ${n.updated} 件）` : ''}` : 'まだ届いていません'}</p>
+    <p class="small">最後に新しい点: ${lastNewText(g.lastNew)}</p>
     ${count
       ? html`<details class="pb-problems">
           <summary class="small">取り込めない本 ${count} 冊（押すと理由）</summary>
@@ -95,16 +107,32 @@ function importHelpLinks(name) {
   return html`<div class="row small" style="margin-top:4px">取り出し方: ${importHelpTargets(name).map((t) => html`<button type="button" class="btn small" data-action="open-import-help" data-target="${t.id}">${t.label}</button>`)}</div>`;
 }
 
+/**
+ * 新しい点が入ったときの、分析への導線（知識の画面の「分析し直す」へ）。PC の自動の分析がオンなら、自動で分析される旨を添える
+ * @param {number} added 新しい点の数
+ * @param {object} [state] 自動の分析の状態を見るため（無ければ自動の一言は出さない）
+ */
+function analyzeLink(added, state) {
+  if (!added) return { button: '', note: '' };
+  const auto = state?.settings?.ai?.mode === 'companion' && state.pcInfo?.autoAnalysis?.enabled === true;
+  return {
+    button: html`<a class="btn small primary" href="#/knowledge">分析する</a>`,
+    note: auto ? html`<p class="small muted">PC の自動の分析がオンです。条件を満たすと PC が分析し直します。すぐに線につなぐなら「分析する」から。</p>` : '',
+  };
+}
+
 /** 取り込み画面の結果欄の中身。{ error } は読み込みそのものの失敗、{ results, stats, analysisChanged } はファイルごとの結果 */
-export function importResultBlock(result) {
+export function importResultBlock(result, state) {
   if (result.error) return html`<p class="notice err">${result.error}</p>`;
   const { results, stats } = result;
   const o = importOutcome(results, stats);
+  const analyze = analyzeLink(stats.added, state);
   return html`<div class="card" style="margin-top:12px">
         <p class="notice${o.tone ? ` ${o.tone}` : ''}">${o.note}${result.analysisChanged ? '（バックアップの新しい分析結果も反映）' : ''}</p>
         <ul class="result-list">${results.map((r) => html`<li>${r.error ? '✗' : '✓'} <b>${r.name}</b><br><span class="small muted">${r.error || `${r.formatLabel} — 本 ${r.books} 冊 / 点 ${r.highlights} 件${r.images ? `（画像 ${r.images} 枚は取り込めません）` : ''}`}</span>${r.error ? importHelpLinks(r.name) : ''}</li>`)}</ul>
         ${stats.memoTitles?.length ? html`<p class="small muted">既にある本にまとめた読書メモ: ${stats.memoTitles.map((m) => `「${m.from}」→『${m.to}』`).join('、')}</p>` : ''}
-        <div class="row" style="margin-top:8px"><a class="btn small" href="#/books">本を見る</a></div>
+        ${analyze.note}
+        <div class="row" style="margin-top:8px">${analyze.button}<a class="btn small" href="#/books">本を見る</a></div>
       </div>`;
 }
 
@@ -116,7 +144,7 @@ export const importView = {
         <input type="file" id="file-input" multiple accept="${ACCEPT}">
         <b>ファイルを選ぶ</b><br><span class="help">またはここにドロップ（.txt .html .docx .md .json .zip）</span>
       </label>
-      <div id="import-result">${refresh && state.lastImport ? importResultBlock(state.lastImport) : ''}</div>
+      <div id="import-result">${refresh && state.lastImport ? importResultBlock(state.lastImport, state) : ''}</div>
 
       <div class="section"><h2>Kindle</h2></div>
       <div class="card">
@@ -184,6 +212,14 @@ export const importView = {
   },
 };
 
+/** 削除した点の入口に出す件数（削除した本は点と分けて冊で数える） */
+function trashCount(library) {
+  const points = deletedHighlights(library).length;
+  const books = deletedBooks(library).length;
+  if (!books) return `${points} 件`;
+  return points ? `${points} 件・本 ${books} 冊` : `本 ${books} 冊`;
+}
+
 export const settingsView = {
   render({ state }) {
     const ai = state.settings.ai;
@@ -227,7 +263,7 @@ export const settingsView = {
       <div class="section"><h2>データ</h2></div>
       <div class="card stack">
         <p class="help">ハイライトと思いつきはこの端末（ブラウザ）の中だけに保存されています。本 ${s.books} 冊 / 点 ${s.points} 件${s.thoughts ? `（うち思いつき ${s.thoughts} 件）` : ''}。</p>
-        <a class="row spread" href="#/trash"><b>削除した点</b><span class="muted">${deletedHighlights(state.library).length} 件 ›</span></a>
+        <a class="row spread" href="#/trash"><b>削除した点</b><span class="muted">${trashCount(state.library)} ›</span></a>
         <div class="row"><button class="btn" data-action="backup">バックアップを保存</button><a class="btn" href="#/import">バックアップから戻す</a></div>
         <button class="btn danger" data-action="clear-all">この端末のデータをすべて消す</button>
       </div>

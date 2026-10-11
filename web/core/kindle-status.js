@@ -11,18 +11,21 @@ export function normalizeKindleReport(body) {
   if (typeof needLogin !== 'boolean') throw new Error('needLogin は true / false で指定してください');
   const added = body.added ?? 0;
   if (!Number.isInteger(added) || added < 0 || added > 100000) throw new Error('added は 0〜100000 の整数で指定してください');
+  // 読み直した冊数。古い拡張は送らないので、届いたときだけ持つ
+  const hasFetched = body.fetched != null;
+  if (hasFetched && (!Number.isInteger(body.fetched) || body.fetched < 0 || body.fetched > 100000)) throw new Error('fetched は 0〜100000 の整数で指定してください');
   const rawInterval = body.intervalMin ?? DEFAULT_INTERVAL_MIN;
   const intervalMin = typeof rawInterval === 'string' && rawInterval.trim() ? Number(rawInterval) : rawInterval;
   if (!Number.isInteger(intervalMin) || intervalMin < 1 || intervalMin > 1440) throw new Error('intervalMin は 1〜1440 の整数で指定してください');
   const error = body.error ?? '';
   if (typeof error !== 'string') throw new Error('error は文字列で指定してください');
-  return { ok: body.ok, needLogin, added, intervalMin, error: Array.from(error.replace(/[\u0000-\u001f\u007f]/g, '')).slice(0, MAX_ERROR).join('') };
+  return { ok: body.ok, needLogin, added, ...(hasFetched && { fetched: body.fetched }), intervalMin, error: Array.from(error.replace(/[\u0000-\u001f\u007f]/g, '')).slice(0, MAX_ERROR).join('') };
 }
 
 /** 前回の保存内容に今回の報告を重ねる（最後の成功・最後に新しい点は、今回なかったら前回のまま） */
 export function mergeKindleSync(prev, report, now) {
-  const { ok, error, needLogin, added, intervalMin } = report;
-  const out = { lastCheck: { at: now, ok, error, needLogin, added, intervalMin } };
+  const { ok, error, needLogin, added, fetched, intervalMin } = report;
+  const out = { lastCheck: { at: now, ok, error, needLogin, added, ...(fetched !== undefined && { fetched }), intervalMin } };
   const lastSuccessAt = ok ? now : prev?.lastSuccessAt;
   if (lastSuccessAt) out.lastSuccessAt = lastSuccessAt;
   const lastNew = added > 0 ? { at: now, added } : prev?.lastNew;
