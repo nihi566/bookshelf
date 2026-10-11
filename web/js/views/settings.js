@@ -31,9 +31,10 @@ export function googleLabel(g) {
   return `有効（最終確認 ${shortTime(g.lastCheck)}・最後に新しい点 ${lastNewText(g.lastNew)}）${problems ? ` ／ 取り込めない本 ${problems} 冊（取り込みの画面に理由）` : ''}${g.error ? ` ／ ${g.error}` : ''}`;
 }
 
-/** 設定 → 接続を確認 の Kindle（ブラウザ拡張）の要約。拡張から連絡が無い（ks が null）ときも「まだ届いていません」 */
+/** 設定 → 接続を確認 の Kindle（ブラウザ拡張）の要約。拡張から連絡が無いとき（取り込み画面と同じく確認の報告が無い）は、新しい点が無いのと区別して出す */
 export function kindleLabel(ks) {
-  return `最後に新しい点 ${lastNewText(ks?.lastNew)}`;
+  if (!ks?.lastCheck) return '拡張から連絡がありません（取り込み画面に設定の手順）';
+  return `最後に新しい点 ${lastNewText(ks.lastNew)}`;
 }
 
 /**
