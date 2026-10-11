@@ -435,7 +435,8 @@ export function pendingNudge(state, { toKnowledge = false } = {}) {
   const head = n
     ? html`前回の分析のあとに増えた点 <a href="#/knowledge/pending" title="増えた点を見る"><b>${n}</b> 件</a>（まだ線につながっていません）`
     : html`前回の分析のあとに増えた点 <b>0</b> 件`;
-  const gone = removed ? html`。減った点 <b>${removed}</b> 件（次の分析で線から外れます）` : '';
+  // 減った点も、押すと消えた点そのもの（理由と戻す画面への入口）の一覧へ（NIH-152）
+  const gone = removed ? html`。減った点 <a href="#/knowledge/removed" title="消えた点を見る"><b>${removed}</b> 件</a>（次の分析で線から外れます）` : '';
   const lead = toKnowledge ? html` — <a href="#/knowledge">分析し直す</a>` : '。「分析し直す」で、変わったところだけ作り直します';
   return html`<p class="small pending-nudge" style="${toKnowledge ? 'margin-top:8px' : ''}">${head}${gone}${lead}</p>`;
 }

@@ -28,7 +28,8 @@ function analysisWith(lib, gone = 0) {
 }
 
 const st = (library, analysis) => ({ library, analysis, settings: { ai: { mode: 'companion', companionUrl: '' } }, servedByCompanion: true, job: null, pcInfo: null });
-const REMOVED = /減った点 <b>(\d+)<\/b> 件/;
+// NIH-152 から件数は消えた点の一覧へのリンク
+const REMOVED = /減った点 <a href="#\/knowledge\/removed"[^>]*><b>(\d+)<\/b> 件<\/a>/;
 
 test('NIH-135: 消えた点が 1 件以上あるとき、知識の画面とホームの案内に「減った点 N 件」が出る', async () => {
   const { knowledge } = await import('../web/js/views/knowledge.js');
@@ -49,7 +50,7 @@ test('NIH-135: 増えた点と減った点が両方あれば、増えた点の�
   // 今の点の最後の 1 件を前回の分析から外す（増えた点 1 件）
   a.lines[0].highlightIds = a.lines[0].highlightIds.filter((id) => id !== analysisPoints(lib).at(-1).id);
   const out = String(knowledge.render({ state: st(lib, a) }));
-  assert.match(out, /<b>1<\/b> 件<\/a>（まだ線につながっていません）。減った点 <b>2<\/b> 件（次の分析で線から外れます）/);
+  assert.match(out, /<b>1<\/b> 件<\/a>（まだ線につながっていません）。減った点 <a [^>]*><b>2<\/b> 件<\/a>（次の分析で線から外れます）/);
 });
 
 test('NIH-135: 消えた点が 0 件なら「減った点」は出さない', async () => {

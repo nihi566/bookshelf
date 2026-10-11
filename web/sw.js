@@ -44,6 +44,7 @@ const SHELL = [
   'core/line-stars.js',
   'js/views/stars.js',
   'js/views/trash.js',
+  'js/views/removed.js',
   'core/notes.js',
   'core/note-evidence.js',
   'core/point-ids.js',

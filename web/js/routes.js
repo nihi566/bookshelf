@@ -6,6 +6,7 @@ import { autoStatusBlock, historyView, isolatedView, knowledge, lineView, pendin
 import { linesView, planesView, solidView } from './views/layers.js';
 import { starsView } from './views/stars.js';
 import { trashView } from './views/trash.js';
+import { removedView } from './views/removed.js';
 import { discoveriesView, discoveryView } from './views/discoveries.js';
 import { farView } from './views/far.js';
 import { noteView, notesView } from './views/notes.js';
@@ -40,6 +41,8 @@ export const ROUTES = [
   [/^\/knowledge\/isolated$/, isolatedView, 'knowledge'],
   // 前回の分析のあとに増えた点（知識の画面・ホームの「増えた点 N 件」から）
   [/^\/knowledge\/pending$/, pendingView, 'knowledge'],
+  // 前回の分析のあとに消えた点（「減った点 N 件」から。理由と戻す画面への入口）
+  [/^\/knowledge\/removed$/, removedView, 'knowledge'],
   // 遠いつながり（別の本・別の面の点の組を AI が読み、共通する考えがあったもの）
   [/^\/knowledge\/far$/, farView, 'knowledge'],
   // 永久ノート（1 ノート = 1 アイデア）と、点 1 つ（それを根拠にしている永久ノート）
