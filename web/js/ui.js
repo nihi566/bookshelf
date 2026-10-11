@@ -5,7 +5,7 @@ import { hash, isoDate, truncate } from '../core/text.js';
 import { kindleSyncState } from '../core/kindle-status.js';
 import { bookCoverUrl } from '../core/covers.js';
 import { analysisPoints, isThought } from '../core/points.js';
-import { pendingPoints } from '../core/auto-analysis.js';
+import { pendingPoints, removedPoints } from '../core/auto-analysis.js';
 import { serveVersionCheck } from '../core/serve-version.js';
 import { THOUGHT_LABEL, THOUGHT_STATUS, isThoughtUnsynced } from '../core/thoughts.js';
 
@@ -414,15 +414,21 @@ export function homeAlertBlock(state) {
 
 /**
  * 前回の分析のあとに増えた点（どの線にも「まだつながらない点」にも入っていない点。ID で数える）の数と、「分析し直す」への案内。
- * 知識の画面は 0 件でも数を出す。ホーム（toKnowledge）は 1 件以上のときだけ出し、知識の画面の「分析し直す」へリンクする
+ * 前回の分析に入っていて今は無い点（本を技術書にした・消した。NIH-135）が 1 件以上あれば「減った点 N 件」も添える。
+ * 知識の画面は 0 件でも増えた点の数を出す。ホーム（toKnowledge）は増えた点か減った点が 1 件以上のときだけ出し、知識の画面の「分析し直す」へリンクする
  */
 export function pendingNudge(state, { toKnowledge = false } = {}) {
   const a = state.analysis;
   if (!a) return '';
-  const n = pendingPoints(analysisPoints(state.library), a);
-  if (!n) return toKnowledge ? '' : html`<p class="small">前回の分析のあとに増えた点 <b>0</b> 件</p>`;
+  const points = analysisPoints(state.library);
+  const n = pendingPoints(points, a);
+  const removed = removedPoints(points, a);
+  if (!n && !removed) return toKnowledge ? '' : html`<p class="small">前回の分析のあとに増えた点 <b>0</b> 件</p>`;
   // 件数を押すと、数えた点そのものの一覧へ（分析し直す前にメモ・タグ・★を付けられるように）
-  const head = html`前回の分析のあとに増えた点 <a href="#/knowledge/pending" title="増えた点を見る"><b>${n}</b> 件</a>`;
+  const head = n
+    ? html`前回の分析のあとに増えた点 <a href="#/knowledge/pending" title="増えた点を見る"><b>${n}</b> 件</a>（まだ線につながっていません）`
+    : html`前回の分析のあとに増えた点 <b>0</b> 件`;
+  const gone = removed ? html`。減った点 <b>${removed}</b> 件（次の分析で線から外れます）` : '';
   const lead = toKnowledge ? html` — <a href="#/knowledge">分析し直す</a>` : '。「分析し直す」で、変わったところだけ作り直します';
-  return html`<p class="small pending-nudge" style="${toKnowledge ? 'margin-top:8px' : ''}">${head}（まだ線につながっていません）${lead}</p>`;
+  return html`<p class="small pending-nudge" style="${toKnowledge ? 'margin-top:8px' : ''}">${head}${gone}${lead}</p>`;
 }
