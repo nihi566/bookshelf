@@ -11,6 +11,8 @@ import { isPointId } from '../point-ids.js';
 
 export const NEIGHBORS_MAX = 5;
 export const RELATED_MAX = 12;
+// 永久ノートの「意味の近い点」として分析に残す数（画面は NEIGHBORS_MAX 件。分析のあとで根拠にした点を除いても足りるように多めに）
+export const NOTE_NEIGHBORS_KEEP = NEIGHBORS_MAX * 2;
 // 意味の近い点の候補を探す線の数（点ごとに、中心が近い線から）
 const NEIGHBOR_LINES = 8;
 
@@ -60,4 +62,29 @@ export function nearPoints({ ids, vectors, lines, isolated, sourceOf }) {
     neighbors,
     related: new Map(lines.map((l, j) => [l.id, related[j].sort((x, y) => y.s - x.s || tieI(x.i, y.i)).slice(0, RELATED_MAX).map((r) => ids[r.i])])),
   };
+}
+
+/**
+ * 永久ノートの「意味の近い点（根拠にしていないもの）」（NIH-229）: ノートごとに、根拠にしていない点を近い順に最大 NOTE_NEIGHBORS_KEEP 件。
+ * ノートは点より少ないので、すべての点と比べる
+ * @param {object} p
+ * @param {{ id: string }[]} p.notes 永久ノート
+ * @param {Map<string, Float32Array>} p.noteVectors ノートの ID → ベクトル
+ * @param {string[]} p.ids 点の ID
+ * @param {Float32Array[]} p.vectors 点のベクトル（ids と同じ並び）
+ * @param {(note: object, pointId: string) => boolean} p.cites もう根拠にしている点か
+ * @returns {Record<string, string[]>} ノートの ID → 点の ID
+ */
+export function noteNeighbors({ notes, noteVectors, ids, vectors, cites }) {
+  const out = {};
+  const tieI = byId(ids);
+  for (const n of notes) {
+    const v = noteVectors.get(n.id);
+    if (!v) continue;
+    const best = [];
+    for (let k = 0; k < ids.length; k++) if (!cites(n, ids[k])) best.push({ k, s: dot(v, vectors[k]) });
+    best.sort((x, y) => y.s - x.s || tieI(x.k, y.k));
+    if (best.length) out[n.id] = best.slice(0, NOTE_NEIGHBORS_KEEP).map((b) => ids[b.k]);
+  }
+  return out;
 }

@@ -4,19 +4,33 @@ import { truncate } from '../../core/text.js';
 import { analysisPointById, pointLabel } from '../../core/points.js';
 import { FAR_MAX_PAIRS } from '../../core/analysis/far.js';
 import { FAR_REACTIONS, farReactionsOf, visibleFarConnections } from '../../core/far-reactions.js';
+import { isNoteId, notesOf } from '../../core/notes.js';
 import { lineIndex } from '../ui.js';
+import { farEndShown } from './links.js';
 
 // 知識の画面に並べる数（残りは「すべての遠いつながり」で見る）
 const ON_KNOWLEDGE = 3;
-const HOW = `分析のたびに、別の本・別の面にあって意味の近さが低めの点の組を ${FAR_MAX_PAIRS} 組まで AI が読み、根っこで共通する考えがあるものだけを残します。`;
+const HOW = `分析のたびに、別の本・別の面にあって意味の近さが低めの点・永久ノートの組を ${FAR_MAX_PAIRS} 組まで AI が読み、根っこで共通する考えがあるものだけを残します。`;
 
-/** 画面に出す遠いつながり（両側の点が今も見られるものだけ。消した・捨てた点の組は出さない） */
+/** 画面に出す遠いつながり（両側の点・ノートが今も見られるものだけ。消した・捨てた点の組は出さない） */
 function shownFar(state) {
-  return visibleFarConnections(state.analysis, state.library).filter((f) => analysisPointById(state.library, f.a) && analysisPointById(state.library, f.b));
+  return visibleFarConnections(state.analysis, state.library).filter((f) => farEndShown(state.library, f.a) && farEndShown(state.library, f.b));
+}
+
+/** 遠いつながりの片側の永久ノート（題・本文の頭。押すとノートへ。NIH-229） */
+function farNoteSide(state, id, mark) {
+  const all = notesOf(state.library);
+  const n = Object.hasOwn(all, id) ? all[id] : null;
+  if (!n || n.deleted) return html`<div class="far-side"><p class="small muted">${mark} ・ このノートは消えました。</p></div>`;
+  return html`<div class="far-side">
+    <p class="far-text">${truncate(`${n.title || '（題なし）'}${n.body ? `：${n.body}` : ''}`.replace(/\s+/g, ' '), 140)}</p>
+    <span class="small muted">${mark} ・ <a href="#/note/${n.id}">永久ノート「${truncate(n.title || '（題なし）', 30)}」</a></span>
+  </div>`;
 }
 
 /** 遠いつながりの片側の点（文・書名・入っている線）。mark は AI に見せたときの印（説明が A・B で指すことがある） */
 function farSide(state, id, idx, mark) {
+  if (isNoteId(id)) return farNoteSide(state, id, mark);
   const p = analysisPointById(state.library, id);
   if (!p) return html`<div class="far-side"><p class="small muted">${mark} ・ この点は消えました。</p></div>`;
   const line = (idx.get(id) || [])[0];

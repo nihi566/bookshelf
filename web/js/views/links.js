@@ -4,7 +4,7 @@ import { html } from '../html.js';
 import { truncate } from '../../core/text.js';
 import { analysisPointById, isThought, pointById, pointLabel, searchPoints } from '../../core/points.js';
 import { currentPointId } from '../../core/point-ids.js';
-import { isNoteId, notesOf, searchNotes } from '../../core/notes.js';
+import { citesPoint, isNoteId, notesOf, searchNotes } from '../../core/notes.js';
 import { notesCitingAll } from '../../core/note-evidence.js';
 import { LINK_REASON_MAX, linksFor } from '../../core/links.js';
 import { farLinksFor } from '../../core/far-reactions.js';
@@ -34,6 +34,11 @@ export function endView(library, id) {
   return { href: `#/point/${cur}`, title: truncate(p.text.replace(/\s+/g, ' '), 60), sub, gone: false };
 }
 
+/** 遠いつながりの端を画面に出せるか（点は分析の点として見えるもの、永久ノートは消していないもの） */
+export function farEndShown(library, id) {
+  return isNoteId(id) ? !endView(library, id).gone : Boolean(analysisPointById(library, id));
+}
+
 function endRow(library, id, { reason = '', actions = '' } = {}) {
   const v = endView(library, id);
   const inner = html`<span class="link-title">${v.title}</span>${v.sub ? html`<span class="link-sub">${v.sub}</span>` : ''}${reason ? html`<span class="link-reason">理由: ${reason}</span>` : ''}`;
@@ -59,8 +64,8 @@ function linkNoteAction(library, link, id, other, title) {
  */
 export function linksBlock(state, id) {
   const links = linksFor(state.library, id);
-  // 遠いつながりは、相手の点が見える組だけ（消した点の組は、遠いつながりの画面と同じく出さない。出すと外せない行が残る）
-  const far = isNoteId(id) ? [] : farLinksFor(state.analysis, state.library, id).filter((f) => analysisPointById(state.library, f.other) && !links.some((l) => l.other === f.other));
+  // 遠いつながりは、相手の点・ノートが見える組だけ（消した点の組は、遠いつながりの画面と同じく出さない。出すと外せない行が残る）
+  const far = farLinksFor(state.analysis, state.library, id).filter((f) => farEndShown(state.library, f.other) && !links.some((l) => l.other === f.other));
   const rows = [
     ...links.map(({ link, other }) => () => {
       const { title, gone } = endView(state.library, other);
@@ -102,6 +107,29 @@ export function neighborsBlock(state, pointId) {
           }),
         )}</ul>`
       : html`<p class="small muted">この点には、まだ意味の近い点がありません（別の本の点が無いか、前回の分析のあとに増えた点です）。</p>`}`;
+}
+
+/**
+ * 永久ノートの画面の「意味の近い点（根拠にしていないもの）」（分析で選んだ点のうち、今も根拠にしていない最大 5 件。NIH-229）。
+ * 1 回の操作で、そのノートの根拠にするか、リンクにできる
+ */
+export function noteNeighborsBlock(state, note) {
+  if (!state.analysis) return '';
+  const all = state.analysis.neighbors;
+  const list = all && typeof all === 'object' && Object.hasOwn(all, note.id) && Array.isArray(all[note.id]) ? all[note.id] : [];
+  const ids = list.filter((x) => typeof x === 'string' && analysisPointById(state.library, x) && !citesPoint(state.library, note, x)).slice(0, NEIGHBORS_MAX);
+  const linked = new Set(linksFor(state.library, note.id).map((e) => e.other));
+  return html`<div class="section"><h2>意味の近い点（根拠にしていないもの）</h2><span class="small muted">${ids.length}</span></div>
+    ${ids.length
+      ? html`<ul class="link-list">${ids.map((x) => {
+          const { title } = endView(state.library, x);
+          return endRow(state.library, x, {
+            actions: html`<button type="button" class="btn small" data-action="cite-quick" data-note="${note.id}" data-point="${x}" aria-label="「${title}」をこのノートの根拠にする">根拠にする</button>${linked.has(currentPointId(state.library, x))
+              ? html`<span class="small muted">リンク済み</span>`
+              : html`<button type="button" class="btn small" data-action="link-quick" data-from="${note.id}" data-to="${x}" aria-label="「${title}」とリンクする">リンクする</button>`}`,
+          });
+        })}</ul>`
+      : html`<p class="small muted">このノートには、まだ意味の近い点がありません（前回の分析のあとに書いた・直したノートは、次の分析で出ます）。</p>`}`;
 }
 
 /** 理由を書くシートの中身 */

@@ -8,7 +8,7 @@
 import { mergeCollections } from './collections.js';
 import { isoStamp } from './text.js';
 import { currentPointId } from './point-ids.js';
-import { EXPLANATION_MAX, IDEA_MAX, farConnectionOf, farId, farText, isFarConnection, isFarId, isPointId } from './analysis/far.js';
+import { EXPLANATION_MAX, IDEA_MAX, farConnectionOf, farId, farText, isFarConnection, isFarEnd, isFarId } from './analysis/far.js';
 
 export const FAR_REACTIONS = Object.freeze({ interesting: '面白い', wrong: 'ちがう' });
 
@@ -24,7 +24,7 @@ const isStatus = (s) => typeof s === 'string' && Object.hasOwn(FAR_REACTIONS, s)
  * 付けた時刻は isoStamp で整える（壊れた時刻は ''、時計の進んだ端末の時刻は now に直す）
  */
 export function normalizeFarReaction(r, now = new Date().toISOString()) {
-  if (!r || typeof r !== 'object' || !isFarId(r.id) || !isPointId(r.a) || !isPointId(r.b) || r.id !== farId(r.a, r.b)) return null;
+  if (!r || typeof r !== 'object' || !isFarId(r.id) || !isFarEnd(r.a) || !isFarEnd(r.b) || r.id !== farId(r.a, r.b)) return null;
   return { id: r.id, a: r.a, b: r.b, idea: farText(r.idea, IDEA_MAX), explanation: farText(r.explanation, EXPLANATION_MAX), status: isStatus(r.status) ? r.status : '', updatedAt: isoStamp(r.updatedAt, now) };
 }
 
@@ -56,8 +56,8 @@ export function farIdOfDiscovery(d) {
 }
 
 /**
- * その点の「面白い」とした遠いつながりを、リンクとして出す形にする（G4-5）。
- * 相手の点の ID（Kindle で伸ばしたハイライトは置き換わった先）と、共通する考え（リンクの理由として出す）
+ * その点・永久ノートの「面白い」とした遠いつながりを、リンクとして出す形にする（G4-5・NIH-229）。
+ * 相手の点・ノートの ID（Kindle で伸ばしたハイライトは置き換わった先）と、共通する考え（リンクの理由として出す）
  * @returns {{ far: object, other: string, reason: string }[]}
  */
 export function farLinksFor(analysis, library, pointId) {
