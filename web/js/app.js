@@ -7,14 +7,14 @@ import { openSheet, serveVersionBlock, toast } from './ui.js';
 import { swVersion } from '../core/serve-version.js';
 import { JOB_PATHS, LAYER_PATHS, PC_INFO_BOXES, PC_INFO_PATHS, THOUGHT_PATHS, matchRoute, parseHash as parseRouteHash } from './routes.js';
 import { appActions } from './app-actions.js';
-import { applySyncBusy, isSyncing, trackSync } from './sync-busy.js';
+import { applySyncBusy, applySyncStatus, isSyncing, recordSyncResult, trackSync } from './sync-busy.js';
 import { noteActions } from './note-actions.js';
 import { linkActions } from './link-actions.js';
 import { askResultBlock, semanticAvailability } from './views/ask.js';
 import { askActions } from './ask-actions.js';
 import { outlineStatusBlock } from './views/outlines.js';
 import { outlineActions } from './outline-actions.js';
-import { googleLabel, importOutcome, importResultBlock } from './views/settings.js';
+import { googleLabel, importOutcome, importResultBlock, kindleLabel } from './views/settings.js';
 import { addHighlight, emptyLibrary, listBooks, mergeParsed, parseSeenPicks, parseShuffleRecord, recentPickIds, recordSeenPicks, shuffleRecord, shuffleSeedFor } from '../core/model.js';
 import { COVER_MAX_LENGTH } from '../core/covers.js';
 import { parseFiles } from '../core/parsers/index.js';
@@ -226,7 +226,8 @@ async function runAnalysis(mode = 'analyze') {
   if (ai.mode === 'direct') {
     if (!ai.chatModel) return toast('チャットモデルを設定してください（設定 → AI）');
     abort = new AbortController();
-    setJob({ running: true, where: 'browser', stage: 'embed', message: '開始しています', done: 0, total: 0, error: '' });
+    // mode: 終わったあとに「この分析の結果」を出すか（おすすめを選び直しただけなら出さない。NIH-157）
+    setJob({ running: true, where: 'browser', stage: 'embed', message: '開始しています', done: 0, total: 0, error: '', mode });
     try {
       const llm = createLlmClient(directLlmOptions(ai));
       const onProgress = (p) => setJob(p);
@@ -246,7 +247,8 @@ async function runAnalysis(mode = 'analyze') {
         }
       }
       await save.analysis();
-      setJob({ running: false, stage: 'done', message: '完了しました' });
+      // analysisAt: この回が作った分析（同期・「この分析に戻す」で差し替わったら、その回の結果を出さない。NIH-157）
+      setJob({ running: false, stage: 'done', message: '完了しました', analysisAt: state.analysis?.createdAt });
       toast('分析が完了しました');
     } catch (e) {
       setJob({ running: false, stage: 'error', error: e.message, message: '' });
@@ -254,7 +256,7 @@ async function runAnalysis(mode = 'analyze') {
     return;
   }
   // PC のコンパニオンサーバで実行（先に同期して最新の点を渡す）
-  setJob({ running: true, where: 'pc', stage: 'embed', message: 'PC と同期しています', done: 0, total: 0, error: '' });
+  setJob({ running: true, where: 'pc', stage: 'embed', message: 'PC と同期しています', done: 0, total: 0, error: '', mode });
   try {
     await syncWithPc();
     const started = await companion.startAnalyze(mode, await recommendWishlist());
@@ -306,7 +308,7 @@ async function pollPcJob() {
       state.analysis = analysis;
       await save.analysis();
     }
-    setJob({ running: false, lost: false, stage: 'done', message: '完了しました' });
+    setJob({ running: false, lost: false, stage: 'done', message: '完了しました', analysisAt: state.analysis?.createdAt });
     toast('分析が完了しました');
     refreshPcInfo();
   } finally {
@@ -329,13 +331,18 @@ async function cancelAnalysis() {
 
 // 同期している間は、画面にある同期のボタンを押せなくし「同期しています」と出す（NIH-141）
 function sync(opts) {
-  return trackSync(state, () => runSync(opts), () => applySyncBusy(document, isSyncing(state)));
+  return trackSync(state, () => runSync(opts), () => {
+    applySyncBusy(document, isSyncing(state));
+    // 最後の同期の結果（失敗の時刻と理由）を、設定の「今すぐ同期」の横に出し直す（NIH-146）
+    applySyncStatus(document, state);
+  });
 }
 
 async function runSync({ quiet = false } = {}) {
   try {
     const { analysisDir } = await syncWithPc();
     state.pcSyncFailed = false;
+    recordSyncResult(state, null);
     if (!quiet) toast(`PC と同期しました${analysisDir ? `（分析: ${analysisDir}）` : ''}`);
     // 書きかけの入力欄があるときは描き直さない（同期した内容は次に画面を開いたときに出る）
     if (!hasDraft()) render({ keepScroll: true });
@@ -350,6 +357,7 @@ async function runSync({ quiet = false } = {}) {
     // 本が 0 冊のとき「読んだ本」に PC のつなぎ方を出すため、失敗を覚えておく
     const wasFailed = state.pcSyncFailed;
     state.pcSyncFailed = true;
+    recordSyncResult(state, e);
     if (!quiet) toast(e.message, 5000);
     // 空表示に案内を出すために描き直す（本があれば空表示は出ないので、絞り込みの入力中を描き直さない）
     if (!wasFailed && parseHash().path === '/books' && !listBooks(state.library).length) render({ keepScroll: true });
@@ -662,7 +670,7 @@ const forms = {
         out.innerHTML = String(html`<p class="notice ok">接続できました。モデル: ${models.join('、') || '（なし）'}</p>`);
       } else {
         const [info, appVersion] = await Promise.all([companion.info(), ownSwVersion()]);
-        out.innerHTML = String(html`<p class="notice ${info.llm.configured ? 'ok' : ''}">PC に接続できました。点 ${info.stats.points ?? info.stats.highlights} 件・チャットモデル: ${info.llm.chatModel || '未設定（PC で bh config model …）'}・埋め込み: ${info.llm.embedModel || '文字 n-gram'}・Play ブックスの自動取り込み: ${googleLabel(info.google)}</p>
+        out.innerHTML = String(html`<p class="notice ${info.llm.configured ? 'ok' : ''}">PC に接続できました。点 ${info.stats.points ?? info.stats.highlights} 件・チャットモデル: ${info.llm.chatModel || '未設定（PC で bh config model …）'}・埋め込み: ${info.llm.embedModel || '文字 n-gram'}・Play ブックスの自動取り込み: ${googleLabel(info.google)}・Kindle の自動取り込み: ${kindleLabel(info.kindleSync)}</p>
           ${serveVersionBlock(info.server, appVersion)}`);
       }
     } catch (e) {

@@ -1,5 +1,5 @@
-// 文書に書いた数の見張り（NIH-93。docs/architecture.md は NIH-129）。
-// docs/concept.md・README.md・docs/architecture.md に書いた件数（今日の点・発見・意味の近い点など）が、実装の定数と同じかを確かめる。
+// 文書に書いた数の見張り（NIH-93。docs/architecture.md は NIH-129。docs/setup.md は NIH-153）。
+// docs/concept.md・README.md・docs/architecture.md・docs/setup.md に書いた数（今日の点・発見・意味の近い点・確認の間隔など）が、実装の定数と同じかを確かめる。
 // 定数を変えて文書を直し忘れると、ここで「どの文書のどの文と、どの定数か」を出して落ちる（NIH-78 で今日の点の件数が古いまま残った）。
 // 文書の言い回しを変えて文が見つからなくなったら、下の照合表の正規表現も直す（数のすぐ前後だけを見ているので、ほかの言い回しは自由に変えてよい）。
 import { test } from 'node:test';
@@ -28,10 +28,19 @@ const RECENT_PICK_DAYS = { file: 'web/core/model.js', name: 'RECENT_PICK_DAYS' }
 const OUTLINE_TITLE_MAX = { file: 'web/core/outlines.js', name: 'OUTLINE_TITLE_MAX' };
 const OUTLINE_SECTIONS_MAX = { file: 'web/core/outlines.js', name: 'OUTLINE_SECTIONS_MAX' };
 const HEADING_MAX = { file: 'web/core/outlines.js', name: 'HEADING_MAX' };
+// per: 文書の単位にそろえるために定数を割る数（ミリ秒の定数を秒・分で書いた文と比べる）
+const KINDLE_INTERVAL_MIN = { file: 'extension/sync-core.js', name: 'intervalMin' };
+const KINDLE_STATUS_INTERVAL_MIN = { file: 'web/core/kindle-status.js', name: 'DEFAULT_INTERVAL_MIN' };
+const GOOGLE_INTERVAL_SEC = { file: 'cli/store.js', name: 'intervalSec' };
+const GOOGLE_MIN_INTERVAL_SEC = { file: 'cli/google.js', name: 'MIN_INTERVAL_SEC' };
+const SERVE_PORT = { file: 'cli/store.js', name: 'port' };
+const UPDATE_WAIT_SEC = { file: 'cli/update.js', name: 'DEFAULT_WAIT_MS', per: 1000 };
+// setup.md の「表示中は 1 分ごとに」（web/js/app.js の PULL_INTERVAL_MS）は照合しない。app.js を文字列で読むテストは増やさない（NIH-86）
 
 const CONCEPT = 'docs/concept.md';
 const README = 'README.md';
 const ARCH = 'docs/architecture.md';
+const SETUP = 'docs/setup.md';
 
 // 照合表: 文書の中で、正規表現の 1 つ目のかっこ（数）が定数と同じであること。文書の中に出てくる箇所はすべて照合する
 const CHECKS = [
@@ -71,7 +80,14 @@ const CHECKS = [
   { doc: ARCH, re: /上限（題 (\d+) 字/g, constant: OUTLINE_TITLE_MAX },
   { doc: ARCH, re: /上限（題 \d+ 字・節 (\d+)・/g, constant: OUTLINE_SECTIONS_MAX },
   { doc: ARCH, re: /上限（題 \d+ 字・節 \d+・見出し (\d+) 字/g, constant: HEADING_MAX },
-];
+  { doc: SETUP, re: /以後は既定で (\d+) 分ごとに確認する/g, constant: KINDLE_INTERVAL_MIN },
+  { doc: SETUP, re: /以後は既定で (\d+) 分ごとに確認する/g, constant: KINDLE_STATUS_INTERVAL_MIN },
+  { doc: SETUP, re: /bh serve が確認（既定 (\d+) 秒ごと）/g, constant: GOOGLE_INTERVAL_SEC },
+  { doc: SETUP, re: /以後、(\d+) 秒ごとに確認/g, constant: GOOGLE_INTERVAL_SEC },
+  { doc: SETUP, re: /確認の間隔（既定 (\d+)、最短 \d+）/g, constant: GOOGLE_INTERVAL_SEC },
+  { doc: SETUP, re: /確認の間隔（既定 \d+、最短 (\d+)）/g, constant: GOOGLE_MIN_INTERVAL_SEC },
+  { doc: SETUP, re: /設定のポート（既定 (\d+)）/g, constant: SERVE_PORT },
+  { doc: SETUP, re: /起動したサーバが (\d+) 秒以内に応答し/g, constant: UPDATE_WAIT_SEC },];
 
 const cache = new Map();
 const read = (file) => {
@@ -80,10 +96,10 @@ const read = (file) => {
 };
 
 /** ソースから定数の値を読む。見つからない・2 回以上書かれているときは null */
-async function constantValue({ file, name }) {
+async function constantValue({ file, name, per = 1 }) {
   const source = await read(file);
   const found = [...source.matchAll(new RegExp(`\\b${name}\\s*[=:]\\s*(\\d[\\d_]*)\\b`, 'g'))];
-  return found.length === 1 ? Number(found[0][1].replace(/_/g, '')) : null;
+  return found.length === 1 ? Number(found[0][1].replace(/_/g, '')) / per : null;
 }
 
 for (const { doc, re, constant } of CHECKS) {
@@ -93,7 +109,20 @@ for (const { doc, re, constant } of CHECKS) {
     const hits = [...(await read(doc)).matchAll(re)];
     assert.ok(hits.length > 0, `${doc} に ${re.source} に当たる文が無い（言い回しを変えたら、この照合表の正規表現も直す）`);
     for (const m of hits) {
-      assert.equal(Number(m[1]), value, `${doc} の「${m[0]}」の ${m[1]} が ${constant.file} の ${constant.name} = ${value} と合わない（文書か定数のどちらかを直す）`);
+      const shown = constant.per ? `${constant.name} ÷ ${constant.per} = ${value}` : `${constant.name} = ${value}`;
+      assert.equal(Number(m[1]), value, `${doc} の「${m[0]}」の ${m[1]} が ${constant.file} の ${shown} と合わない（文書か定数のどちらかを直す）`);
     }
   });
 }
+
+// 拡張機能で選べる確認の間隔は定数ではなく設定画面の選択肢なので、選択肢の最短・最長と文書の範囲を比べる
+test(`${SETUP} の拡張機能で選べる確認の間隔が extension/options.html の選択肢と同じ`, async () => {
+  const select = (await read('extension/options.html')).match(/<select name="intervalMin">([\s\S]*?)<\/select>/);
+  assert.ok(select, 'extension/options.html に <select name="intervalMin"> が無い（名前を変えたら、このテストも直す）');
+  const choices = [...select[1].matchAll(/<option value="(\d+)"/g)].map((m) => Number(m[1]));
+  const m = (await read(SETUP)).match(/（(\d+) 分〜(\d+) 時間から選べる）/);
+  assert.ok(m, `${SETUP} に「（N 分〜N 時間から選べる）」の文が無い（言い回しを変えたら、このテストの正規表現も直す）`);
+  assert.equal(Number(m[1]), Math.min(...choices), `${SETUP} の「${m[0]}」の最短が extension/options.html の選択肢 ${choices.join(' / ')} 分と合わない`);
+  assert.equal(Number(m[2]) * 60, Math.max(...choices), `${SETUP} の「${m[0]}」の最長が extension/options.html の選択肢 ${choices.join(' / ')} 分と合わない`);
+  assert.ok(choices.includes(await constantValue(KINDLE_INTERVAL_MIN)), `extension/sync-core.js の既定の間隔が extension/options.html の選択肢 ${choices.join(' / ')} 分に無い`);
+});

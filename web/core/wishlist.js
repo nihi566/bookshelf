@@ -225,13 +225,15 @@ export function cleanupSyncedMarks(store, book) {
 
 /**
  * 欲しい本の画面を開いたときの絞り込み。filters: いまの条件、normal: リンクから開く前の条件（普通に開いているときは null）。
- * 検索・おすすめ・ホームのリンク（q / ku）から来たときはその条件だけで開き（リンクに出した件数と合わせる）、それまでの条件を取っておく。
+ * 検索・おすすめ・ホームのリンク（q / ku / price: 価格の印。all と知らない値はリンクとして扱わない）から来たときは
+ * その条件だけで開き（リンクに出した件数と合わせる）、それまでの条件を取っておく。
  * 普通に開き直したら取っておいた条件に戻す。同じ画面の描き直し（refresh: 同期のあとなど）では、利用者がリンク先で変えた条件を残す
  */
-export function openWishlistFilters(filters, normal, { q = '', ku = false, refresh = false } = {}) {
-  if (q || ku) {
+export function openWishlistFilters(filters, normal, { q = '', ku = false, price = 'all', refresh = false } = {}) {
+  const mark = price !== 'all' && Object.hasOwn(PRICE_MARK_LABELS, price) ? price : 'all';
+  if (q || ku || mark !== 'all') {
     if (refresh && normal) return { filters, normal };
-    return { filters: { ...filters, q, ku, shelf: 'all', reading: 'all', sort: 'default', min: '', max: '', tag: 'all', kind: 'all', label: '', price: 'all' }, normal: normal ?? filters };
+    return { filters: { ...filters, q, ku, shelf: 'all', reading: 'all', sort: 'default', min: '', max: '', tag: 'all', kind: 'all', label: '', price: mark }, normal: normal ?? filters };
   }
   return { filters: normal ?? filters, normal: null };
 }
@@ -456,7 +458,7 @@ const SKIP_IN_PICKS = new Set(['purchased', 'seen']);
 
 /**
  * ホーム用の要約。items: [{ book, marks }]。
- * kuCount は「Kindle Unlimited のみ」で絞り込んだ欲しい本の画面と同じ数（リンク先の件数と食い違わないように）。
+ * kuCount は「Kindle Unlimited のみ」、dropCount は価格の印「値下がりした」で絞り込んだ欲しい本の画面と同じ数（リンク先の件数と食い違わないように）。
  * picks は今すぐ読める候補: KU で、購入済み・読んだを除き、読みたいを先頭に最大 3 冊。
  */
 export function wishlistSummary(items, limit = 3) {
@@ -467,7 +469,7 @@ export function wishlistSummary(items, limit = 3) {
     .sort((a, b) => wanted(b) - wanted(a) || a.book.index - b.book.index)
     .slice(0, limit)
     .map(({ book }) => book);
-  return { total: items.length, kuCount: ku.length, picks };
+  return { total: items.length, kuCount: ku.length, dropCount: items.filter(({ book }) => matchesPriceMark(book, 'drop')).length, picks };
 }
 
 // おすすめに渡す欲しい本の上限（PC へ送る本文の大きさを抑える。公開データは 300 冊ほど）

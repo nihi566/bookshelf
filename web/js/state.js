@@ -27,6 +27,8 @@ export const state = {
   lastSync: null,
   // 最後の PC との同期が失敗したか（保存しない。開き直すたびに同期し直す）
   pcSyncFailed: false,
+  // 最後の PC との同期が失敗した時刻と理由 { at, message }。成功したら null（保存しない。NIH-146）
+  lastSyncError: null,
   // PC のコンパニオンサーバの状態（拡張の確認結果など）
   pcInfo: null,
   // 取り込み画面の最後の取り込み結果（保存しない。自動同期の描き直しのあとも結果欄を出し直すため。画面を離れたら消す）

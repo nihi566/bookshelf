@@ -47,9 +47,10 @@ function fakeRun(handlers) {
 
 /**
  * 偽の PC。サーバは「起動」されるまで応答せず（接続できない）、起動した時刻を startedAt として返す。
- * oldServer なら起動しても止める前の時刻を返し続ける（古いコードのまま）
+ * oldServer なら起動しても止める前の時刻を返し続ける（古いコードのまま）。起動したサーバは PID 999 でポートを待ち受ける。
+ * portStaysBusy なら、止めてもポートが空かない
  */
-function setup({ pullFails = false, listeners = [{ pid: 111, cmd: 'node cli\\bh.js serve' }], oldServer = false, servedSw = SW, serverVersion } = {}) {
+function setup({ pullFails = false, listeners = [{ pid: 111, cmd: 'node cli\\bh.js serve' }], oldServer = false, servedSw = SW, serverVersion, portStaysBusy = false } = {}) {
   const repoDir = tmp('bh-repo-');
   const dataDir = path.join(repoDir, 'data');
   mkdirSync(path.join(repoDir, 'web'), { recursive: true });
@@ -65,6 +66,7 @@ function setup({ pullFails = false, listeners = [{ pid: 111, cmd: 'node cli\\bh.
   const startServer = () => {
     events.push('start');
     serverStartedAt = oldServer ? '2026-01-01T00:00:00Z' : new Date(clock).toISOString();
+    alive = [...alive, { pid: 999, cmd: 'node cli\\bh.js serve' }];
   };
   const { run, calls } = fakeRun([
     [/rev-parse --abbrev-ref HEAD/, 'main\n'],
@@ -103,7 +105,7 @@ function setup({ pullFails = false, listeners = [{ pid: 111, cmd: 'node cli\\bh.
     kill: (pid) => {
       events.push(`kill:${pid}`);
       killed.push(pid);
-      alive = alive.filter((l) => l.pid !== pid);
+      if (!portStaysBusy) alive = alive.filter((l) => l.pid !== pid);
     },
     now: () => new Date(clock),
     sleep: async (ms) => { clock += ms; },
@@ -168,6 +170,31 @@ test('bh update: 起動したサーバが止める前のもの（古いコード
   await assert.rejects(runUpdate({ ...opts, waitMs: 3000 }), /新しいコードで応答しませんでした（止める前に起動したサーバ/);
 });
 
+test('bh update: 起動の確認に失敗したら、data/serve.log の末尾 20 行を理由に続けて出す', async () => {
+  const { opts, dataDir } = setup({ oldServer: true });
+  const lines = Array.from({ length: 30 }, (_, i) => `line ${i + 1}`);
+  writeFileSync(path.join(dataDir, 'serve.log'), `${lines.join('\n')}\nError: listen EADDRINUSE :::8787\n`);
+  const err = await runUpdate({ ...opts, waitMs: 3000 }).then(() => assert.fail('失敗するはず'), (e) => e);
+  assert.match(err.message, /新しいコードで応答しませんでした[\s\S]*serve\.log の末尾[\s\S]*line 12\n[\s\S]*EADDRINUSE :::8787\nbh serve は動いています（PID 999）。起動し直していません$/);
+  assert.doesNotMatch(err.message, /line 11\n/);
+});
+
+test('bh update: 版が違って失敗したときも、data/serve.log の末尾を出す', async () => {
+  const { opts, dataDir } = setup({ serverVersion: 'bh-v41' });
+  writeFileSync(path.join(dataDir, 'serve.log'), 'started bh-v41\n');
+  await assert.rejects(runUpdate(opts), /ディスクの版（bh-v42）と違います[\s\S]*serve\.log の末尾[\s\S]*started bh-v41\nbh serve は動いています（PID 999）。起動し直していません$/);
+});
+
+test('bh update: data/serve.log が無い・空なら、失敗の文言は今のまま', async () => {
+  const missing = await runUpdate({ ...setup({ oldServer: true }).opts, waitMs: 3000 }).catch((e) => e.message);
+  // 続くのは起動し直しの結果の 1 行だけ（NIH-147）
+  assert.match(missing, /data\/serve\.log を確かめてください\nbh serve は動いています（PID 999）。起動し直していません$/);
+  const { opts, dataDir } = setup({ oldServer: true });
+  writeFileSync(path.join(dataDir, 'serve.log'), '\n\n');
+  const empty = await runUpdate({ ...opts, waitMs: 3000 }).catch((e) => e.message);
+  assert.match(empty, /data\/serve\.log を確かめてください\nbh serve は動いています（PID 999）。起動し直していません$/);
+});
+
 test('bh update: 起動したサーバの sw.js の版がディスクと違えば失敗にする', async () => {
   const { opts } = setup({ servedSw: "const CACHE = 'bh-v41';\n" });
   await assert.rejects(runUpdate(opts), /sw\.js の版（bh-v41）がディスクの版（bh-v42）と違います/);
@@ -205,6 +232,82 @@ test('bh update: タスクが無い PC では bh serve を切り離して起動�
   assert.equal(r.started, 'spawn');
   assert.equal(r.version, 'bh-v42');
   assert.ok(!calls.some((c) => c.includes('Start-ScheduledTask')));
+});
+
+/** Start-ScheduledTask を fails 回目まで失敗させる（それより後は偽の PC に渡す） */
+function failingStart(opts, fails) {
+  let n = 0;
+  return async (cmd, args) => {
+    if ([cmd, ...args].join(' ').includes('Start-ScheduledTask') && n++ < fails) throw new Error('タスクを開始できません');
+    return opts.run(cmd, args);
+  };
+}
+
+/** タスクが無い PC */
+const noTask = (opts) => async (cmd, args) => ([cmd, ...args].join(' ').includes('Get-ScheduledTask') ? '' : opts.run(cmd, args));
+
+test('bh update: 止めた後に起動に失敗したら、起動し直してから理由を出す', async () => {
+  const { opts, events } = setup();
+  await assert.rejects(runUpdate({ ...opts, run: failingStart(opts, 1) }), (e) => {
+    assert.match(e.message, /タスクを開始できません/);
+    assert.match(e.message, /起動し直しました（タスク「book-highlights bh serve」）/);
+    return true;
+  });
+  assert.deepEqual(events, ['pull:backups=2', 'kill:111', 'start']);
+});
+
+test('bh update: 起動し直しにも失敗したら、手で起動する方法を出す', async () => {
+  const { opts, events } = setup();
+  await assert.rejects(runUpdate({ ...opts, run: failingStart(opts, 2) }), (e) => {
+    assert.match(e.message, /起動し直せませんでした（タスクを開始できません）/);
+    assert.match(e.message, /Start-ScheduledTask -TaskName 'book-highlights bh serve'/);
+    assert.match(e.message, /node cli\/bh\.js serve/);
+    return true;
+  });
+  assert.ok(!events.includes('start'));
+});
+
+test('bh update: 切り離して起動したサーバが応答しなければ、もう一度起動して理由を出す', async () => {
+  const { opts, startServer, events } = setup();
+  // 1 回目は起動してすぐ落ちた（何も待ち受けない）ことにする
+  let n = 0;
+  const spawnServe = () => { if (n++ > 0) startServer(); };
+  await assert.rejects(runUpdate({ ...opts, run: noTask(opts), spawnServe, waitMs: 3000 }), (e) => {
+    assert.match(e.message, /3 秒以内に新しいコードで応答しませんでした/);
+    assert.match(e.message, /起動し直しました（node cli\/bh\.js serve）/);
+    return true;
+  });
+  assert.equal(n, 2);
+  assert.deepEqual(events.slice(-1), ['start']);
+});
+
+test('bh update: 起動し直したサーバも応答しなければ、起動し直せなかったと伝える', async () => {
+  const { opts } = setup();
+  await assert.rejects(runUpdate({ ...opts, run: noTask(opts), spawnServe: () => {}, waitMs: 3000 }), (e) => {
+    assert.match(e.message, /起動し直せませんでした（.*3 秒以内に応答しませんでした/s);
+    assert.match(e.message, /node cli\/bh\.js serve/);
+    return true;
+  });
+});
+
+test('bh update: 止めた後にポートが空かなければ、bh serve が動いているので起動し直さない', async () => {
+  const { opts, events } = setup({ portStaysBusy: true });
+  await assert.rejects(runUpdate(opts), (e) => {
+    assert.match(e.message, /ポート 8787 が空きませんでした/);
+    assert.match(e.message, /bh serve は動いています（PID 111）/);
+    return true;
+  });
+  assert.ok(!events.includes('start'));
+});
+
+test('bh update: 起動したサーバの版が違うときは、動いているので起動し直さない', async () => {
+  const { opts, events } = setup({ serverVersion: 'bh-v41' });
+  await assert.rejects(runUpdate(opts), (e) => {
+    assert.match(e.message, /サーバの版（bh-v41）がディスクの版（bh-v42）と違います/);
+    assert.match(e.message, /bh serve は動いています（PID 999）/);
+    return true;
+  });
+  assert.equal(events.filter((x) => x === 'start').length, 1);
 });
 
 test('bh update: Windows の実物の PowerShell で、空いているポートを調べると空の一覧になる', { skip: process.platform !== 'win32' && 'Windows でだけ確かめる' }, async () => {
