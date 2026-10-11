@@ -37,6 +37,18 @@ export function homeDiscoveries(state) {
   return unreadDiscoveries(state.analysis, state.library).filter(shown(state)).filter((d) => d.pointIds.every((id) => analysisPointById(state.library, id)));
 }
 
+/**
+ * 今の分析の回で見つかった発見（前回の分析より後に見つかったもの。既読も含む。
+ * 消した・捨てた点の発見と「ちがう」とした遠いつながりはホームと同じく数えない。NIH-157）
+ */
+export function runDiscoveries(state) {
+  const since = state.analysis?.changes?.previousAt || '';
+  return discoveriesOf(state.analysis)
+    .filter((d) => String(d.foundAt || '') > since)
+    .filter(shown(state))
+    .filter((d) => d.pointIds.every((id) => analysisPointById(state.library, id)));
+}
+
 /** ホームの「発見」（未読があるときだけ出す） */
 export function discoveriesBlock(state) {
   const unread = homeDiscoveries(state);

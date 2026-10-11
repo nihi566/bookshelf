@@ -77,7 +77,7 @@ export function createCompanionServer({ store, log = console.log, catalogFetch, 
   const serverStartedAt = new Date().toISOString();
   // 起動したときの web/sw.js の版（= 動いているコードの版）。/sw.js はディスクから毎回配るので、そちらでは古いコードか分からない
   const serverVersion = startupSwVersion();
-  const job = { running: false, stage: '', message: '', done: 0, total: 0, error: '', startedAt: null, finishedAt: null, trigger: '', controller: null };
+  const job = { running: false, stage: '', message: '', done: 0, total: 0, error: '', startedAt: null, finishedAt: null, trigger: '', mode: '', controller: null };
   // 取り込みの最中は自動の分析を始めない（取り込み途中の点で分析しない）
   let activeImports = 0;
   // 最後に失敗・中止した時刻（state.json に書けないときも、試し直すまで待てるよう手元にも持つ）
@@ -409,7 +409,7 @@ export function createCompanionServer({ store, log = console.log, catalogFetch, 
    */
   async function runJob(mode, wishlist = [], { trigger = 'manual' } = {}) {
     const startedAt = new Date().toISOString();
-    Object.assign(job, { running: true, stage: 'start', message: trigger === 'auto' ? '点が増えたので、PC が自動で分析しています' : '開始しています', done: 0, total: 0, error: '', startedAt, finishedAt: null, trigger, controller: new AbortController() });
+    Object.assign(job, { running: true, stage: 'start', message: trigger === 'auto' ? '点が増えたので、PC が自動で分析しています' : '開始しています', done: 0, total: 0, error: '', startedAt, finishedAt: null, trigger, mode, controller: new AbortController() });
     try {
       const cfg = await store.config();
       if (!cfg.llm.chatModel) throw new Error('チャットモデルが設定されていません（bh config model <モデル名>）');

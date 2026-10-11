@@ -17,6 +17,7 @@ import { companion } from '../services.js';
 import { farBlock } from './far.js';
 import { citingNotesBlock, notesSummaryBlock } from './notes.js';
 import { outlinesSummaryBlock } from './outlines.js';
+import { runDiscoveries } from './discoveries.js';
 
 const STAGES = [
   ['embed', '点'],
@@ -429,6 +430,23 @@ export const isolatedView = {
   },
 };
 
+/**
+ * 分析し直したあとの、その回の結果（新しくつながった点・発見の件数と、前回からの変化・発見へのリンク。NIH-157）。
+ * 分析中・失敗・中止・状況不明・おすすめを選び直しただけのときと、終わったあとに分析が差し替わった（同期・「この分析に戻す」）ときは
+ * 出さない（失敗の理由は進み具合の欄に出る）。前回が無い分析（前回からの変化が無い）でも出さない
+ */
+function runResultBlock(state) {
+  const { job, analysis: a } = state;
+  if (!a?.changes || !job || job.running || job.lost || job.stage !== 'done' || job.mode === 'recommend' || job.analysisAt !== a.createdAt) return '';
+  const c = a.changes;
+  const found = runDiscoveries(state).length;
+  const lines = c?.rebuilt ? html`最初から作り直しました（線(グループ) ${a.lines.length} 本）` : html`新しく線(グループ)につながった点 <b>${c.connectedPoints?.length ?? 0}</b>`;
+  return html`<section class="card stack run-result" aria-live="polite">
+    <p>この分析の結果: ${lines}・発見 <b>${found}</b> 件</p>
+    <div class="row"><a class="btn small" href="#/knowledge">知識の画面で前回からの変化を見る</a>${found ? html`<a class="btn small" href="#/discoveries">発見を見る</a>` : ''}</div>
+  </section>`;
+}
+
 /** 前回の分析のあとに増えた点（知識の画面・ホームの「増えた点 N 件」から。数え方は pendingPoints と同じ） */
 export const pendingView = {
   render({ state }) {
@@ -436,9 +454,10 @@ export const pendingView = {
     if (!state.analysis) return html`${head}<p class="card small muted">まだ分析していません。</p>`;
     const hs = pendingPointList(analysisPoints(state.library), state.analysis);
     // 分析し直して増えた点が無くなっても、終わったこと（失敗ならその理由）が見えるように進み具合は残す
-    if (!hs.length) return html`${head}<p class="card small muted">前回の分析のあとに増えた点はありません。</p>${jobPanel(state.job)}`;
+    if (!hs.length) return html`${head}${runResultBlock(state)}<p class="card small muted">前回の分析のあとに増えた点はありません。</p>${jobPanel(state.job)}`;
     // NIH-121: メモ・タグ・★を付け終えたら、知識の画面へ戻らずに分析し直せる
     return html`${head}
+      ${runResultBlock(state)}
       <p class="help">${hs.length} 件。まだどの線(グループ)にも入っていません。分析し直す前に、自分のメモ・タグ・★を付けておくと、次の分析の線に反映されます。</p>
       ${hs.map((h) => pointCard(h, { library: state.library }))}
       <div class="row">${runAnalysisButton(state)}</div>

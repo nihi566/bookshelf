@@ -226,7 +226,8 @@ async function runAnalysis(mode = 'analyze') {
   if (ai.mode === 'direct') {
     if (!ai.chatModel) return toast('チャットモデルを設定してください（設定 → AI）');
     abort = new AbortController();
-    setJob({ running: true, where: 'browser', stage: 'embed', message: '開始しています', done: 0, total: 0, error: '' });
+    // mode: 終わったあとに「この分析の結果」を出すか（おすすめを選び直しただけなら出さない。NIH-157）
+    setJob({ running: true, where: 'browser', stage: 'embed', message: '開始しています', done: 0, total: 0, error: '', mode });
     try {
       const llm = createLlmClient(directLlmOptions(ai));
       const onProgress = (p) => setJob(p);
@@ -246,7 +247,8 @@ async function runAnalysis(mode = 'analyze') {
         }
       }
       await save.analysis();
-      setJob({ running: false, stage: 'done', message: '完了しました' });
+      // analysisAt: この回が作った分析（同期・「この分析に戻す」で差し替わったら、その回の結果を出さない。NIH-157）
+      setJob({ running: false, stage: 'done', message: '完了しました', analysisAt: state.analysis?.createdAt });
       toast('分析が完了しました');
     } catch (e) {
       setJob({ running: false, stage: 'error', error: e.message, message: '' });
@@ -254,7 +256,7 @@ async function runAnalysis(mode = 'analyze') {
     return;
   }
   // PC のコンパニオンサーバで実行（先に同期して最新の点を渡す）
-  setJob({ running: true, where: 'pc', stage: 'embed', message: 'PC と同期しています', done: 0, total: 0, error: '' });
+  setJob({ running: true, where: 'pc', stage: 'embed', message: 'PC と同期しています', done: 0, total: 0, error: '', mode });
   try {
     await syncWithPc();
     const started = await companion.startAnalyze(mode, await recommendWishlist());
@@ -306,7 +308,7 @@ async function pollPcJob() {
       state.analysis = analysis;
       await save.analysis();
     }
-    setJob({ running: false, lost: false, stage: 'done', message: '完了しました' });
+    setJob({ running: false, lost: false, stage: 'done', message: '完了しました', analysisAt: state.analysis?.createdAt });
     toast('分析が完了しました');
     refreshPcInfo();
   } finally {
