@@ -111,3 +111,38 @@ test('app.js: 案内を押すとその説明を開いて見える位置まで動
   assert.match(fn, /\.open = true/);
   assert.match(fn, /scrollIntoView/);
 });
+
+// NIH-132 新しい点が入ったときだけ、結果欄に分析への導線（知識の画面の「分析し直す」へ）を出す
+const ANALYZE = /<a class="btn small primary" href="#\/knowledge">分析する<\/a>/;
+const direct = { settings: { ai: { mode: 'direct' } }, pcInfo: null };
+const pc = (enabled) => ({ settings: { ai: { mode: 'companion' } }, pcInfo: { autoAnalysis: { enabled } } });
+
+test('新しい点が 1 件以上入ったときは「分析する」が出て、自動の分析がオフなら自動の一言は出ない', () => {
+  const box = String(importResultBlock({ results: [OK], stats: STATS }, direct));
+  assert.match(box, ANALYZE);
+  assert.match(box, /href="#\/books">本を見る<\/a>/, '「本を見る」は残す');
+  assert.doesNotMatch(box, /自動の分析がオン/);
+  assert.doesNotMatch(String(importResultBlock({ results: [OK], stats: STATS }, pc(false))), /自動の分析がオン/);
+  assert.match(String(importResultBlock({ results: [OK, BAD], stats: STATS }, direct)), ANALYZE, '一部が読めなくても新しい点があれば出す');
+});
+
+test('PC の自動の分析がオンなら、自動で分析される旨を添える', () => {
+  const box = String(importResultBlock({ results: [OK], stats: STATS }, pc(true)));
+  assert.match(box, ANALYZE);
+  assert.match(box, /PC の自動の分析がオンです。条件を満たすと PC が分析し直します/);
+  assert.doesNotMatch(String(importResultBlock({ results: [OK], stats: STATS }, { ...pc(true), settings: { ai: { mode: 'direct' } } })), /自動の分析がオン/, 'PC を使わない設定では出さない');
+});
+
+test('新しい点が 0 件・全部読めない・読み込み失敗のときは「分析する」を出さない', () => {
+  assert.doesNotMatch(String(importResultBlock({ results: [OK], stats: { ...NONE, updated: 2, unchanged: 3 } }, pc(true))), /分析する|自動の分析がオン/);
+  assert.doesNotMatch(String(importResultBlock({ results: [BAD], stats: NONE }, direct)), /分析する/);
+  assert.doesNotMatch(String(importResultBlock({ error: 'ファイルを読めませんでした' }, direct)), /分析する/);
+  assert.doesNotMatch(String(importResultBlock({ results: [OK], stats: STATS })), /自動の分析がオン/, 'state を渡さなくても壊れない');
+});
+
+test('呼び出し元は state を渡す（取り込み直後と、自動同期の描き直し）', () => {
+  const app = readFileSync(join(WEB, 'js/app.js'), 'utf8');
+  assert.equal((app.match(/importResultBlock\(state\.lastImport, state\)/g) || []).length, 2);
+  const box = resultBox(String(importView.render(ctx({ results: [OK], stats: STATS }, true))));
+  assert.match(box, ANALYZE);
+});
