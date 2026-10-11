@@ -146,3 +146,19 @@ test('呼び出し元は state を渡す（取り込み直後と、自動同期�
   const box = resultBox(String(importView.render(ctx({ results: [OK], stats: STATS }, true))));
   assert.match(box, ANALYZE);
 });
+
+// NIH-151 前回の分析があり新しい点が入ったときは、結果欄から増えた点の一覧（分析前にメモ・タグ・★を付けられる）へ行ける
+const PENDING = /<a class="btn small" href="#\/knowledge\/pending">増えた点を見る<\/a>/;
+const analyzed = { ...direct, analysis: { lines: [] } };
+
+test('前回の分析があり新しい点が入ったときは「増えた点を見る」が出る', () => {
+  const box = String(importResultBlock({ results: [OK], stats: STATS }, analyzed));
+  assert.match(box, PENDING);
+  assert.match(box, ANALYZE, '「分析する」も残す');
+});
+
+test('分析がまだ無いとき・新しい点が 0 件のときは「増えた点を見る」を出さない', () => {
+  assert.doesNotMatch(String(importResultBlock({ results: [OK], stats: STATS }, direct)), /knowledge\/pending/, '分析がまだ無い');
+  assert.doesNotMatch(String(importResultBlock({ results: [OK], stats: STATS })), /knowledge\/pending/, 'state を渡さない');
+  assert.doesNotMatch(String(importResultBlock({ results: [OK], stats: { ...NONE, updated: 2 } }, analyzed)), /knowledge\/pending/, '新しい点が 0 件');
+});
