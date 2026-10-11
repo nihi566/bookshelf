@@ -573,14 +573,13 @@ export function highlightNeighbors(library, id) {
 // くっつけるときに戻せるよう控える欄（戻すときは、この欄だけを控えた値に戻す）
 const JOIN_FIELDS = ['text', 'originalText', 'textEditedAt', 'location', 'locationEnd', 'favorite', 'tags', 'userNote', 'deleted', 'supersededBy', 'joinedAt'];
 
-// 日本語・中国語（全角の記号を含む）や空白どうしはそのままつなぎ、英語などの文どうしは空白を挟む
-const NO_SPACE = /[\s\u3000-\u9fff\uf900-\ufaff\uff00-\uffef]/u;
-const joinText = (a, b) => (NO_SPACE.test(a.slice(-1)) || NO_SPACE.test(b.slice(0, 1)) ? a + b : `${a} ${b}`);
+// 前の文と次の文の間は改行にする（つなぎ目の前後の空白・改行は 1 つの改行にまとめる。NIH-191）
+const joinText = (a, b) => `${a.trimEnd()}\n${b.trimStart()}`;
 const joinLines = (...xs) => xs.filter(Boolean).join('\n');
 
 /**
  * 同じ本の 2 つの点を 1 つにくっつける（ハイライトするときに 2 つに分かれてしまった文を戻す）。
- * 本の中で前にある点を残し、文は「前の文 + 次の文」に直す（文を直したのと同じ扱い。ID は変えない）。
+ * 本の中で前にある点を残し、文は「前の文 + 改行 + 次の文」に直す（文を直したのと同じ扱い。ID は変えない）。
  * 後ろの点は前の点に置き換わった点にする（Kindle で伸ばしたハイライトと同じく、リンク・ノートの根拠は前の点としてたどれる）
  * @returns {{ highlight: object, undo: { before: object[] } }} undo は unjoinHighlights に渡す
  */
