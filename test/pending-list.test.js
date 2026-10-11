@@ -140,7 +140,7 @@ test('NIH-157: 一覧の画面で分析が終わると、新しくつながっ�
   assert.match(out, RESULT);
   assert.match(out, /新しく線\(グループ\)につながった点 <b>3<\/b>/);
   assert.match(out, /発見 <b>2<\/b> 件/, 'この回の発見だけ数える（前回までの発見・消えた点の発見は数えない）');
-  assert.match(out, /<a [^>]*href="#\/knowledge"[^>]*>[^<]*前回からの変化/);
+  assert.match(out, /<a [^>]*href="#\/knowledge(\?focus=changes)?"[^>]*>[^<]*前回からの変化/);
   assert.match(out, /<a [^>]*href="#\/discoveries"/);
   assert.match(out, /増えた点はありません/, '増えた点は 0 件のまま');
 });
@@ -185,4 +185,23 @@ test('NIH-157: 分析のあとにまた点が増えていても、終わった�
   const out = String(pendingView.render({ state: { ...st(lib, a), job: DONE } }));
   assert.match(out, RESULT);
   assert.ok(out.search(RESULT) < out.indexOf('#/point/'), '一覧より上に出す');
+});
+
+// NIH-179: 「前回からの変化を見る」で、知識の画面の先頭ではなく「前回からの変化」の見出しまで移る
+test('NIH-179: 一覧のリンクは前回からの変化の欄を指し、知識の画面の見出しにはその目印がある', async () => {
+  const { pendingView, knowledge, changesFocused } = await import('../web/js/views/knowledge.js');
+  const lib = sample();
+  const a = rerunOf(lib);
+  const out = String(pendingView.render({ state: { ...st(lib, a), job: DONE } }));
+  assert.match(out, /<a [^>]*href="#\/knowledge\?focus=changes"[^>]*>[^<]*前回からの変化/);
+  const k = String(knowledge.render({ state: st(lib, a) }));
+  assert.match(k, /<div class="section" id="changes"><h2>前回からの変化<\/h2>/);
+  // 戻した回の見出しにも同じ目印を付ける
+  const restored = String(knowledge.render({ state: st(lib, { ...a, restoredFrom: '2026-10-01T00:00:00.000Z' }) }));
+  assert.match(restored, /<div class="section" id="changes"><h2>前回からの変化<\/h2>/);
+  // 欄へ送るのは focus=changes のときだけ（タブ・戻るでふつうに開いたら先頭から）
+  assert.equal(changesFocused(new URLSearchParams('focus=changes')), true);
+  assert.equal(changesFocused(new URLSearchParams('')), false);
+  assert.equal(changesFocused(new URLSearchParams('history=pinned')), false);
+  assert.equal(changesFocused(undefined), false);
 });

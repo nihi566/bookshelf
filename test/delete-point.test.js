@@ -17,6 +17,18 @@ test('NIH-91: 点のカードに、編集を開かずに押せる「点を削除
   assert.match(card, new RegExp(`<button class="icon-btn" data-action="delete" data-id="${id}" aria-label="点を削除"[^>]*>`));
 });
 
+test('NIH-192: 点・思いつきのカードにコピーボタンを出さず、点の削除ボタンは操作列の一番右に置く', async () => {
+  const { lib, id } = oneHighlight();
+  const card = String(highlightCard(lib.highlights[id], { library: lib }));
+  assert.doesNotMatch(card, /data-action="copy"/);
+  const actions = card.match(/<div class="hl-actions">([\s\S]*?)<\/div>/)[1];
+  const last = actions.trim().split('\n').at(-1);
+  assert.match(last, /data-action="delete"/);
+  const { thoughtCard } = await import('../web/js/ui.js');
+  const thought = String(thoughtCard({ id: 't1', text: '思いつき', status: 'inbox', createdAt: T1 }));
+  assert.doesNotMatch(thought, /data-action="copy"/);
+});
+
 test('NIH-91: カードの削除ボタンは、編集シートの削除と同じく点に deleted の印を付けて保存する', async () => {
   const { fakeApp, button } = await import('./helpers/app-actions.js');
   const { lib, id } = oneHighlight();

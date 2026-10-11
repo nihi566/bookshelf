@@ -4,7 +4,7 @@ import { appActions } from '../../web/js/app-actions.js';
 
 /**
  * @param {object} state 画面の状態（library・analysis・loaded など）
- * @param {object} [overrides] 差し替えたい部品（confirm・clipboard・restoreHistory など）
+ * @param {object} [overrides] 差し替えたい部品（confirm・restoreHistory など）
  */
 export function fakeApp(state, overrides = {}) {
   const log = [];
@@ -32,7 +32,6 @@ export function fakeApp(state, overrides = {}) {
     go: (hash) => log.push(`go ${hash}`),
     confirm: () => true,
     coverDataUrl: async () => '',
-    clipboard: () => undefined,
     restoreHistory: async () => {
       throw new Error('restoreHistory を差し替えていません');
     },

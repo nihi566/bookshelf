@@ -61,7 +61,7 @@ test('joinHighlights: 前の点に次の点の文をつなぎ、次の点は前�
   const { highlight, undo } = joinHighlights(lib, b, a, T3);
   assert.equal(highlight.id, a);
   const h = lib.highlights[a];
-  assert.equal(h.text, FIRST + SECOND, '日本語はそのままつなぐ');
+  assert.equal(h.text, `${FIRST}\n${SECOND}`, '前の文と次の文の間は改行にする（NIH-191）');
   assert.equal(h.originalText, FIRST, '取り込んだときの文を残す（再取り込みの重複判定に使う）');
   assert.equal(h.textEditedAt, T3);
   assert.equal(h.favorite, true);
@@ -80,32 +80,33 @@ test('joinHighlights: 前の点に次の点の文をつなぎ、次の点は前�
   assert.ok(undo.before.length === 2);
 });
 
-test('joinHighlights: 両側が英数字なら間に空白を入れる。直した文はいまの文どうしをつなぐ', () => {
+test('joinHighlights: 英数字どうしも改行でつなぐ。直した文はいまの文どうしをつなぐ', () => {
   const lib = emptyLibrary();
   mergeParsed(lib, [{ title: 'Book', source: 'kindle', highlights: [{ text: 'The road to', location: 1 }, { text: 'serfdom is paved', location: 2 }] }], { now: T1 });
   const [x, y] = bookHighlights(lib, bookIdFor('Book'));
   updateHighlight(lib, x.id, { text: 'The road to' }, T2);
   joinHighlights(lib, x.id, y.id, T3);
-  assert.equal(lib.highlights[x.id].text, 'The road to serfdom is paved');
+  assert.equal(lib.highlights[x.id].text, 'The road to\nserfdom is paved');
   const { lib: lib2, a, b } = threeHighlights();
   updateHighlight(lib2, a, { text: '直した前の文、' }, T2);
   joinHighlights(lib2, a, b, T3);
-  assert.equal(lib2.highlights[a].text, '直した前の文、' + SECOND);
+  assert.equal(lib2.highlights[a].text, `直した前の文、\n${SECOND}`);
   assert.equal(lib2.highlights[a].originalText, FIRST, '取り込んだときの文は最初のまま');
 });
 
-test('joinHighlights: 英語などは記号のあとにも空白を挟み、日本語と英数字の境目・空白の前後には挟まない', () => {
+test('joinHighlights: つなぎ目の前後にある空白・改行は 1 つの改行にまとめる', () => {
   const pair = (p, q) => {
     const lib = emptyLibrary();
     mergeParsed(lib, [{ title: 'B', source: 'kindle', highlights: [{ text: p, location: 1 }, { text: q, location: 2 }] }], { now: T1 });
     const [x, y] = bookHighlights(lib, bookIdFor('B'));
     return joinHighlights(lib, x.id, y.id, T2).highlight.text;
   };
-  assert.equal(pair('Hello.', 'World'), 'Hello. World');
-  assert.equal(pair('café', 'au lait'), 'café au lait');
-  assert.equal(pair('AI', 'が考える'), 'AIが考える');
-  assert.equal(pair('私たちは', 'AI を'), '私たちはAI を');
-  assert.equal(pair('求められるのは：', 'Freedom'), '求められるのは：Freedom', '全角の記号のあとは挟まない');
+  assert.equal(pair('Hello.', 'World'), 'Hello.\nWorld');
+  assert.equal(pair('AI', 'が考える'), 'AI\nが考える');
+  assert.equal(pair('求められるのは：', 'Freedom'), '求められるのは：\nFreedom');
+  assert.equal(pair('前の文 ', '　次の文'), '前の文\n次の文', '空白は残さない');
+  assert.equal(pair('前の文\n\n', '\n次の文'), '前の文\n次の文', '改行を重ねない');
+  assert.equal(pair('前の行\n  前の文', '次の文\n  次の行'), '前の行\n  前の文\n次の文\n  次の行', 'つなぎ目以外の空白・改行は変えない');
 });
 
 test('joinHighlights: 位置・ページ・日付が同じ点どうしでも、本の画面で前に見えている方を前にする', () => {
@@ -113,7 +114,7 @@ test('joinHighlights: 位置・ページ・日付が同じ点どうしでも、�
   mergeParsed(lib, [{ title: '紙の本', source: 'paper', highlights: [{ text: '前の文', createdAt: T1 }, { text: '後の文', createdAt: T1 }] }], { now: T1 });
   const [x, y] = bookHighlights(lib, bookIdFor('紙の本'));
   joinHighlights(lib, y.id, x.id, T2);
-  assert.equal(lib.highlights[x.id].text, x.originalText + y.text);
+  assert.equal(lib.highlights[x.id].text, `${x.originalText}\n${y.text}`);
   assert.equal(lib.highlights[y.id].supersededBy, x.id);
 });
 
@@ -170,7 +171,7 @@ test('同期: くっつけた結果は、どちら向きに統合しても相手
   const { a, b } = threeHighlights();
   const { undo } = joinHighlights(phone, a, b, T3);
   for (const merged of [mergeLibraries(pc, phone), mergeLibraries(phone, pc)]) {
-    assert.equal(merged.highlights[a].text, FIRST + SECOND);
+    assert.equal(merged.highlights[a].text, `${FIRST}\n${SECOND}`);
     assert.equal(merged.highlights[b].supersededBy, a);
     assert.equal(merged.highlights[b].deleted, true);
   }
@@ -202,7 +203,7 @@ test('再取り込み: くっつけた後で取り込み直しても、後ろの
   const stats = mergeParsed(lib, [{ title: '本', source: 'kindle', highlights: [{ text: FIRST, location: 100, locationEnd: 101 }, { text: SECOND, location: 102, locationEnd: 103 }] }], { now: T3 });
   assert.equal(stats.added, 0);
   assert.equal(lib.highlights[b].deleted, true);
-  assert.equal(lib.highlights[a].text, FIRST + SECOND);
+  assert.equal(lib.highlights[a].text, `${FIRST}\n${SECOND}`);
   assert.equal(liveHighlights(lib).length, 2);
 });
 
@@ -242,7 +243,7 @@ test('画面: くっつけるときは書きかけの編集を先に保存して
   assert.match(app.sheets[0].content, /join-prev/);
   app.log.length = 0;
   await app.sheets[0].onSubmit(formData({ text: '書きかけの後ろの文', userNote: '', tags: '' }), 'join-prev');
-  assert.equal(lib.highlights[a].text, FIRST + '書きかけの後ろの文', '書きかけの編集を先に保存してからつなぐ');
+  assert.equal(lib.highlights[a].text, `${FIRST}\n書きかけの後ろの文`, '書きかけの編集を先に保存してからつなぐ');
   assert.equal(lib.highlights[b].supersededBy, a);
   assert.deepEqual(app.log, ['persist', 'toast', 'render', 'sync'], '端末に保存してから知らせて同期する');
   const toast = app.toasts.at(-1);

@@ -10,7 +10,6 @@ import { FAR_REACTIONS, farConnectionById, reactFar } from '../core/far-reaction
 import { assignThoughtToLine, lineAssignmentOf, unassignThought } from '../core/line-assignments.js';
 import { FEEDBACK_LABELS, deleteBook, highlightNeighbors, joinHighlights, mergeParsed, registerBook, restoreBook, setFeedback, unjoinHighlights, updateBook, updateHighlight } from '../core/model.js';
 import { THOUGHT_STATUS, addThought, deleteThought, thoughtsOf, updateThought } from '../core/thoughts.js';
-import { isThought, pointById } from '../core/points.js';
 import { randomId } from '../core/text.js';
 import { SAMPLE_BOOKS } from '../core/sample.js';
 
@@ -29,12 +28,11 @@ const NOT_LOADED = 'まだ端末のデータを読み込んでいます。少し
  * @param {(hash: string) => void} deps.go 画面を移る
  * @param {(message: string) => boolean} deps.confirm
  * @param {(file: File|null) => Promise<string>} deps.coverDataUrl 選んだ表紙の画像を縮めた data URL にする
- * @param {() => { writeText(text: string): Promise<void> }|undefined} deps.clipboard 使えない画面では undefined
  * @param {(id: string) => Promise<object>} deps.restoreHistory PC の過去の分析をいまの分析に戻す
  * @param {(id: string, pinned: boolean) => Promise<unknown>} deps.pinHistory PC の過去の分析に「この回を残す」の印を付け外しする
  * @param {(patch: object) => Promise<{ autoAnalysis: object }>} deps.setAutoAnalysis PC の自動の分析の入切・条件を変える
  */
-export function appActions({ state, openSheet, toast, persist, saveAnalysis, sync, render, refreshThoughts, go, confirm, coverDataUrl, clipboard, restoreHistory, pinHistory, setAutoAnalysis }) {
+export function appActions({ state, openSheet, toast, persist, saveAnalysis, sync, render, refreshThoughts, go, confirm, coverDataUrl, restoreHistory, pinHistory, setAutoAnalysis }) {
   const notLoaded = () => {
     if (state.loaded) return false;
     toast(NOT_LOADED);
@@ -175,16 +173,6 @@ export function appActions({ state, openSheet, toast, persist, saveAnalysis, syn
     // 削除した本を、本といっしょに削除した点ごと戻す（NIH-139）
     'restore-book'(el) {
       return undoDeleteBook(el.dataset.id, () => render({ keepScroll: true }));
-    },
-    async copy(el) {
-      const h = pointById(state.library, el.dataset.id);
-      if (!h) return;
-      // http の LAN アドレスなど、安全でない画面ではクリップボードを使えない
-      const board = clipboard();
-      if (!board) return toast('この画面ではコピーできません（https か localhost で開いてください）', 4000);
-      const b = state.library.books[h.bookId];
-      await board.writeText(isThought(h) || !b ? h.text : `${h.text}\n— ${b.title}${b.author ? `（${b.author}）` : ''}`);
-      toast('コピーしました');
     },
     // ---- 思いつき（フリートノート） ----
     'new-thought'() {
