@@ -5,9 +5,11 @@
 //   3. 設定のポートで待ち受けている bh serve を止める（bh serve 以外が使っていたら何も止めない）
 //   4. 起動し直す（Windows でタスク「book-highlights bh serve」があればそれを、無ければ切り離して起動）
 //   5. 止めた後に起動したサーバが応答し、起動時に読んだ版（/api/info の server.version。古いサーバなら /sw.js の版）がディスクの web/sw.js と同じかを確かめる
+//      （確かめられなければ、理由に続けて data/serve.log の末尾を出す）
+//   3〜5 で失敗したら、bh serve が待ち受けていなければ 4 と同じ経路で起動し直してから失敗にする（常駐を止めたまま残さない）
 
 import { execFile, spawn } from 'node:child_process';
-import { copyFile, readFile } from 'node:fs/promises';
+import { copyFile, open, readFile } from 'node:fs/promises';
 import { closeSync, openSync } from 'node:fs';
 import path from 'node:path';
 import { swVersion } from '../web/core/serve-version.js';
@@ -21,6 +23,9 @@ const DEFAULT_WAIT_MS = 30_000;
 const STOP_WAIT_MS = 10_000;
 const POLL_MS = 500;
 const COMMAND_TIMEOUT_MS = 120_000;
+// 起動の確認に失敗したとき、理由に続けて出す data/serve.log の末尾（追記され続けるので後ろから少しだけ読む）
+const LOG_TAIL_LINES = 20;
+const LOG_TAIL_BYTES = 64 * 1024;
 
 /** 退避ファイル名に使う時刻（PC の時刻で YYYYMMDD-HHMMSS） */
 export function backupStamp(d) {
@@ -82,13 +87,18 @@ export async function listeners({ platform, port, run = execRun }) {
   }).filter((l) => Number.isInteger(l.pid) && l.pid > 0);
 }
 
-async function stopServe({ platform, port, run, kill, sleep, now, log }) {
+/** ポートで待ち受けている bh serve を調べる（bh serve と確かめられないプロセスがあれば、何も止めずに失敗にする） */
+async function findServe({ platform, port, run }) {
   const found = await listeners({ platform, port, run });
   const others = found.filter((l) => !isServeCommand(l.cmd));
   if (others.length) {
     const what = others.map((l) => `PID ${l.pid}${l.cmd ? '' : '（コマンドラインを読めませんでした）'}`).join(', ');
     throw new Error(`ポート ${port} を bh serve と確かめられないプロセスが使っています（${what}）。何も止めずに終わります`);
   }
+  return found;
+}
+
+async function stopServe(found, { platform, port, run, kill, sleep, now, log }) {
   if (!found.length) {
     log(`止める: ポート ${port} で動いている bh serve はありませんでした（別のポートで動かしているなら、bh config port で合わせてください）`);
     return;
@@ -99,7 +109,7 @@ async function stopServe({ platform, port, run, kill, sleep, now, log }) {
     } catch (e) {
       // 調べてから止めるまでのあいだに終わっていたなら、止まっているのでそのまま進む
       if (e?.code === 'ESRCH') continue;
-      throw new Error(`bh serve（PID ${l.pid}）を止められませんでした: ${e.message}（main は取り込み済み。bh serve を手で起動し直してください）`);
+      throw new Error(`bh serve（PID ${l.pid}）を止められませんでした: ${e.message}（main は取り込み済み）`);
     }
   }
   log(`止める: bh serve（PID ${found.map((l) => l.pid).join(', ')}）`);
@@ -141,6 +151,27 @@ async function startServe({ platform, run, repoDir, dataDir, spawnServe, log }) 
   (spawnServe || (() => spawnDetached(repoDir, dataDir)))();
   log(`起動: node cli/bh.js serve（出力は ${path.join(dataDir, 'serve.log')}）`);
   return 'spawn';
+}
+
+/** data/serve.log の末尾の行（無い・空・読めないときは空の配列） */
+async function serveLogTail(dataDir) {
+  let fh;
+  try {
+    fh = await open(path.join(dataDir, 'serve.log'), 'r');
+    const { size } = await fh.stat();
+    const length = Math.min(size, LOG_TAIL_BYTES);
+    const buf = Buffer.alloc(length);
+    await fh.read(buf, 0, length, size - length);
+    const lines = buf.toString('utf8').split(/\r?\n/);
+    // 途中から読んだなら、先頭の行は欠けているので捨てる
+    if (length < size) lines.shift();
+    while (lines.length && !lines.at(-1).trim()) lines.pop();
+    return lines.some((l) => l.trim()) ? lines.slice(-LOG_TAIL_LINES) : [];
+  } catch {
+    return [];
+  } finally {
+    await fh?.close();
+  }
 }
 
 function baseUrl(cfg) {
@@ -186,6 +217,51 @@ async function verifyServe({ cfg, repoDir, fetchFn, stoppedAt, waitMs, sleep, no
   }
 }
 
+/** 版を問わず、サーバが /api/info に応答するまで待つ（起動し直したときの確認） */
+async function waitResponding({ cfg, fetchFn, waitMs, sleep, now }) {
+  const base = baseUrl(cfg);
+  const headers = cfg.token ? { 'X-BH-Token': cfg.token } : {};
+  const deadline = now().getTime() + waitMs;
+  let reason = '応答がありません';
+  for (;;) {
+    try {
+      const res = await fetchFn(`${base}/api/info`, { headers, signal: AbortSignal.timeout(2000) });
+      if (res.ok) return;
+      reason = `/api/info が ${res.status} を返しました`;
+    } catch (e) {
+      reason = e.message;
+    }
+    if (now().getTime() >= deadline) throw new Error(`${base} が ${Math.round(waitMs / 1000)} 秒以内に応答しませんでした: ${reason}`);
+    await sleep(POLL_MS);
+  }
+}
+
+function manualStartHint(platform) {
+  const plain = 'リポジトリで node cli/bh.js serve';
+  return platform === 'win32' ? `PowerShell で Start-ScheduledTask -TaskName '${SERVE_TASK}'（タスクが無ければ ${plain}）` : plain;
+}
+
+/**
+ * 止めた後の段階で失敗したとき、常駐が止まったまま残らないようにする（NIH-147）。
+ * bh serve がまだ待ち受けていれば何もしない。いなければ同じ経路で起動し直し、応答を待つ。結果の文面を返す（ここでは投げない）
+ */
+async function recoverServe(ctx) {
+  const { platform, port, run } = ctx;
+  try {
+    const running = (await listeners({ platform, port, run })).filter((l) => isServeCommand(l.cmd));
+    if (running.length) return `bh serve は動いています（PID ${running.map((l) => l.pid).join(', ')}）。起動し直していません`;
+  } catch {
+    // 調べられなければ、止まっているものとして起動し直す（動いていれば、起動した側がポートを取れずに終わるだけ）
+  }
+  try {
+    const how = await startServe(ctx);
+    await waitResponding({ ...ctx, cfg: { ...ctx.cfg, port } });
+    return `bh serve を起動し直しました（${how === 'task' ? `タスク「${SERVE_TASK}」` : 'node cli/bh.js serve'}）`;
+  } catch (e) {
+    return `bh serve を起動し直せませんでした（${e.message}）。手で起動してください: ${manualStartHint(platform)}`;
+  }
+}
+
 /**
  * 既定の外部コマンドの実行（標準出力を返す。失敗したら標準エラーを理由にして投げる）。
  * git が資格情報を尋ねて止まったままにならないよう、尋ねさせず、時間を区切る
@@ -225,12 +301,28 @@ export async function runUpdate({
   log(commits.log.length ? `取り込み: ${commits.before} → ${commits.after}（${commits.log.length} 件）` : `取り込み: 新しいコミットはありませんでした（${commits.after}）`);
   for (const l of commits.log) log(`  ${l}`);
 
-  await stopServe({ platform, port, run, kill, sleep, now, log });
-  const stoppedAt = now().getTime();
-  const started = await startServe({ platform, run, repoDir, dataDir, spawnServe, log });
+  const ctx = { platform, port, run, kill, sleep, now, log, repoDir, dataDir, spawnServe, cfg, fetchFn, waitMs };
+  const found = await findServe(ctx);
+  try {
+    await stopServe(found, ctx);
+    const stoppedAt = now().getTime();
+    const started = await startServe(ctx);
 
-  const { version, startedAt, mismatch } = await verifyServe({ cfg: { ...cfg, port }, repoDir, fetchFn, stoppedAt, waitMs, sleep, now });
-  if (mismatch) throw new Error(mismatch);
-  log(`確認: 新しいコードで動いています（版 ${version}・起動 ${startedAt}）`);
-  return { backups, commits, started, version, startedAt };
+    let result;
+    try {
+      result = await verifyServe({ ...ctx, cfg: { ...cfg, port }, stoppedAt });
+    } catch (e) {
+      result = { mismatch: e.message };
+    }
+    const { version, startedAt, mismatch } = result;
+    if (mismatch) {
+      // 起動時の例外・ポート競合などの原因は、たいていログの末尾にある
+      const tail = await serveLogTail(dataDir);
+      throw new Error(tail.length ? `${mismatch}\n--- ${path.join(dataDir, 'serve.log')} の末尾 ${tail.length} 行 ---\n${tail.join('\n')}` : mismatch);
+    }
+    log(`確認: 新しいコードで動いています（版 ${version}・起動 ${startedAt}）`);
+    return { backups, commits, started, version, startedAt };
+  } catch (e) {
+    throw new Error(`${e.message}\n${await recoverServe(ctx)}`);
+  }
 }

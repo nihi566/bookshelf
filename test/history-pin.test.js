@@ -177,7 +177,7 @@ test('NIH-127: 履歴の見出しに印の数と上限を出し、上限のと�
   const guide = /ほかの回の「残すのをやめる」を押す/;
   const full = String(historyBody(a, { current: false, pinned: false, pinCount: 12, pinMax: 12 }));
   assert.match(full, guide);
-  assert.match(full, /<a href="#\/knowledge">知識の画面の分析の履歴<\/a>/, '履歴の一覧へ戻れる');
+  assert.match(full, /<a href="#\/knowledge\?history=pinned">知識の画面の分析の履歴（印の付いた回だけ）<\/a>/, '印の付いた回だけに絞った履歴の一覧へ行ける（NIH-161）');
   assert.match(full, /data-action="pin-history"[^>]*>この回を残す<\/button>/, 'ボタンは残す（押せば PC が理由を返す）');
   // 上限に達していない・この回に印がある・上限が分からないときは案内しない
   assert.doesNotMatch(String(historyBody(a, { current: false, pinned: false, pinCount: 11, pinMax: 12 })), guide);
@@ -187,4 +187,37 @@ test('NIH-127: 履歴の見出しに印の数と上限を出し、上限のと�
   const src = readFileSync(path.join(ROOT, 'web/js/views/knowledge.js'), 'utf8');
   assert.match(src, /<h2>分析の履歴 <span class="small muted pin-count" id="history-pin-count"><\/span><\/h2>/, '見出しの横に数を出す場所がある');
   assert.match(readFileSync(path.join(ROOT, 'web/js/services.js'), 'utf8'), /history: \(\) => call\('\/api\/history'\)\.then\(\(r\) => \(\{ items: r\?\.items \|\| \[\], pinMax: Number\.isInteger\(r\?\.pinMax\) \? r\.pinMax : null \}\)\)/);
+});
+
+test('NIH-161: 見出しの「残す N / 12 回」を押すと印の付いた回だけに絞り、もう一度押すと全件に戻る', async () => {
+  const { historyListHtml, pinCountHtml, historyPinnedOnly } = await import('../web/js/views/knowledge.js');
+  const items = [
+    { id: '20261004T100000000Z', createdAt: '2026-10-04T10:00:00.000Z', stats: {}, changes: null, pinned: true },
+    { id: '20261003T100000000Z', createdAt: '2026-10-03T10:00:00.000Z', stats: {}, changes: null },
+    { id: '20261002T100000000Z', createdAt: '2026-10-02T10:00:00.000Z', stats: {}, changes: null, pinned: false },
+  ];
+  // 絞り込みは URL のクエリで持つ（別の画面のリンクからも開ける）
+  assert.equal(historyPinnedOnly(new URLSearchParams('history=pinned')), true);
+  assert.equal(historyPinnedOnly(new URLSearchParams('')), false);
+  assert.equal(historyPinnedOnly(undefined), false);
+
+  // 見出しの数: 全件のときは絞るリンク、絞っているときは全件に戻すリンク
+  const off = String(pinCountHtml(items, 12, false));
+  assert.match(off, /<a href="#\/knowledge\?history=pinned" aria-pressed="false"[^>]*>残す 1 \/ 12 回<\/a>/);
+  const on = String(pinCountHtml(items, 12, true));
+  assert.match(on, /<a href="#\/knowledge" aria-pressed="true"[^>]*>残す 1 \/ 12 回<\/a>/);
+
+  // 一覧: 絞ると印の回だけ。全件に戻す入口も出す
+  assert.equal((String(historyListHtml(items, null)).match(/<li>/g) || []).length, 3);
+  const pinnedList = String(historyListHtml(items, null, { pinnedOnly: true }));
+  assert.equal((pinnedList.match(/<li>/g) || []).length, 1);
+  assert.match(pinnedList, /20261004T100000000Z/);
+  assert.doesNotMatch(pinnedList, /20261003T100000000Z|20261002T100000000Z/);
+  assert.match(pinnedList, /<a href="#\/knowledge">すべての回を出す<\/a>/);
+  // 印の回が無ければ、そう出して全件に戻す入口を出す
+  const none = String(historyListHtml(items.filter((h) => !h.pinned), null, { pinnedOnly: true }));
+  assert.match(none, /印の付いた回はありません/);
+  assert.match(none, /<a href="#\/knowledge">すべての回を出す<\/a>/);
+  // 履歴そのものが無いときは、絞っていても従来の案内
+  assert.match(String(historyListHtml([], null, { pinnedOnly: true })), /まだ履歴がありません/);
 });

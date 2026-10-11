@@ -48,6 +48,23 @@ export function appActions({ state, openSheet, toast, persist, saveAnalysis, syn
     toast('元に戻しました');
   }
 
+  /**
+   * 削除した本を、本といっしょに削除した点ごと戻す（NIH-139）。保存できてから show で画面を描き直す
+   * @param {string} id 本の ID
+   * @param {() => void} show 戻した後の画面の出し方（ゴミ箱は描き直し、削除直後の通知は本の画面へ）
+   */
+  async function undoDeleteBook(id, show) {
+    const { library } = state;
+    const count = restoreBook(library, id);
+    if (count === null) throw new Error('この本はもう見つかりません（同期で戻ったか、消えた可能性があります）');
+    // 保存を待つ間に同期でライブラリが差し替わっても通知を出せるよう、書名は先に取っておく
+    const { title } = library.books[id];
+    await persist();
+    show();
+    sync();
+    toast(`『${title}』と点 ${count} 件を元に戻しました`);
+  }
+
   /** くっつけた 2 つの点を、くっつける前に戻す */
   async function undoJoinHighlights(undo) {
     unjoinHighlights(state.library, undo);
@@ -154,16 +171,8 @@ export function appActions({ state, openSheet, toast, persist, saveAnalysis, syn
       return undoDeleteHighlight(el.dataset.id);
     },
     // 削除した本を、本といっしょに削除した点ごと戻す（NIH-139）
-    async 'restore-book'(el) {
-      const { library } = state;
-      const count = restoreBook(library, el.dataset.id);
-      if (count === null) throw new Error('この本はもう見つかりません（同期で戻ったか、消えた可能性があります）');
-      // 保存を待つ間に同期でライブラリが差し替わっても通知を出せるよう、書名は先に取っておく
-      const { title } = library.books[el.dataset.id];
-      await persist();
-      render({ keepScroll: true });
-      sync();
-      toast(`『${title}』と点 ${count} 件を元に戻しました`);
+    'restore-book'(el) {
+      return undoDeleteBook(el.dataset.id, () => render({ keepScroll: true }));
     },
     async copy(el) {
       const h = pointById(state.library, el.dataset.id);
@@ -258,7 +267,8 @@ export function appActions({ state, openSheet, toast, persist, saveAnalysis, syn
       deleteBook(state.library, b.id);
       await persist();
       go('#/books');
-      toast('削除しました');
+      // 押し間違いに気づいたその場で、設定の「削除した点」まで行かずに本と点ごと戻せるようにする（NIH-154）
+      toast('削除しました', 6000, { label: '元に戻す', run: () => undoDeleteBook(b.id, () => go(`#/book/${b.id}`)) });
       sync();
     },
     async 'load-sample'() {
