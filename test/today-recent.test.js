@@ -96,7 +96,7 @@ test('NIH-99: ホームの画面は最近見た点を後ろへ回して選び、
   const marked = [];
   String(home.render({ state, shuffle: '', recentPicks, markPicksSeen: (x) => marked.push(x) }));
   assert.equal(marked.length, 1);
-  assert.deepEqual(marked[0], ids(dailyPicks(library, 2, new Date(), '', recentPicks)));
+  assert.deepEqual(marked[0], ids(dailyPicks(library, 1, new Date(), '', recentPicks)));
   assert.ok(marked[0].every((id) => !recentPicks.has(id)), '最近見た点は出さない');
   // 履歴を渡さない呼び方（ほかのテスト・古い呼び出し）でも落ちない
   assert.doesNotThrow(() => String(home.render({ state, shuffle: 0 })));

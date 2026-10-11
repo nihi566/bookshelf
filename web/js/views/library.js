@@ -24,7 +24,7 @@ const flow = html`<div class="flow" aria-label="点から立体へ">
 </div>`;
 
 // ホームの今日の点の件数
-const HOME_PICKS = 2;
+const HOME_PICKS = 1;
 
 export const home = {
   render({ state, shuffle = 0, recentPicks, markPicksSeen }) {
