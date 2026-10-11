@@ -88,7 +88,8 @@ function elapsed(now, iso) {
  * - 利用者が分析を中止してから AUTO_RETRY_MS たっていなければ待つ（止めた直後に始め直さない）
  * @param {{ points: {id:string}[], analysis: object|null, config?: object, now?: Date, lastFailureAt?: string|null, lastCancelledAt?: string|null, notesChanged?: boolean }} p
  *   notesChanged: 前回の分析のあとに永久ノートを書いた・直したか（notesChanged() の結果）
- * @returns {{ due: boolean, pending: number, removed: number, reason: string }}
+ * @returns {{ due: boolean, pending: number, removed: number, reason: string, nextAt: string|null }}
+ *   nextAt: 時間を待っているときに始まる見込みの時刻（ISO。その間に点が増えればもっと早く始まる）。待っていない・変化が無いときは null（NIH-112）
  */
 export function autoAnalyzeDue({ points, analysis, config, now = new Date(), lastFailureAt = null, lastCancelledAt = null, notesChanged: notes = false }) {
   const c = autoConfig(config);
@@ -96,14 +97,18 @@ export function autoAnalyzeDue({ points, analysis, config, now = new Date(), las
   const removed = removedPoints(points, analysis);
   const changed = pending + removed;
   const at = now.valueOf();
-  const result = (due, reason) => ({ due, pending, removed, reason });
+  const result = (due, reason, nextAt = null) => ({ due, pending, removed, reason, nextAt: nextAt === null ? null : new Date(nextAt).toISOString() });
   if (!c.enabled) return result(false, '自動の分析は切ってあります');
   if (points.length < MIN_POINTS) return result(false, `点が ${MIN_POINTS} 件未満です`);
   if (!changed && !notes) return result(false, '前回の分析のあとに増えた点・減った点も、書いた・直した永久ノートもありません');
-  if (elapsed(at, lastFailureAt) < AUTO_RETRY_MS) return result(false, '前回の分析が失敗したので、少し待ってから試し直します');
-  if (elapsed(at, lastCancelledAt) < AUTO_RETRY_MS) return result(false, '分析を中止したので、少し待ってから始めます');
   const since = elapsed(at, analysis?.createdAt);
   const hours = since === Infinity ? Infinity : since / 3_600_000;
+  // 時間の条件を満たす時刻（いま条件を満たしていれば null）。前回の時刻が読めなければ hours が Infinity で、いま満たしている
+  const timeAt = changed >= c.minPoints || hours >= c.maxHours ? null : at - since + c.maxHours * 3_600_000;
+  // 失敗・中止のあとの待ちが明ける時刻。明けたあとも時間を待つなら、遅い方
+  const retryAt = (iso) => Math.max(Date.parse(iso) + AUTO_RETRY_MS, timeAt ?? 0);
+  if (elapsed(at, lastFailureAt) < AUTO_RETRY_MS) return result(false, '前回の分析が失敗したので、少し待ってから試し直します', retryAt(lastFailureAt));
+  if (elapsed(at, lastCancelledAt) < AUTO_RETRY_MS) return result(false, '分析を中止したので、少し待ってから始めます', retryAt(lastCancelledAt));
   const counts = [pending ? `${pending} 件増え` : '', removed ? `${removed} 件減り` : ''].filter(Boolean).join('、');
   const pointsText = counts ? `点が ${counts}ました` : '';
   if (changed >= c.minPoints) return result(true, `前回の分析のあとに${pointsText}`);
@@ -112,6 +117,6 @@ export function autoAnalyzeDue({ points, analysis, config, now = new Date(), las
     return result(true, `前回の分析から ${Number.isFinite(hours) ? Math.floor(hours) : '–'} 時間たち、${what}`);
   }
   // 永久ノートは、書いている途中で分析が始まらないように、前回から maxHours たつまで待つ（点の数の条件には数えない）
-  if (!changed) return result(false, `書いた・直した永久ノートは、前回から ${c.maxHours} 時間たつと分析に入れます`);
-  return result(false, `点が ${c.minPoints} 件増える・減るか、前回から ${c.maxHours} 時間たつと分析します`);
+  if (!changed) return result(false, `書いた・直した永久ノートは、前回から ${c.maxHours} 時間たつと分析に入れます`, timeAt);
+  return result(false, `あと ${Math.ceil(c.minPoints - changed)} 件増える・減るか、前回から ${c.maxHours} 時間たつと分析します`, timeAt);
 }
