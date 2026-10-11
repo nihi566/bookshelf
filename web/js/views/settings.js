@@ -19,6 +19,19 @@ function shortTime(iso) {
   return Number.isNaN(d.getTime()) ? '—' : `${d.getMonth() + 1}/${d.getDate()} ${d.toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' })}`;
 }
 
+/** Play ブックスで最後に新しい点が届いた時刻・件数（PC の state.json に残るので、bh serve を起動し直しても消えない） */
+function lastNewText(n) {
+  return n?.at ? `${shortTime(n.at)}・${Number(n.added) || 0} 件${n.updated ? `（更新 ${n.updated} 件）` : ''}` : 'まだ届いていません';
+}
+
+/** 設定 → 接続を確認 の Play ブックスの要約（取り込み画面と同じ「最後に新しい点」を出す） */
+export function googleLabel(g) {
+  if (!g) return '未対応（PC の bh を更新してください）';
+  if (!g.active) return g.error || '未設定';
+  const problems = g.problemCount ?? g.problems?.length ?? 0;
+  return `有効（最終確認 ${shortTime(g.lastCheck)}・最後に新しい点 ${lastNewText(g.lastNew)}）${problems ? ` ／ 取り込めない本 ${problems} 冊（取り込みの画面に理由）` : ''}${g.error ? ` ／ ${g.error}` : ''}`;
+}
+
 /**
  * 取り込み画面の Play ブックス自動取り込みの状態欄の中身（PC がドライブを見張っている結果）。
  * 取り込めない本は、文書が直るまで出し続ける（PC の記録に残っている）
@@ -30,9 +43,8 @@ export function playbooksSyncBlock(state) {
   if (!g.active) return html`<p class="small">自動取り込み: ${g.error || '未設定'}</p>`;
   const problems = Array.isArray(g.problems) ? g.problems : [];
   const count = Number.isInteger(g.problemCount) ? g.problemCount : problems.length;
-  const n = g.lastNew;
   return html`<p class="small">自動取り込み: 有効（最終確認 ${shortTime(g.lastCheck)}）</p>
-    <p class="small">最後に新しい点: ${n?.at ? `${shortTime(n.at)}・${Number(n.added) || 0} 件${n.updated ? `（更新 ${n.updated} 件）` : ''}` : 'まだ届いていません'}</p>
+    <p class="small">最後に新しい点: ${lastNewText(g.lastNew)}</p>
     ${count
       ? html`<details class="pb-problems">
           <summary class="small">取り込めない本 ${count} 冊（押すと理由）</summary>
