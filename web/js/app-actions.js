@@ -7,7 +7,7 @@ import { toggleLineStar } from '../core/line-stars.js';
 import { markDiscoveryRead } from '../core/discovery-reads.js';
 import { FAR_REACTIONS, farConnectionById, reactFar } from '../core/far-reactions.js';
 import { assignThoughtToLine, lineAssignmentOf, unassignThought } from '../core/line-assignments.js';
-import { FEEDBACK_LABELS, deleteBook, highlightNeighbors, joinHighlights, mergeParsed, registerBook, setFeedback, unjoinHighlights, updateBook, updateHighlight } from '../core/model.js';
+import { FEEDBACK_LABELS, deleteBook, highlightNeighbors, joinHighlights, mergeParsed, registerBook, restoreBook, setFeedback, unjoinHighlights, updateBook, updateHighlight } from '../core/model.js';
 import { THOUGHT_STATUS, addThought, deleteThought, thoughtsOf, updateThought } from '../core/thoughts.js';
 import { isThought, pointById } from '../core/points.js';
 import { randomId } from '../core/text.js';
@@ -152,6 +152,18 @@ export function appActions({ state, openSheet, toast, persist, saveAnalysis, syn
     // 削除した点の画面（#/trash）から戻す。通知の「元に戻す」と同じ処理
     'restore-highlight'(el) {
       return undoDeleteHighlight(el.dataset.id);
+    },
+    // 削除した本を、本といっしょに削除した点ごと戻す（NIH-139）
+    async 'restore-book'(el) {
+      const { library } = state;
+      const count = restoreBook(library, el.dataset.id);
+      if (count === null) throw new Error('この本はもう見つかりません（同期で戻ったか、消えた可能性があります）');
+      // 保存を待つ間に同期でライブラリが差し替わっても通知を出せるよう、書名は先に取っておく
+      const { title } = library.books[el.dataset.id];
+      await persist();
+      render({ keepScroll: true });
+      sync();
+      toast(`『${title}』と点 ${count} 件を元に戻しました`);
     },
     async copy(el) {
       const h = pointById(state.library, el.dataset.id);

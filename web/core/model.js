@@ -122,18 +122,7 @@ export function mergeParsed(library, parsedBooks, { now = new Date().toISOString
       continue;
     } else if (book.deleted) {
       // 削除済みの本に再取り込みがあった場合は、本と一緒に消した点ごと復活させる（明示的な取り込み操作のため）
-      delete book.deleted;
-      book.updatedAt = now;
-      book.userUpdatedAt = now;
-      for (const h of Object.values(library.highlights)) {
-        if (h.bookId === bookId && h.deletedWithBook) {
-          keepUserStamp(h);
-          delete h.deleted;
-          delete h.deletedWithBook;
-          h.updatedAt = now;
-          h.userUpdatedAt = now;
-        }
-      }
+      restoreBook(library, bookId, now);
     }
     stats.books++;
     if (!book.author && pb.author) book.author = cleanText(pb.author).replace(/\s+/g, ' ');
@@ -637,6 +626,45 @@ export function deletedHighlights(library) {
   return Object.values(library.highlights)
     .filter((h) => h.deleted && !h.supersededBy && library.books[h.bookId] && !library.books[h.bookId].deleted)
     .sort((a, b) => String(b.userUpdatedAt || b.updatedAt || '').localeCompare(String(a.userUpdatedAt || a.updatedAt || '')));
+}
+
+/**
+ * 利用者が削除した本（ゴミ箱。削除した時刻の新しい順）と、本といっしょに削除した点の数（restoreBook で戻る点）
+ * @returns {{ book: object, count: number }[]}
+ */
+export function deletedBooks(library) {
+  const counts = new Map();
+  for (const h of Object.values(library.highlights)) if (h.deletedWithBook) counts.set(h.bookId, (counts.get(h.bookId) || 0) + 1);
+  return Object.values(library.books)
+    .filter((b) => b.deleted)
+    .sort((a, b) => String(b.userUpdatedAt || b.updatedAt || '').localeCompare(String(a.userUpdatedAt || a.updatedAt || '')))
+    .map((book) => ({ book, count: counts.get(book.id) || 0 }));
+}
+
+/**
+ * 削除した本を、本といっしょに削除した点（deletedWithBook）ごと戻す。印を外すだけなのでメモ・タグ・★も戻る。
+ * 本より前に点だけ削除していた点は削除したまま。時刻を進めるので、同期でほかの端末にも戻る
+ * @returns {number|null} 戻した点の数。本が無い・削除していなければ null（何もしない）
+ */
+export function restoreBook(library, bookId, now = new Date().toISOString()) {
+  const book = Object.hasOwn(library.books, bookId) ? library.books[bookId] : null;
+  if (!book?.deleted) return null;
+  delete book.deleted;
+  book.updatedAt = now;
+  book.userUpdatedAt = now;
+  let count = 0;
+  for (const h of Object.values(library.highlights)) {
+    if (h.bookId === bookId && h.deletedWithBook) {
+      keepUserStamp(h);
+      delete h.deleted;
+      delete h.deletedWithBook;
+      h.updatedAt = now;
+      h.userUpdatedAt = now;
+      count++;
+    }
+  }
+  library.updatedAt = now;
+  return count;
 }
 
 export function deleteBook(library, bookId, now = new Date().toISOString()) {
