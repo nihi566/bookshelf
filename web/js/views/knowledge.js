@@ -58,6 +58,14 @@ function when(iso) {
   return `${d.getMonth() + 1}/${d.getDate()} ${d.toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' })}`;
 }
 
+/** 次の自動の分析がいつ・何を待って始まるか（オフのとき・分析の最中・古い PC で判断が届かないときは出さない。NIH-112） */
+function nextLine(au) {
+  const n = au.next;
+  if (!au.enabled || au.running || !n?.reason) return '';
+  const text = n.due ? `まもなく始めます（${n.reason}）` : `${n.reason}${n.nextAt ? `（始まる見込み: ${when(n.nextAt)}）` : ''}`;
+  return html`<p class="small muted">次の自動の分析: ${text}</p>`;
+}
+
 /**
  * 自動の分析の状態（PC の bh serve が、点が増えたら人の操作なしに分析し直す）。
  * PC の情報（/api/info）を取り直したときに、この欄だけ差し替える（app.js の PC_INFO_BOXES）
@@ -72,6 +80,7 @@ export function autoStatusBlock(state) {
   const cancelled = au.lastCancelledAt && (!au.lastSuccessAt || au.lastCancelledAt > au.lastSuccessAt);
   return html`<p class="small">自動の分析: ${au.enabled ? html`<b>オン</b> — ${rule}` : html`<b>オフ</b>（PC で <span class="code">bh config auto on</span> で入れられます）`}</p>
     <p class="small muted">最後に成功: ${when(okAt)}${au.lastTrigger === 'auto' && au.lastSuccessAt && !au.lastError && !cancelled ? '（自動）' : ''}</p>
+    ${nextLine(au)}
     ${au.enabled && au.notesChanged ? html`<p class="small muted">前回の分析のあとに書いた・直した永久ノートがあります。次の分析で面・立体に入ります。</p>` : ''}
     ${cancelled ? html`<p class="small muted">${when(au.lastCancelledAt)} に分析を中止しました。少し時間をおいてから、PC が自動で始め直します。</p>` : ''}
     ${au.lastError ? html`<p class="notice err">${when(au.lastErrorAt)} の分析に失敗しました: ${au.lastError}。前回の結果はそのまま残っています。次の機会に PC がもう一度試します。</p>` : ''}`;

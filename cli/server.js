@@ -227,7 +227,7 @@ export function createCompanionServer({ store, log = console.log, catalogFetch, 
           job: publicJob(),
           google: drive ? { ...publicDrive(drive.status), lastNew: st.playbooksSync?.lastNew || null } : null,
           // 自動の分析の設定と、最後に成功した時刻・失敗の理由（知識の画面に出す）
-          autoAnalysis: { ...autoConfig(cfg.autoAnalyze), running: Boolean(auto), pending: pendingPoints(points, analysis), removed: removedPoints(points, analysis), notesChanged: notesChanged(lib, analysis), ...publicAutoState(st.autoAnalysis) },
+          autoAnalysis: { ...autoConfig(cfg.autoAnalyze), running: Boolean(auto), pending: pendingPoints(points, analysis), removed: removedPoints(points, analysis), notesChanged: notesChanged(lib, analysis), next: autoNext({ library: lib, analysis, st, cfg }), ...publicAutoState(st.autoAnalysis) },
         });
       }
       case 'GET /api/history':
@@ -460,6 +460,31 @@ export function createCompanionServer({ store, log = console.log, catalogFetch, 
     }
   }
 
+  /** 自動の分析の条件の判断（checkAutoAnalyze と /api/info で同じ入力から判断する） */
+  function autoDecision({ library, analysis, st, cfg, now = new Date() }) {
+    const later = (a, b) => [a, b].filter(Boolean).sort().pop() || null;
+    return autoAnalyzeDue({
+      points: analysisPoints(library),
+      analysis,
+      config: cfg.autoAnalyze,
+      now,
+      lastFailureAt: later(st.autoAnalysis?.lastErrorAt, lastStop.failure),
+      lastCancelledAt: later(st.autoAnalysis?.lastCancelledAt, lastStop.cancel),
+      notesChanged: notesChanged(library, analysis),
+    });
+  }
+
+  /** 次の自動の分析がいつ・何を待って始まるか（知識の画面に出す。NIH-112） */
+  function autoNext({ library, analysis, st, cfg }) {
+    // checkAutoAnalyze が始めない場面では「まもなく始めます」と出さない
+    const wait = (reason) => ({ due: false, reason, nextAt: null });
+    if (job.running) return wait('分析の最中です。終わってから判断します');
+    if (activeImports > 0 || drive?.status?.checking) return wait('取り込みの最中です。終わってから判断します');
+    if (!cfg.llm.chatModel) return wait('チャットモデルが設定されていません（PC で bh config model <モデル名>）');
+    const { due, reason, nextAt } = autoDecision({ library, analysis, st, cfg });
+    return { due, reason, nextAt };
+  }
+
   /**
    * 自動の分析を始めるか確かめ、条件を満たしていれば始める（終わるのは待たない）。
    * 手動の分析中・取り込みの最中（拡張・Google ドライブ・画面からの取り込み）には始めない
@@ -471,16 +496,7 @@ export function createCompanionServer({ store, log = console.log, catalogFetch, 
     const cfg = await store.config();
     if (!cfg.llm.chatModel) return { started: false, reason: 'チャットモデルが設定されていません' };
     const [library, analysis, st] = await Promise.all([store.library(), store.analysis(), store.state()]);
-    const later = (a, b) => [a, b].filter(Boolean).sort().pop() || null;
-    const r = autoAnalyzeDue({
-      points: analysisPoints(library),
-      analysis,
-      config: cfg.autoAnalyze,
-      now,
-      lastFailureAt: later(st.autoAnalysis?.lastErrorAt, lastStop.failure),
-      lastCancelledAt: later(st.autoAnalysis?.lastCancelledAt, lastStop.cancel),
-      notesChanged: notesChanged(library, analysis),
-    });
+    const r = autoDecision({ library, analysis, st, cfg, now });
     if (!r.due || job.running) return { started: false, ...r };
     log(`[auto] ${r.reason}。分析を始めます`);
     startJob('analyze', [], { trigger: 'auto' });
