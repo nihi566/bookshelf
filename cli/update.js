@@ -5,10 +5,11 @@
 //   3. 設定のポートで待ち受けている bh serve を止める（bh serve 以外が使っていたら何も止めない）
 //   4. 起動し直す（Windows でタスク「book-highlights bh serve」があればそれを、無ければ切り離して起動）
 //   5. 止めた後に起動したサーバが応答し、起動時に読んだ版（/api/info の server.version。古いサーバなら /sw.js の版）がディスクの web/sw.js と同じかを確かめる
+//      （確かめられなければ、理由に続けて data/serve.log の末尾を出す）
 //   3〜5 で失敗したら、bh serve が待ち受けていなければ 4 と同じ経路で起動し直してから失敗にする（常駐を止めたまま残さない）
 
 import { execFile, spawn } from 'node:child_process';
-import { copyFile, readFile } from 'node:fs/promises';
+import { copyFile, open, readFile } from 'node:fs/promises';
 import { closeSync, openSync } from 'node:fs';
 import path from 'node:path';
 import { swVersion } from '../web/core/serve-version.js';
@@ -22,6 +23,9 @@ const DEFAULT_WAIT_MS = 30_000;
 const STOP_WAIT_MS = 10_000;
 const POLL_MS = 500;
 const COMMAND_TIMEOUT_MS = 120_000;
+// 起動の確認に失敗したとき、理由に続けて出す data/serve.log の末尾（追記され続けるので後ろから少しだけ読む）
+const LOG_TAIL_LINES = 20;
+const LOG_TAIL_BYTES = 64 * 1024;
 
 /** 退避ファイル名に使う時刻（PC の時刻で YYYYMMDD-HHMMSS） */
 export function backupStamp(d) {
@@ -147,6 +151,27 @@ async function startServe({ platform, run, repoDir, dataDir, spawnServe, log }) 
   (spawnServe || (() => spawnDetached(repoDir, dataDir)))();
   log(`起動: node cli/bh.js serve（出力は ${path.join(dataDir, 'serve.log')}）`);
   return 'spawn';
+}
+
+/** data/serve.log の末尾の行（無い・空・読めないときは空の配列） */
+async function serveLogTail(dataDir) {
+  let fh;
+  try {
+    fh = await open(path.join(dataDir, 'serve.log'), 'r');
+    const { size } = await fh.stat();
+    const length = Math.min(size, LOG_TAIL_BYTES);
+    const buf = Buffer.alloc(length);
+    await fh.read(buf, 0, length, size - length);
+    const lines = buf.toString('utf8').split(/\r?\n/);
+    // 途中から読んだなら、先頭の行は欠けているので捨てる
+    if (length < size) lines.shift();
+    while (lines.length && !lines.at(-1).trim()) lines.pop();
+    return lines.some((l) => l.trim()) ? lines.slice(-LOG_TAIL_LINES) : [];
+  } catch {
+    return [];
+  } finally {
+    await fh?.close();
+  }
 }
 
 function baseUrl(cfg) {
@@ -283,8 +308,18 @@ export async function runUpdate({
     const stoppedAt = now().getTime();
     const started = await startServe(ctx);
 
-    const { version, startedAt, mismatch } = await verifyServe({ ...ctx, cfg: { ...cfg, port }, stoppedAt });
-    if (mismatch) throw new Error(mismatch);
+    let result;
+    try {
+      result = await verifyServe({ ...ctx, cfg: { ...cfg, port }, stoppedAt });
+    } catch (e) {
+      result = { mismatch: e.message };
+    }
+    const { version, startedAt, mismatch } = result;
+    if (mismatch) {
+      // 起動時の例外・ポート競合などの原因は、たいていログの末尾にある
+      const tail = await serveLogTail(dataDir);
+      throw new Error(tail.length ? `${mismatch}\n--- ${path.join(dataDir, 'serve.log')} の末尾 ${tail.length} 行 ---\n${tail.join('\n')}` : mismatch);
+    }
     log(`確認: 新しいコードで動いています（版 ${version}・起動 ${startedAt}）`);
     return { backups, commits, started, version, startedAt };
   } catch (e) {

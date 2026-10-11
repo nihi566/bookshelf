@@ -101,7 +101,18 @@ test('Kindle 状態: 画面に出す文言', async () => {
   const err = kindleSyncLines(mk({ ok: false, error: '3 冊を読み取れませんでした' }), at(1));
   assert.match(err[0], /^自動取り込み: 失敗（最終確認 .+）: 3 冊を読み取れませんでした$/);
 
-  const stale = kindleSyncLines(mk(), at(150));
+  // 古い拡張（冊数なし）は、最後に拡張の再読み込みを促す。冊数があれば出さない
+  const OLD_EXT = '拡張機能が古いようです。chrome://extensions で再読み込みしてください';
+  assert.equal(ok.at(-1), OLD_EXT);
+  assert.equal(ok.length, 3);
+  assert.equal(login.at(-1), OLD_EXT);
+  assert.equal(kindleSyncLines(mk(), at(150)).at(-1), OLD_EXT);
+  assert.equal(fetched.length, 2);
+  assert.ok(!fetched.includes(OLD_EXT));
+  assert.ok(!kindleSyncLines(mk({ fetched: 0 }), at(1)).includes(OLD_EXT));
+  assert.ok(!kindleSyncLines(null, T0).includes(OLD_EXT));
+
+  const stale = kindleSyncLines(mk({ fetched: 1 }), at(150));
   assert.equal(stale[0], '自動取り込み: 拡張から 2 時間 30 分 連絡がありません。PC のブラウザが閉じているか、PC に送れていない可能性があります');
   assert.match(stale[1], /^最後の結果: 正常（最終確認 .+）$/);
   assert.equal(stale.length, 3);
