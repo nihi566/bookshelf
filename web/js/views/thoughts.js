@@ -2,6 +2,7 @@
 import { html } from '../html.js';
 import { THOUGHT_MAX_LENGTH, THOUGHT_STATUS, countUnsyncedThoughts, inboxThoughts, searchThoughts, thoughtCounts } from '../../core/thoughts.js';
 import { lineIndex, pcSyncOf, thoughtCard } from '../ui.js';
+import { syncButton } from '../sync-busy.js';
 import { lineAssignmentOf } from '../../core/line-assignments.js';
 
 // ホームの受け箱に並べる件数（残りはメモの一覧で見る）
@@ -53,7 +54,7 @@ function unsyncedRow(state) {
   const pcSync = pcSyncOf(state);
   const n = pcSync ? countUnsyncedThoughts(state.library, pcSync.lastSync) : 0;
   if (!n) return '';
-  return html`<div class="unsynced-row"><span class="badge unsynced">PC に未同期 ${n} 件</span><button type="button" class="btn small" data-action="sync">同期する</button></div>`;
+  return html`<div class="unsynced-row"><span class="badge unsynced">PC に未同期 ${n} 件</span>${syncButton(state, '同期する', 'btn small')}</div>`;
 }
 
 /** ホームの受け箱（未整理の思いつき）。無ければ何も出さない */

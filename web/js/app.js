@@ -7,6 +7,7 @@ import { openSheet, serveVersionBlock, toast } from './ui.js';
 import { swVersion } from '../core/serve-version.js';
 import { LAYER_PATHS, PC_INFO_BOXES, PC_INFO_PATHS, THOUGHT_PATHS, matchRoute, parseHash as parseRouteHash } from './routes.js';
 import { appActions } from './app-actions.js';
+import { applySyncBusy, isSyncing, trackSync } from './sync-busy.js';
 import { noteActions } from './note-actions.js';
 import { linkActions } from './link-actions.js';
 import { askResultBlock, semanticAvailability } from './views/ask.js';
@@ -326,7 +327,12 @@ async function cancelAnalysis() {
 
 // ---- 同期 ----
 
-async function sync({ quiet = false } = {}) {
+// 同期している間は、画面にある同期のボタンを押せなくし「同期しています」と出す（NIH-141）
+function sync(opts) {
+  return trackSync(state, () => runSync(opts), () => applySyncBusy(document, isSyncing(state)));
+}
+
+async function runSync({ quiet = false } = {}) {
   try {
     const { analysisDir } = await syncWithPc();
     state.pcSyncFailed = false;
@@ -551,7 +557,8 @@ const actions = {
   'rerun-recommend': () => runAnalysis('recommend'),
   'cancel-analysis': cancelAnalysis,
   'check-pc-job': () => checkPcJob(),
-  sync: () => sync(),
+  // 同期中のボタンは押せないが、念のため同期中は押されても二重に走らせない
+  sync: () => !isSyncing(state) && sync(),
   async 'toggle-autosync'(el) {
     state.settings.autoSync = el.checked;
     await save.settings();
