@@ -9,6 +9,7 @@
 
 import { bookKey, cleanText, hash, normalizeText } from './text.js';
 import { isUploadedCover } from './covers.js';
+import { joinCandidateIds } from './join-hints.js';
 import { mergeCollections } from './collections.js';
 import { mergeThought, normalizeThought, pointThoughts } from './thoughts.js';
 import { mergeReads } from './discovery-reads.js';
@@ -483,6 +484,25 @@ function pageNumber(p) {
 
 export function bookHighlights(library, bookId) {
   return liveHighlights(library).filter((h) => h.bookId === bookId).sort(compareInBook);
+}
+
+/**
+ * 本ごとの「次の点とくっつける?」の印の数（NIH-164。読んだ本の一覧に出す）。
+ * 本の画面と同じ並び（bookHighlights）で joinCandidateIds に渡すので、本の画面の印の数と一致する
+ * @returns {Map<string, number>} 候補が 1 件以上ある本だけ
+ */
+export function bookJoinCandidateCounts(library) {
+  const byBook = new Map();
+  for (const h of liveHighlights(library)) {
+    if (!byBook.has(h.bookId)) byBook.set(h.bookId, []);
+    byBook.get(h.bookId).push(h);
+  }
+  const out = new Map();
+  for (const [bookId, hs] of byBook) {
+    const n = joinCandidateIds(hs.sort(compareInBook)).size;
+    if (n) out.set(bookId, n);
+  }
+  return out;
 }
 
 /**

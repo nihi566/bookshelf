@@ -1,7 +1,7 @@
 // ホーム・本・検索の画面
 import { html } from '../html.js';
 import { joinCandidateIds } from '../../core/join-hints.js';
-import { bookHighlights, dailyPicks, guessTechnical, isTechnicalBook, libraryStats, listBooks, searchHighlights, SOURCES } from '../../core/model.js';
+import { bookHighlights, bookJoinCandidateCounts, dailyPicks, guessTechnical, isTechnicalBook, libraryStats, listBooks, searchHighlights, SOURCES } from '../../core/model.js';
 import { searchPoints } from '../../core/points.js';
 import { THOUGHT_LABEL, liveThoughts } from '../../core/thoughts.js';
 import { normalizeText } from '../../core/text.js';
@@ -138,6 +138,8 @@ export const books = {
     let list = listBooks(state.library, { includeEmpty: true }).filter((b) => (!source || b.sources.includes(source)) && (!q || `${b.title} ${b.author}`.toLowerCase().includes(q)));
     if (sort === 'title') list = list.sort((a, b) => a.title.localeCompare(b.title, 'ja'));
     if (sort === 'count') list = list.sort((a, b) => b.count - a.count);
+    // 文の途中で切れていそうな点の多い本から直せるように、本の画面の印の数を行に添える
+    const joinCounts = bookJoinCandidateCounts(state.library);
     const chip = (key, value, label) => {
       const params = new URLSearchParams(query);
       if (value) params.set(key, value);
@@ -150,7 +152,7 @@ export const books = {
       <form class="search-box" data-form="book-filter" role="search"><input type="search" name="q" value="${query.get('q') || ''}" placeholder="書名・著者で絞り込む" aria-label="書名・著者で絞り込む"></form>
       <div class="chips" role="group" aria-label="読み方で絞り込む">${chip('source', '', 'すべて')}${chip('source', 'kindle', 'Kindle')}${chip('source', 'playbooks', 'Play Books')}${chip('source', 'paper', '紙の本')}${chip('source', 'memo', '読書メモ')}</div>
       <div class="chips" style="margin-top:6px" role="group" aria-labelledby="books-sort-label"><span class="chips-label" id="books-sort-label">並び順</span>${chip('sort', 'recent', '最近')}${chip('sort', 'title', '書名')}${chip('sort', 'count', '点の数')}</div>
-      ${list.length ? html`<ul class="book-list">${list.map(bookRow)}</ul>` : emptyBooksBlock(state)}`;
+      ${list.length ? html`<ul class="book-list">${list.map((b) => bookRow(b, { joinCandidates: joinCounts.get(b.id) }))}</ul>` : emptyBooksBlock(state)}`;
   },
 };
 
