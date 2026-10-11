@@ -12,14 +12,15 @@
 
 import { feedbackByStatus } from '../model.js';
 import { analysisPoints, currentPointId, embedText, isThought, legacyEmbedText, pointLabel } from '../points.js';
-import { notesForAnalysis } from '../notes.js';
+import { citesPoint, noteEmbedText, notesForAnalysis } from '../notes.js';
+import { isPointId } from '../point-ids.js';
 import { lineAssignmentOf, lineAssignmentsOf } from '../line-assignments.js';
 import { notesKey } from '../auto-analysis.js';
 import { bookKey, hash, maskSecrets, truncate } from '../text.js';
 import { PROMPT_VERSION, RECOMMEND_KINDS, RELATION_TYPES, farPrompt, humanLine, linePrompt, pickPrompt, planePrompt, recommendPrompt, searchPrompt, solidPrompt } from './prompts.js';
-import { centroid, dot, l2normalize, tfidfEmbed } from './vectors.js';
+import { centroid, dot, l2normalize, tfidfEmbed, tfidfEmbedAgainst } from './vectors.js';
 import { carryLines, carryPlanes } from './incremental.js';
-import { nearPoints } from './neighbors.js';
+import { nearPoints, noteNeighbors } from './neighbors.js';
 import { diffAnalyses } from './changes.js';
 import { farDiscovery, findDiscoveries, mergeDiscoveries } from './discoveries.js';
 import { FAR_MAX_UNREADABLE, farCandidates, farId, judgeFarPairs, mergeFarConnections, pickReps } from './far.js';
@@ -104,6 +105,44 @@ function promptPoint(library, p) {
   return { text: p.text, label: pointLabel(library, p), thought: isThought(p), aiAnswer: p.answerTo?.kind === 'ask', note: p.note || '', userNote: p.userNote || '', tags: p.tags || [] };
 }
 
+/** AI に渡す永久ノートの形（prompts.js の pointLine。読者が自分の言葉でまとめたものとして見せる） */
+function promptNote(n) {
+  return { text: [n.title, n.body].filter(Boolean).join('：'), label: '永久ノート', thought: true };
+}
+
+/** 永久ノートの面: 根拠の点の線がいちばん多く入っている面（同じ数なら ID の順。どの面にも入っていなければ null） */
+function notePlane(planeIds) {
+  const count = new Map();
+  for (const id of planeIds) if (id) count.set(id, (count.get(id) || 0) + 1);
+  let best = null;
+  for (const [id, n] of count) if (!best || n > count.get(best) || (n === count.get(best) && id < best)) best = id;
+  return best;
+}
+
+/**
+ * 永久ノートのベクトル（ノートの ID → ベクトル）。埋め込みモデルがあれば、点と同じキャッシュに文のハッシュとともに持ち、
+ * 書き換えたノートだけ埋め込み直す。文字 n-gram のときは、点の文で数えた語の珍しさで埋め込む（点のベクトルは変えず、同じ尺度で比べられる）
+ * @param {string[]} texts 点の埋め込む文（文字 n-gram のときだけ使う）
+ * @returns {Promise<Map<string, Float32Array>>}
+ */
+async function embedNotes({ notes, llm, cache, texts, signal }) {
+  if (!notes.length) return new Map();
+  const noteTexts = notes.map(noteEmbedText);
+  if (!llm.embedModel) {
+    const vs = tfidfEmbedAgainst(texts, noteTexts);
+    return new Map(notes.map((n, i) => [n.id, vs[i]]));
+  }
+  const emb = cache.embeddings;
+  const keys = noteTexts.map((t) => hash(t));
+  const missing = notes.map((_, i) => i).filter((i) => !emb.vectors[notes[i].id] || emb.keys[notes[i].id] !== keys[i]);
+  if (missing.length) {
+    const vecs = await llm.embed(missing.map((i) => noteTexts[i]), { signal });
+    missing.forEach((i, j) => (emb.vectors[notes[i].id] = vecs[j]));
+  }
+  notes.forEach((n, i) => (emb.keys[n.id] = keys[i]));
+  return new Map(notes.map((n) => [n.id, emb.vectors[n.id]]));
+}
+
 /**
  * @param {object} p
  * @param {object} p.library
@@ -167,6 +206,11 @@ export async function analyzeLibrary({ library, llm: rawLlm, cache = emptyCache(
     vectors = tfidfEmbed(texts);
     embedMethod = 'tfidf';
   }
+  check();
+  // 1.5 永久ノート → ベクトル（遠いつながり・意味の近い点の候補にする。点のベクトルは変えない。NIH-229）
+  const notes = notesForAnalysis(library);
+  const noteVectors = await embedNotes({ notes, llm, cache, texts, signal });
+  for (const n of notes) textKeyById.set(n.id, hash(noteEmbedText(n)));
   check();
 
   // 前回の結果を引き継げるか（同じ版の分析で、同じ方法で埋め込んだとき。違えば最初から作り直す）。
@@ -253,7 +297,6 @@ export async function analyzeLibrary({ library, llm: rawLlm, cache = emptyCache(
   const planeGroups = skipDismissedPlanes(linePlaneGroups, lines, lines.map((l) => l.vector), dismissedPointSets(library, 'plane'));
   // 永久ノート（人間がまとめた線）。根拠の点が入っている面と、立体を作る AI に見せる（G3-5。線から作って直していない下書きは除く）。
   // AI に見せる文を指紋にも入れて、ノートを書き直したら面・立体を作り直す（ノートが無ければ指紋は前と同じ）
-  const notes = notesForAnalysis(library);
   const lineOfPoint = new Map(lines.flatMap((l) => l.highlightIds.map((id) => [id, l.id])));
   const linesOfNote = new Map(notes.map((n) => [n.id, new Set(n.pointIds.map((id) => lineOfPoint.get(currentPointId(library, id))).filter(Boolean))]));
   const noteKeys = (ns) => (ns.length ? ['|人間がまとめた線|', ...ns.map((n) => `${n.id}:${hash(humanLine(n))}`).sort()] : []);
@@ -313,8 +356,8 @@ export async function analyzeLibrary({ library, llm: rawLlm, cache = emptyCache(
   for (const k of Object.keys(cache.llm)) if (/^(line|plane|solid):/.test(k) && !usedSigs.has(k)) delete cache.llm[k];
   // 使わなくなった埋め込み（消えた点・変わった線の説明文）をキャッシュから外す（保存を重くしない）
   if (llm.embedModel) {
-    const live = new Set([...points.map((p) => p.id), ...summaryKeys]);
-    for (const k of Object.keys(cache.embeddings.vectors)) if (/^[hts]/.test(k) && !live.has(k)) delete cache.embeddings.vectors[k];
+    const live = new Set([...points.map((p) => p.id), ...summaryKeys, ...notes.map((n) => n.id)]);
+    for (const k of Object.keys(cache.embeddings.vectors)) if (/^[htsn]/.test(k) && !live.has(k)) delete cache.embeddings.vectors[k];
     for (const k of Object.keys(cache.embeddings.keys || {})) if (!live.has(k)) delete cache.embeddings.keys[k];
   }
 
@@ -353,16 +396,20 @@ export async function analyzeLibrary({ library, llm: rawLlm, cache = emptyCache(
     isolated,
     sourceOf: (i) => sourceOf(points[i].id),
   });
-  analysis.neighbors = near.neighbors;
+  // 永久ノートの「意味の近い点（根拠にしていないもの）」も同じ入れ物に、ノートの ID で持つ（NIH-229）
+  const noteNear = noteNeighbors({ notes, noteVectors, ids: points.map((p) => p.id), vectors, cites: (n, id) => citesPoint(library, n, id) });
+  analysis.neighbors = { ...near.neighbors, ...noteNear };
   for (const l of analysis.lines) {
     const related = near.related.get(l.id);
     if (related?.length) l.relatedIds = related;
   }
 
-  // 4.5 遠いつながり（別の本・別の面にある、近さが低めの点の組を AI に判定させる。おすすめの本と同じく、線・面・立体の回数には数えない）
+  // 4.5 遠いつながり（別の本・別の面にある、近さが低めの点・永久ノートの組を AI に判定させる。おすすめの本と同じく、線・面・立体の回数には数えない）
   check();
-  const far = await findFarConnections({ library, analysis, previous, points, vectors, indexOf, sourceOf, textKeyById, llm: rawLlm, cache, signal, onProgress });
-  analysis.farConnections = mergeFarConnections(far.found, previous?.farConnections, alive, wrongFarIds(library));
+  const far = await findFarConnections({ library, analysis, previous, points, vectors, indexOf, sourceOf, textKeyById, notes, noteVectors, llm: rawLlm, cache, signal, onProgress });
+  // 遠いつながりの端は、点か、分析に渡した永久ノート
+  const farAlive = (id) => alive(id) || noteVectors.has(id);
+  analysis.farConnections = mergeFarConnections(far.found, previous?.farConnections, farAlive, wrongFarIds(library));
   analysis.stats.far = { candidates: far.candidates, calls: far.calls, found: far.found.length };
   // エラー文は長さも切る（分析の形の確かめで、長すぎる説明は受け入れないため）
   if (far.error) analysis.farNote = `遠い組み合わせの判定に失敗しました（${truncate(maskSecrets(far.error), 300)}）。次の分析でもう一度試します。`;
@@ -372,7 +419,9 @@ export async function analyzeLibrary({ library, llm: rawLlm, cache = emptyCache(
   const foundNow = base
     ? findDiscoveries({ previous: base, lines: analysis.lines, sourceOf, vectorOf: (id) => vectors[indexOf.get(id)], formerIdsOf, now: analysis.createdAt })
     : [];
-  analysis.discoveries = mergeDiscoveries([...(previous ? far.found.map(farDiscovery) : []), ...foundNow], previous?.discoveries, alive);
+  // 永久ノートを含む遠いつながりは発見にしない（発見の画面は点どうしの組を出すため）
+  const farPointPairs = far.found.filter((f) => isPointId(f.a) && isPointId(f.b));
+  analysis.discoveries = mergeDiscoveries([...(previous ? farPointPairs.map(farDiscovery) : []), ...foundNow], previous?.discoveries, alive);
 
   // 5. おすすめの本（立体が前回と同じなら、前回のおすすめをそのまま使う。'keep' なら立体が変わっても前回のものを残す）
   if (recommend) {
@@ -603,11 +652,13 @@ function strList(v, n, max) {
  * 判定は cache.far に { a, b, shared, idea?, explanation?, at } で残す（読めない答えは { a, b, unreadable: 回数, at }）
  * @returns {Promise<{ found: object[], calls: number, candidates: number, error: string }>}
  */
-async function findFarConnections({ library, analysis, previous, points, vectors, indexOf, sourceOf, textKeyById, llm, cache, signal, onProgress }) {
+async function findFarConnections({ library, analysis, previous, points, vectors, indexOf, sourceOf, textKeyById, notes, noteVectors, llm, cache, signal, onProgress }) {
   const judged = cache.far;
-  // 判定の指紋: 2 点（並びに依らない）と、それぞれの文（自分のメモ・タグを含む）・モデル・プロンプトの版
+  // 判定の指紋: 2 点（並びに依らない）と、それぞれの文（自分のメモ・タグを含む。永久ノートは題と本文）・モデル・プロンプトの版
   const sig = (a, b) => 'far:' + hash([PROMPT_VERSION, llm.chatModel, ...[a, b].sort().map((id) => `${id}:${textKeyById.get(id)}`)].join('|'));
-  const current = (k, v) => typeof v?.a === 'string' && typeof v?.b === 'string' && indexOf.has(v.a) && indexOf.has(v.b) && sig(v.a, v.b) === k;
+  const noteById = new Map(notes.map((n) => [n.id, n]));
+  const has = (id) => indexOf.has(id) || noteVectors.has(id);
+  const current = (k, v) => typeof v?.a === 'string' && typeof v?.b === 'string' && has(v.a) && has(v.b) && sig(v.a, v.b) === k;
   const known = new Set([...Object.keys(farReactionsOf(library)), ...(previous?.farConnections || []).map((f) => f.id)]);
   // 前の分析で「ある」と判定したのに、その分析が保存されなかった組（判定のあとで中止・失敗した）。判定し直さず、今回の結果に入れる。
   // 前の分析が履歴から戻した回なら、元の回より後に判定した組も拾う（戻した回には入っていないが、判定済みなので二度と判定しない。NIH-7）
@@ -624,10 +675,21 @@ async function findFarConnections({ library, analysis, previous, points, vectors
     [...analysis.lines.map((l) => ({ id: l.highlightIds[0], plane: planeOfLine.get(l.id) || null, isolated: false })), ...analysis.isolated.map((id) => ({ id, plane: null, isolated: true }))].filter((r) => indexOf.has(r.id)),
     (id) => judgedCount.get(id) || 0,
   ).map((r) => ({ ...r, vector: vectors[indexOf.get(r.id)], source: sourceOf(r.id) }));
-  // 判定済み（「ある」「ない」）の組と、答えが何度も読めなかった組は選ばない
+  // 永久ノートも代表にする（面は、根拠の点の線がいちばん多く入っている面。出どころはノートごとに別。NIH-229）
+  const lineOfPoint = new Map(analysis.lines.flatMap((l) => l.highlightIds.map((id) => [id, l.id])));
+  const noteReps = notes
+    .filter((n) => noteVectors.has(n.id))
+    .map((n) => ({ id: n.id, plane: notePlane(n.pointIds.map((id) => planeOfLine.get(lineOfPoint.get(currentPointId(library, id))))), isolated: false, note: true, vector: noteVectors.get(n.id), source: n.id }));
+  // 判定済み（「ある」「ない」）の組と、答えが何度も読めなかった組は選ばない。ノートとその根拠の点の組・根拠の点が重なるノートどうしの組も
+  // 選ばない（もう結んである）
   const done = (v) => typeof v?.shared === 'boolean' || (v?.unreadable || 0) >= FAR_MAX_UNREADABLE;
-  const candidates = farCandidates({ reps, skip: (c) => known.has(c.id) || done(judged[sig(c.a, c.b)]) });
-  const pointOf = (id) => promptPoint(library, points[indexOf.get(id)]);
+  const cited = (c) => {
+    const [x, y] = [noteById.get(c.a), noteById.get(c.b)];
+    if (x && y) return x.pointIds.some((id) => citesPoint(library, y, id));
+    return (x && citesPoint(library, x, c.b)) || (y && citesPoint(library, y, c.a)) || false;
+  };
+  const candidates = farCandidates({ reps: [...reps, ...noteReps], skip: (c) => known.has(c.id) || cited(c) || done(judged[sig(c.a, c.b)]) });
+  const pointOf = (id) => (noteById.has(id) ? promptNote(noteById.get(id)) : promptPoint(library, points[indexOf.get(id)]));
   const at = analysis.createdAt;
   const r = await judgeFarPairs({
     candidates,

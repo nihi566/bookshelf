@@ -118,6 +118,17 @@ export function noteActions({ state, openSheet, toast, persist, sync, render, go
       go(`#/note/${n.id}`);
       sync();
     }),
+    // ノートの画面の「意味の近い点」を、1 回の操作でそのノートの根拠にする（NIH-229）
+    async 'cite-quick'(el) {
+      if (notLoaded()) return;
+      const { note, point } = el.dataset;
+      if (!pointById(state.library, point)) return;
+      addNotePoint(state.library, note, point);
+      await persist();
+      toast('永久ノートの根拠にしました');
+      render({ keepScroll: true });
+      sync();
+    },
     // 点を、ほかの永久ノートの根拠にする（「新しいノートを書く」なら、その点を根拠にして書く）
     'cite-point'(el) {
       const p = pointById(state.library, el.dataset.id);

@@ -6,7 +6,7 @@
 // 埋め込み・チャットは引数で受け取る（PC の bh serve がローカル LLM を渡す。テストは偽の LLM を渡す）
 
 import { analysisPoints, embedText, pointById, pointLabel } from './points.js';
-import { liveNotes } from './notes.js';
+import { liveNotes, noteEmbedText } from './notes.js';
 import { cleanText, hash, sliceChars, truncate } from './text.js';
 import { dot } from './analysis/vectors.js';
 import { farText } from './analysis/far.js';
@@ -50,7 +50,7 @@ export function placeText(p) {
 export function searchTargets(library) {
   return [
     ...analysisPoints(library).map((p) => ({ id: p.id, kind: 'point', text: embedText(p) })),
-    ...liveNotes(library).map((n) => ({ id: n.id, kind: 'note', text: [n.title, n.body].filter(Boolean).join('\n') })),
+    ...liveNotes(library).map((n) => ({ id: n.id, kind: 'note', text: noteEmbedText(n) })),
   ];
 }
 

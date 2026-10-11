@@ -5,7 +5,7 @@ import { isoDate, truncate } from '../../core/text.js';
 import { NOTE_BODY_MAX, NOTE_TITLE_MAX, citesPoint, notesOf, searchNotes } from '../../core/notes.js';
 import { missingEvidence, noteEvidence, notesCiting, notesSharingEvidence } from '../../core/note-evidence.js';
 import { lineIndex, pointCard } from '../ui.js';
-import { linksBlock } from './links.js';
+import { linksBlock, noteNeighborsBlock } from './links.js';
 
 // 知識の画面に並べる数（残りは一覧で見る）
 const ON_KNOWLEDGE = 3;
@@ -120,6 +120,7 @@ export const noteView = {
         ? ev.map((e) => (e.point ? pointCard(e.point, { library: state.library, lines: idx.get(e.id) }) : html`<p class="card small muted">この点は消えました。</p>`))
         : html`<p class="empty">根拠の点はまだありません。点のページの「永久ノートの根拠にする」で足せます。</p>`}
       ${notesBlock(state.library, notesSharingEvidence(state.library, n), '根拠が重なる永久ノート')}
-      ${linksBlock(state, n.id)}`;
+      ${linksBlock(state, n.id)}
+      ${noteNeighborsBlock(state, n)}`;
   },
 };

@@ -145,6 +145,9 @@ export function notesForAnalysis(library) {
   return liveNotes(library).filter((n) => !isUneditedLineDraft(n));
 }
 
+/** 永久ノートを埋め込む文（題と本文。意味で探す・分析で同じ文にする） */
+export const noteEmbedText = (n) => [n.title, n.body].filter(Boolean).join('\n');
+
 /** 永久ノートを探す（題・本文。空白区切りの AND）。直した順 */
 export function searchNotes(library, query = '') {
   const terms = normalizeText(query).split(' ').filter(Boolean);

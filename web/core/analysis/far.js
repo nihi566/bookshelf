@@ -3,10 +3,12 @@
 // 似たものを束ねる（線・面）だけでは「想定内の答え」にしかならない。そこで、別の本・別の面にあって意味の近さが
 // 低めの点の組を選び、AI に「共通する考えがあるか」を判定させる。あると判定した組だけを「遠いつながり」として残す。
 //
-// FarConnection = { id: 'f…', a, b, idea, explanation, foundAt }（a・b は点の ID。a < b）
+// FarConnection = { id: 'f…', a, b, idea, explanation, foundAt }（a・b は点か永久ノートの ID。a < b）
+// 永久ノートも代表に入る（「1 ノート = 1 アイデア」を網の結び目にする。NIH-229）
 
 import { hash, truncate } from '../text.js';
 import { isPointId } from '../point-ids.js';
+import { isNoteId } from '../notes.js';
 import { dot } from './vectors.js';
 
 // 1 回の分析で AI に判定させる組の数（AI を呼ぶ回数の上限）と、残しておく遠いつながりの数
@@ -18,6 +20,8 @@ export const FAR_MAX_REPS = 600;
 const BAND = [0.15, 0.45];
 // 1 回の候補のうち、まだつながらない点を含む組に先に割り当てる数（全部をそれにすると、線どうしの組を試せなくなる）
 const ISOLATED_SLOTS = Math.ceil(FAR_MAX_PAIRS / 2);
+// 1 回の候補のうち、永久ノートを含む組に先に割り当てる数（ノートは点より少ないので、近さの順だけでは回ってこない。NIH-229）
+export const FAR_NOTE_SLOTS = 3;
 // AI への依頼がこの回数続けて失敗したら、残りの組は次の分析に回す（PC の AI が止まっているときに分析を長引かせない）
 const MAX_FAILURES = 2;
 // AI の答えがこの回数読めなかった組は、もう試さない（いつも同じ組が先頭に来て、ほかの組を試せなくならないように）
@@ -30,6 +34,8 @@ const FAR_ID = /^f[0-9a-z]{1,40}$/;
 export const isFarId = (v) => typeof v === 'string' && FAR_ID.test(v);
 // 点の ID の形（ハイライトは 'h'、思いつきは 't'）は point-ids.js にまとめている
 export { isPointId };
+/** 遠いつながりの端になれる ID か（点か永久ノート） */
+export const isFarEnd = (v) => isPointId(v) || isNoteId(v);
 
 /** 2 点の組の ID（並びに依らない） */
 export function farId(a, b) {
@@ -65,14 +71,17 @@ export function pickReps(reps, judgedCount = () => 0, max = FAR_MAX_REPS) {
 /**
  * 遠い組み合わせの候補を選ぶ（同じ入力なら同じ候補。乱数は使わない）
  * @param {object} p
- * @param {{ id: string, vector: Float32Array, plane: string|null, source: string, isolated: boolean }[]} p.reps
- *   代表の点（線の中心にいちばん近い点と、まだつながらない点。pickReps で絞ったもの）。plane は点の線が入っている面（まだつながらない点は null）
+ * @param {{ id: string, vector: Float32Array, plane: string|null, source: string, isolated: boolean, note?: boolean }[]} p.reps
+ *   代表の点（線の中心にいちばん近い点と、まだつながらない点。pickReps で絞ったもの）と永久ノート（note: true）。
+ *   plane は点の線が入っている面（まだつながらない点は null）
  * @param {(pair: { id: string, a: string, b: string }) => boolean} [p.skip] 候補にしない組（前に判定した組・反応を付けた組）
  * @param {number} [p.max]
- * @returns {{ id: string, a: string, b: string, sim: number }[]} 先頭の最大 5 組は、まだつながらない点を含む組（あれば）
+ * @returns {{ id: string, a: string, b: string, sim: number }[]} 先頭の最大 3 組は永久ノートを含む組、そこから 5 組目までは
+ *   まだつながらない点を含む組（どちらも、あれば）
  */
 export function farCandidates({ reps: given, skip = () => false, max = FAR_MAX_PAIRS }) {
-  const reps = given.slice(0, FAR_MAX_REPS);
+  // 永久ノートは代表の点の上限の外に足す（点が多くてもノートを試す。ノートが無ければ今までと同じ）
+  const reps = [...given.filter((r) => !r.note).slice(0, FAR_MAX_REPS), ...given.filter((r) => r.note)];
   const n = reps.length;
   // 別の本（思いつきは 1 つずつ別）・別の面（まだつながらない点は、どの面とも別）の組の近さ。組を 1 つずつの物にはしない（重くなるため）
   const total = (n * (n - 1)) / 2;
@@ -101,7 +110,7 @@ export function farCandidates({ reps: given, skip = () => false, max = FAR_MAX_P
     const [x, y] = [reps[ia[k]], reps[ib[k]]];
     // 組の 2 点は ID の順（入力の並びに依らず、AI に見せる順も同じになる）
     const [a, b] = x.id < y.id ? [x.id, y.id] : [y.id, x.id];
-    band.push({ a, b, sim: sims[k], isolated: x.isolated || y.isolated });
+    band.push({ a, b, sim: sims[k], isolated: x.isolated || y.isolated, note: Boolean(x.note || y.note) });
   }
   // 近い順（遠い組のうち、共通点がありそうなものから）。同じ近さなら ID の順
   band.sort((x, y) => y.sim - x.sim || (x.a < y.a ? -1 : x.a > y.a ? 1 : x.b < y.b ? -1 : x.b > y.b ? 1 : 0));
@@ -116,7 +125,9 @@ export function farCandidates({ reps: given, skip = () => false, max = FAR_MAX_P
     used.add(p.b);
     out.push(pair);
   };
-  // まだつながらない点を含む組を先に（候補の半分まで）。残りを、まだつながらない点を含むかに関わらず近い順に
+  // 永久ノートを含む組を先に（3 組まで）。次に、まだつながらない点を含む組を（候補の半分まで）。
+  // 残りを、ノート・まだつながらない点を含むかに関わらず近い順に
+  for (const p of band) if (p.note && out.length < Math.min(max, FAR_NOTE_SLOTS)) take(p);
   for (const p of band) if (p.isolated && out.length < Math.min(max, ISOLATED_SLOTS)) take(p);
   for (const p of band) take(p);
   return out;
@@ -174,7 +185,7 @@ export async function judgeFarPairs({ candidates, llm, promptOf, remember = () =
 /** 遠いつながりとして使える形か（ほかの端末・バックアップから届いた分析の中のものを確かめる） */
 export function isFarConnection(f) {
   const text = (v, max) => v == null || (typeof v === 'string' && v.length <= max);
-  return Boolean(f) && typeof f === 'object' && isFarId(f.id) && isPointId(f.a) && isPointId(f.b) && f.id === farId(f.a, f.b) && text(f.idea, 200) && text(f.explanation, 2000) && text(f.foundAt, 40);
+  return Boolean(f) && typeof f === 'object' && isFarId(f.id) && isFarEnd(f.a) && isFarEnd(f.b) && f.id === farId(f.a, f.b) && text(f.idea, 200) && text(f.explanation, 2000) && text(f.foundAt, 40);
 }
 
 /** 遠いつながりを、決まった欄だけの新しい物にする（届いた物に余計な欄があっても持ち越さない） */

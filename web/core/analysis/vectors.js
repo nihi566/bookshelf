@@ -22,20 +22,32 @@ export function dot(a, b) {
  * 日本語は単語境界が無いので、文字 2-gram / 3-gram が語彙の近さをよく拾う。
  */
 export function tfidfEmbed(texts, dims = 1024) {
-  const docs = texts.map((t) => {
-    const s = normalizeText(t).replace(/[\s\p{P}\p{S}]/gu, '');
-    const grams = new Map();
-    for (const n of [2, 3]) {
-      for (let i = 0; i + n <= s.length; i++) {
-        const g = s.slice(i, i + n);
-        grams.set(g, (grams.get(g) || 0) + 1);
-      }
+  return tfidfEmbedAgainst(texts, texts, dims);
+}
+
+/** 文の文字 2-gram / 3-gram の数 */
+function gramsOf(t) {
+  const s = normalizeText(t).replace(/[\s\p{P}\p{S}]/gu, '');
+  const grams = new Map();
+  for (const n of [2, 3]) {
+    for (let i = 0; i + n <= s.length; i++) {
+      const g = s.slice(i, i + n);
+      grams.set(g, (grams.get(g) || 0) + 1);
     }
-    return grams;
-  });
+  }
+  return grams;
+}
+
+/**
+ * texts を、corpus の文で数えた語の珍しさ（idf）で埋め込む（tfidfEmbed(corpus) のベクトルと同じ尺度で比べられる）。
+ * 点のベクトルを変えずに、永久ノートを点と比べるときに使う（NIH-229）
+ */
+export function tfidfEmbedAgainst(corpus, texts, dims = 1024) {
+  const corpusDocs = corpus.map(gramsOf);
+  const docs = texts === corpus ? corpusDocs : texts.map(gramsOf);
   const df = new Map();
-  for (const d of docs) for (const g of d.keys()) df.set(g, (df.get(g) || 0) + 1);
-  const N = docs.length;
+  for (const d of corpusDocs) for (const g of d.keys()) df.set(g, (df.get(g) || 0) + 1);
+  const N = corpusDocs.length;
   return docs.map((d) => {
     const v = new Float32Array(dims);
     for (const [g, tf] of d) {
