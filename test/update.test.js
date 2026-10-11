@@ -168,6 +168,30 @@ test('bh update: 起動したサーバが止める前のもの（古いコード
   await assert.rejects(runUpdate({ ...opts, waitMs: 3000 }), /新しいコードで応答しませんでした（止める前に起動したサーバ/);
 });
 
+test('bh update: 起動の確認に失敗したら、data/serve.log の末尾 20 行を理由に続けて出す', async () => {
+  const { opts, dataDir } = setup({ oldServer: true });
+  const lines = Array.from({ length: 30 }, (_, i) => `line ${i + 1}`);
+  writeFileSync(path.join(dataDir, 'serve.log'), `${lines.join('\n')}\nError: listen EADDRINUSE :::8787\n`);
+  const err = await runUpdate({ ...opts, waitMs: 3000 }).then(() => assert.fail('失敗するはず'), (e) => e);
+  assert.match(err.message, /新しいコードで応答しませんでした[\s\S]*serve\.log の末尾[\s\S]*line 12\n[\s\S]*EADDRINUSE :::8787$/);
+  assert.doesNotMatch(err.message, /line 11\n/);
+});
+
+test('bh update: 版が違って失敗したときも、data/serve.log の末尾を出す', async () => {
+  const { opts, dataDir } = setup({ serverVersion: 'bh-v41' });
+  writeFileSync(path.join(dataDir, 'serve.log'), 'started bh-v41\n');
+  await assert.rejects(runUpdate(opts), /ディスクの版（bh-v42）と違います[\s\S]*serve\.log の末尾[\s\S]*started bh-v41$/);
+});
+
+test('bh update: data/serve.log が無い・空なら、失敗の文言は今のまま', async () => {
+  const missing = await runUpdate({ ...setup({ oldServer: true }).opts, waitMs: 3000 }).catch((e) => e.message);
+  assert.match(missing, /data\/serve\.log を確かめてください$/);
+  const { opts, dataDir } = setup({ oldServer: true });
+  writeFileSync(path.join(dataDir, 'serve.log'), '\n\n');
+  const empty = await runUpdate({ ...opts, waitMs: 3000 }).catch((e) => e.message);
+  assert.match(empty, /data\/serve\.log を確かめてください$/);
+});
+
 test('bh update: 起動したサーバの sw.js の版がディスクと違えば失敗にする', async () => {
   const { opts } = setup({ servedSw: "const CACHE = 'bh-v41';\n" });
   await assert.rejects(runUpdate(opts), /sw\.js の版（bh-v41）がディスクの版（bh-v42）と違います/);
