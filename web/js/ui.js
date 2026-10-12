@@ -400,24 +400,13 @@ export function playbooksSyncAlert(g) {
 }
 
 /**
- * ホームに出す分析の失敗の警告（1 行）。自動の分析がオフのとき・失敗していないとき・最後の失敗より新しい成功があるときは空文字
- * @param {{ enabled?: boolean, lastError?: string, lastErrorAt?: string|null, lastSuccessAt?: string|null, failureCount?: number } | null | undefined} au /api/info の autoAnalysis
- * @returns {string}
+ * ホームの先頭の警告欄（Kindle・Play ブックスの自動取り込み）。PC モードで PC の情報を取れているときだけ出す。
+ * 分析の失敗は出さない（手動で分析するので。理由は知識の画面に出る。NIH-307）
  */
-export function autoAnalysisAlert(au) {
-  if (!au?.enabled || !au.lastError) return '';
-  if (au.lastSuccessAt && au.lastErrorAt && au.lastSuccessAt >= au.lastErrorAt) return '';
-  const reason = alertReason(au.lastError);
-  const count = Number(au.failureCount) || 0;
-  return count >= 2 ? `PC の分析が ${count} 回続けて失敗しています（${reason}）` : `PC の分析に失敗しています（${reason}）`;
-}
-
-/** ホームの先頭の警告欄（Kindle・Play ブックスの自動取り込み・分析の失敗）。PC モードで PC の情報を取れているときだけ出す。分析の警告は押すと知識の画面へ */
 export function homeAlertBlock(state) {
   if (state.settings.ai.mode !== 'companion' || !state.pcInfo) return '';
   const playbooks = playbooksSyncAlert(state.pcInfo.google);
-  const text = autoAnalysisAlert(state.pcInfo.autoAnalysis);
-  return html`${kindleAlertBlock(state)}${playbooks ? html`<a class="notice err" href="#/import" style="${ALERT_STYLE}">${playbooks}（詳しく）</a>` : ''}${text ? html`<a class="notice err" href="#/knowledge" style="${ALERT_STYLE}">${text}（詳しく）</a>` : ''}`;
+  return html`${kindleAlertBlock(state)}${playbooks ? html`<a class="notice err" href="#/import" style="${ALERT_STYLE}">${playbooks}（詳しく）</a>` : ''}`;
 }
 
 /**

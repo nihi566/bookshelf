@@ -467,7 +467,7 @@ export function createCompanionServer({ store, log = console.log, catalogFetch, 
       } else {
         log(`[analyze${trigger === 'auto' ? '・自動' : ''}] ${job.error}`);
         lastStop.failure = now;
-        // 続けて失敗した回数はホームの警告に出す（成功で 0 に戻す。中止は数えない）
+        // 続けて失敗した回数を数える（/api/info の autoAnalysis に返す。成功で 0 に戻す。中止は数えない。ホームの警告は NIH-307 で外した）
         await recordRun((prev) => ({ lastRunAt: startedAt, lastError: job.error, lastErrorAt: now, failureCount: (Number(prev.failureCount) || 0) + 1, lastTrigger: trigger }));
       }
     } finally {

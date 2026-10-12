@@ -9,7 +9,8 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createStore, HISTORY_KEEP } from '../cli/store.js';
 import { createCompanionServer } from '../cli/server.js';
-import { AUTO_RETRY_MS, autoAnalyzeDue, autoConfig, pendingPoints } from '../web/core/auto-analysis.js';
+import { AUTO_RETRY_MS, autoConfig, pendingPoints } from '../web/core/auto-analysis.js';
+import { AUTO_ON, autoAnalyzeDue } from './helpers/auto-on.js';
 import { analysisShapeError } from '../web/core/analysis/shape.js';
 import { analyzeLibrary } from '../web/core/analysis/pipeline.js';
 import { applyImport } from '../web/core/importing.js';
@@ -37,7 +38,7 @@ async function hangingLlm() {
 async function withServer(fn, { llmUrl } = {}) {
   const store = createStore(mkdtempSync(path.join(tmpdir(), 'bh-review-')));
   const fake = await startFakeLlm();
-  await store.saveConfig({ llm: { baseUrl: llmUrl || fake.url, chatModel: 'fake-chat', embedModel: 'fake-embed' } });
+  await store.saveConfig({ llm: { baseUrl: llmUrl || fake.url, chatModel: 'fake-chat', embedModel: 'fake-embed' }, autoAnalyze: AUTO_ON });
   const server = createCompanionServer({ store, log: () => {}, catalogFetch: async () => new Response('{"items":[]}') });
   await new Promise((r) => server.listen(0, '127.0.0.1', r));
   const base = `http://127.0.0.1:${server.address().port}`;
@@ -222,7 +223,7 @@ test('前回の線がすべてほどけても（点が減って各線 1 点）�
 });
 
 test('自動の分析の設定: 空・null・真偽値は既定値に戻し、"false" や 0 は「オフ」と読む。未来の失敗時刻では待ち続けない', () => {
-  assert.deepEqual(autoConfig({ maxHours: null, minPoints: '' }), { enabled: true, minPoints: 10, maxHours: 24 });
+  assert.deepEqual(autoConfig({ maxHours: null, minPoints: '' }), { enabled: false, minPoints: 10, maxHours: 24 });
   assert.equal(autoConfig({ maxHours: false }).maxHours, 24);
   assert.equal(autoConfig({ maxHours: 0 }).maxHours, 24, '0 時間は使わない');
   assert.equal(autoConfig({ maxHours: '6' }).maxHours, 6);

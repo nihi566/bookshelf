@@ -10,7 +10,8 @@ import { promisify } from 'node:util';
 import { fileURLToPath } from 'node:url';
 import { createStore, HISTORY_KEEP } from '../cli/store.js';
 import { createCompanionServer } from '../cli/server.js';
-import { AUTO_RETRY_MS, autoAnalyzeDue, pendingPoints, removedPoints } from '../web/core/auto-analysis.js';
+import { AUTO_RETRY_MS, pendingPoints, removedPoints } from '../web/core/auto-analysis.js';
+import { AUTO_ON, autoAnalyzeDue } from './helpers/auto-on.js';
 import { startFakeLlm } from './helpers/fake-llm.js';
 
 const run = promisify(execFile);
@@ -68,7 +69,7 @@ async function withServer(fn, { llmUrl, drive = null } = {}) {
   const dataDir = mkdtempSync(path.join(tmpdir(), 'bh-auto-'));
   const fake = await startFakeLlm();
   const store = createStore(dataDir);
-  await store.saveConfig({ llm: { baseUrl: llmUrl || fake.url, chatModel: 'fake-chat', embedModel: 'fake-embed' } });
+  await store.saveConfig({ llm: { baseUrl: llmUrl || fake.url, chatModel: 'fake-chat', embedModel: 'fake-embed' }, autoAnalyze: AUTO_ON });
   const server = createCompanionServer({ store, log: () => {}, catalogFetch: async () => new Response(JSON.stringify({ items: [] })), drive });
   await new Promise((r) => server.listen(0, '127.0.0.1', r));
   const base = `http://127.0.0.1:${server.address().port}`;
@@ -160,7 +161,7 @@ test('NIH-107: 本を技術書にして点が減ると、bh serve は自動で�
     const inBefore = new Set([...before.lines.flatMap((l) => l.highlightIds), ...before.isolated]);
     assert.ok(goneIds.every((id) => inBefore.has(id)), '前回の分析に入っている');
 
-    await store.saveConfig({ ...(await store.config()), autoAnalyze: { minPoints: goneIds.length } });
+    await store.saveConfig({ ...(await store.config()), autoAnalyze: { ...AUTO_ON, minPoints: goneIds.length } });
     await store.saveLibrary({ ...lib, books: { ...lib.books, [book.id]: { ...book, technical: true } } });
     const r = await server.checkAutoAnalyze();
     assert.equal(r.started, true, r.reason);

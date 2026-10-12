@@ -41,7 +41,7 @@ const HELP = `使い方: bh <コマンド> [オプション]
                                       AI を呼ぶ。--full は最初から作り直す）
   recommend                           おすすめの本を選び直す
   serve [--port 8787] [--host 127.0.0.1]  コンパニオンサーバを起動（Google にログイン済みなら Play ブックスの線を自動で取り込む。
-                                      点が増えたら自動で分析し直す）
+                                      自動の分析を入れていれば、点が増えたら分析し直す）
   update                              マージした main を常駐の bh serve に反映する（data/ の library.json・analysis.json を
                                       退避 → git pull --ff-only origin main → bh serve を止めて起動し直す → 新しい版で
                                       動いているか確かめる。取り込めなければ bh serve は止めない）
@@ -59,7 +59,7 @@ const HELP = `使い方: bh <コマンド> [オプション]
   config google-client <ID> <シークレット>  Google Cloud で作った OAuth クライアント（種類: デスクトップ アプリ）
   config google-folder <フォルダ ID>  「Play ブックスのメモ」フォルダを名前で探せないときに指定（空で自動に戻す）
   config google-interval <秒>         ドライブを確認する間隔（既定: 60、最短 ${MIN_INTERVAL_SEC}）
-  config auto on|off                  bh serve の自動の分析を入れる・切る（既定: on）
+  config auto on|off                  bh serve の自動の分析を入れる・切る（既定: off）
   config auto-points <件数>           前回の分析のあとに点がこの件数増えたら自動で分析する（既定: 10）
   config auto-hours <時間>            前回からこの時間たち、点が 1 件以上増えた・減ったら自動で分析する（既定: 24）
 

@@ -6,7 +6,8 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { createStore } from '../cli/store.js';
 import { createCompanionServer } from '../cli/server.js';
-import { AUTO_RETRY_MS, autoAnalyzeDue } from '../web/core/auto-analysis.js';
+import { AUTO_RETRY_MS } from '../web/core/auto-analysis.js';
+import { AUTO_ON, autoAnalyzeDue } from './helpers/auto-on.js';
 import { emptyLibrary } from '../web/core/model.js';
 
 const pts = (n) => Array.from({ length: n }, (_, i) => ({ id: `h${i}` }));
@@ -56,7 +57,7 @@ test('NIH-112: 条件を満たしたとき・変化が無いときは、見込�
 
 test('NIH-112: /api/info の autoAnalysis.next に、今の判断の理由と見込みの時刻が入る', async () => {
   const store = createStore(mkdtempSync(path.join(tmpdir(), 'bh-next-')));
-  await store.saveConfig({ llm: { baseUrl: 'http://127.0.0.1:9', chatModel: 'fake-chat', embedModel: 'fake-embed' } });
+  await store.saveConfig({ llm: { baseUrl: 'http://127.0.0.1:9', chatModel: 'fake-chat', embedModel: 'fake-embed' }, autoAnalyze: AUTO_ON });
   const server = createCompanionServer({ store, log: () => {} });
   await new Promise((r) => server.listen(0, '127.0.0.1', r));
   try {
@@ -74,7 +75,7 @@ test('NIH-112: /api/info の autoAnalysis.next に、今の判断の理由と見
     assert.equal(next.reason, 'あと 9 件増える・減るか、前回から 24 時間たつと分析します');
     assert.equal(next.nextAt, new Date(Date.parse(createdAt) + 24 * 3_600_000).toISOString());
     // チャットモデルが無ければ始まらないので、そう伝える
-    await store.saveConfig({ llm: { baseUrl: 'http://127.0.0.1:9', chatModel: '', embedModel: 'fake-embed' } });
+    await store.saveConfig({ llm: { baseUrl: 'http://127.0.0.1:9', chatModel: '', embedModel: 'fake-embed' }, autoAnalyze: AUTO_ON });
     assert.match((await info()).reason, /チャットモデルが設定されていません/);
   } finally {
     server.close();

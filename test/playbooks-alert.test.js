@@ -46,7 +46,7 @@ test('NIH-67: ホームの警告欄に出し、押すと取り込みの画面へ
   assert.equal(String(homeAlertBlock(st(expired, { mode: 'direct' }))), '');
   assert.equal(String(homeAlertBlock(st(null))), '');
   assert.equal(String(homeAlertBlock(st(undefined))), '');
-  // Kindle → Play ブックス → 分析の順に同じ欄に並ぶ
+  // Kindle → Play ブックスの順に同じ欄に並ぶ（分析の失敗はホームに出さない。NIH-307）
   const all = String(
     homeAlertBlock({
       ...st(expired),
@@ -57,7 +57,8 @@ test('NIH-67: ホームの警告欄に出し、押すと取り込みの画面へ
       },
     }),
   );
-  assert.match(all, /href="#\/import"[^>]*>(?!Play)[\s\S]*href="#\/import"[^>]*>Play ブックス[\s\S]*href="#\/knowledge"/);
+  assert.match(all, /href="#\/import"[^>]*>(?!Play)[\s\S]*href="#\/import"[^>]*>Play ブックス/);
+  assert.doesNotMatch(all, /href="#\/knowledge"/);
 });
 
 /** トークンの更新を invalid_grant で断る Google の偽物（ログインの期限切れ） */

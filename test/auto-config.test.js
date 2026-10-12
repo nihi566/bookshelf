@@ -88,6 +88,15 @@ test('NIH-162: 範囲外の値・トークン違いは断り、設定を変え�
   });
 });
 
+test('NIH-307: 自動の分析は既定で切ってある（config.json に入切が無ければ、bh serve は人の操作なしに分析しない）', async () => {
+  const store = createStore(mkdtempSync(path.join(tmpdir(), 'bh-autocfg-')));
+  assert.equal((await store.config()).autoAnalyze.enabled, false);
+  await store.saveConfig({ token: 'tok', autoAnalyze: { minPoints: 5 } });
+  assert.equal((await store.config()).autoAnalyze.enabled, false, '件数だけ変えた設定でも入りにならない');
+  await store.saveConfig({ token: 'tok', autoAnalyze: { enabled: true } });
+  assert.equal((await store.config()).autoAnalyze.enabled, true, '入れれば入る');
+});
+
 test('NIH-162: bh config auto-points / auto-hours も同じ確かめ方を使う', () => {
   const src = readFileSync(path.join(ROOT, 'cli', 'bh.js'), 'utf8');
   assert.match(src, /parseAutoSettings/);

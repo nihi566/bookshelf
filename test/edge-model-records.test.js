@@ -60,7 +60,8 @@ import {
 } from '../web/core/thoughts.js';
 import { SAMPLE_BOOKS } from '../web/core/sample.js';
 import { discoveriesOf, isRead, markDiscoveryRead, mergeReads, readsOf, unreadDiscoveries } from '../web/core/discovery-reads.js';
-import { AUTO_DEFAULTS, AUTO_RETRY_MS, autoAnalyzeDue, autoConfig, pendingPoints } from '../web/core/auto-analysis.js';
+import { AUTO_DEFAULTS, AUTO_RETRY_MS, autoConfig, pendingPoints } from '../web/core/auto-analysis.js';
+import { autoAnalyzeDue } from './helpers/auto-on.js';
 
 const T1 = '2026-10-01T00:00:00.000Z';
 const T2 = '2026-10-02T00:00:00.000Z';
@@ -999,9 +1000,10 @@ test('edge auto: autoConfig は壊れた値・文字列・0・負数・Infinity 
   assert.deepEqual(autoConfig({ minPoints: true, maxHours: false }), AUTO_DEFAULTS);
   assert.deepEqual(autoConfig({ minPoints: 0, maxHours: -1 }), AUTO_DEFAULTS);
   assert.deepEqual(autoConfig({ minPoints: Infinity, maxHours: NaN }), AUTO_DEFAULTS);
-  assert.deepEqual(autoConfig({ minPoints: ' 5 ', maxHours: '0.5' }), { enabled: true, minPoints: 5, maxHours: 0.5 });
-  for (const off of [false, 0, 'false', 'off', '0']) assert.equal(autoConfig({ enabled: off }).enabled, false, String(off));
-  for (const on of [true, 1, 'true', 'on', undefined, null]) assert.equal(autoConfig({ enabled: on }).enabled, true, String(on));
+  assert.deepEqual(autoConfig({ minPoints: ' 5 ', maxHours: '0.5' }), { enabled: false, minPoints: 5, maxHours: 0.5 });
+  // 入切を決めていなければ既定（切る。NIH-307）
+  for (const off of [false, 0, 'false', 'off', '0', undefined, null]) assert.equal(autoConfig({ enabled: off }).enabled, false, String(off));
+  for (const on of [true, 1, 'true', 'on']) assert.equal(autoConfig({ enabled: on }).enabled, true, String(on));
 });
 
 test('edge auto: autoAnalyzeDue の境界（点の数・ちょうど minPoints・ちょうど maxHours・未来の時刻・不正な時刻）', () => {

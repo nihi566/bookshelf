@@ -17,6 +17,7 @@ import { SAMPLE_BOOKS } from '../web/core/sample.js';
 import { createLlmClient } from '../web/core/analysis/llm.js';
 import { analyzeLibrary, emptyCache } from '../web/core/analysis/pipeline.js';
 import { startFakeLlm } from './helpers/fake-llm.js';
+import { AUTO_ON } from './helpers/auto-on.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const fixture = (name) => path.join(ROOT, 'test/fixtures', name);
@@ -62,7 +63,7 @@ async function withServer(fn, { llmUrl } = {}) {
   const dataDir = mkdtempSync(path.join(tmpdir(), 'bh-restore-'));
   const fake = await startFakeLlm();
   const store = createStore(dataDir);
-  await store.saveConfig({ llm: { baseUrl: llmUrl || fake.url, chatModel: 'fake-chat', embedModel: 'fake-embed' } });
+  await store.saveConfig({ llm: { baseUrl: llmUrl || fake.url, chatModel: 'fake-chat', embedModel: 'fake-embed' }, autoAnalyze: AUTO_ON });
   const server = createCompanionServer({ store, log: () => {}, catalogFetch: async () => new Response(JSON.stringify({ items: [] })), drive: null });
   await new Promise((r) => server.listen(0, '127.0.0.1', r));
   const base = `http://127.0.0.1:${server.address().port}`;
