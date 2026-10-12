@@ -76,6 +76,8 @@ Outline   = { id: 'o'+時刻+乱数, title, sources: [{ kind: 'plane'|'line'|'no
 
 - **思いつき（Thought）**は本に属さないメモ（フリートノート。`web/core/thoughts.js`）。「メモ」と呼ぶものが他にもある（読書メモ = source `memo` の点 / 取り込んだメモ = `note` / 自分のメモ = `userNote`）ので、コードでは thought と呼ぶ。本文を直しても ID は変わらない
   - 状態: 未整理（受け箱に出る）・整理済み・捨てた。捨てたもの以外は分析の点になり、今日の点・検索にも出る
+  - ★（`favorite`）: 点の★と同じく、線を作る AI に優先して見せ、★の画面・検索の★に出る。付け外しした時刻 `favoriteAt` を持ち、同期では状態（`statusAt`）と同じく本文とは別に新しい方を採る（一度も★を付けていないメモはどちらも持たない）
+  - 削除は本文を残さない墓標にする（同期で生き返らないので「元に戻す」は無く、カードの × も編集シートの削除も確かめてから消す）
   - 同期（`mergeLibraries`）では `updatedAt` が新しい方を採る。消したもの（墓標）はどちらから来ても消えたまま（`web/core/collections.js` の `mergeCollections`）。外から来た項目は形を確かめ、壊れたものは捨てる
   - 古い版のデータ（`thoughts` が無い）は空として読む（`thoughtsOf()`）
 - **点の共通の形**（`web/core/points.js`）: 分析の点 = 技術書を除くハイライト + 捨てていない思いつき（`analysisPoints`）。分析結果の `highlightIds` には思いつきの ID も入る（`pointById` で引く）。Kindle で伸ばしたハイライトに置き換わった点は `currentPointId` で置き換わった先をたどる（永久ノートの根拠に書いた点を見失わない）

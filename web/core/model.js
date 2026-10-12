@@ -716,8 +716,10 @@ export function libraryStats(library) {
   const books = listBooks(library);
   const bySource = {};
   for (const h of hs) bySource[h.source] = (bySource[h.source] || 0) + 1;
-  const thoughts = pointThoughts(library).length;
-  return { books: books.length, highlights: hs.length, technical: live.length - hs.length, bySource, favorites: hs.filter((h) => h.favorite).length, thoughts, points: hs.length + thoughts };
+  const pts = pointThoughts(library);
+  const thoughts = pts.length;
+  const favorites = hs.filter((h) => h.favorite).length + pts.filter((t) => t.favorite).length;
+  return { books: books.length, highlights: hs.length, technical: live.length - hs.length, bySource, favorites, thoughts, points: hs.length + thoughts };
 }
 
 // ---- 紙の本（書名・表紙を登録し、線を引いた文を手で入れる） ----
