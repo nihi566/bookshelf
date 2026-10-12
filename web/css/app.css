@@ -98,6 +98,13 @@ mark { background: var(--mark); color: inherit; border-radius: 2px; padding: 0 1
 .brand:hover { text-decoration: none; }
 .brand-mark { width: 22px; height: 22px; background: url("../icons/icon.svg") center / contain no-repeat; }
 .topbar-status { flex: 1 1 auto; font-size: 0.8rem; color: var(--ink-3); text-align: right; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* 読書メモ / 価格の切り替え（NIH-286）。今いる軸を塗る */
+.axis-switch { flex: none; display: inline-flex; padding: 2px; border-radius: 999px; border: 1px solid var(--line); background: var(--surface-2); }
+.axis-switch a { display: inline-flex; align-items: center; min-height: 32px; padding: 2px 12px; border-radius: 999px; color: var(--ink-2); font-size: 0.85rem; font-weight: 600; white-space: nowrap; }
+.axis-switch a:hover { text-decoration: none; color: var(--accent); }
+.axis-switch a[aria-current="true"] { background: var(--surface); color: var(--accent); box-shadow: var(--shadow); }
+/* 幅の狭い端末では「本棚」の文字を隠し、分析中の表示（#status）の場所を空ける（印と aria-label は残す） */
+@media (max-width: 420px) { .brand-name { display: none; } }
 .topbar-memo { flex: none; display: inline-flex; align-items: center; gap: 4px; min-height: 36px; padding: 4px 12px; border-radius: 999px; border: 1px solid var(--line); background: var(--surface); color: var(--accent); font-weight: 600; font-size: 0.85rem; cursor: pointer; }
 .topbar-memo:hover { background: var(--accent-soft); }
 .topbar-memo svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }

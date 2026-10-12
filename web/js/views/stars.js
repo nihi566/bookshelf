@@ -9,8 +9,7 @@ export const starsView = {
     const { present, missing, waiting } = starredLines(state.library, state.analysis);
     const points = searchPoints(state.library, '', { favorite: true });
     const idx = lineIndex(state.analysis);
-    const head = html`<a class="back" href="#/">‹ ホーム</a>
-      <div class="page-head"><div><h1>★</h1><div class="sub">★をつけた線(グループ)と点を見返す</div></div></div>`;
+    const head = html`<div class="page-head"><div><h1>★</h1><div class="sub">★をつけた線(グループ)と点を見返す</div></div></div>`;
     if (!present.length && !missing.length && !waiting && !points.length) {
       return html`${head}
         <p class="empty">まだ★はありません。点のカードの ☆ を押すか、線(グループ)の画面の「☆ ★をつける」で付けられます。</p>`;

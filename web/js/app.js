@@ -5,7 +5,7 @@ import { loadCache, loadState, save, saveCache, state } from './state.js';
 import { buildBookmarklet, companion, detectCompanion, download, syncWithPc } from './services.js';
 import { openSheet, serveVersionBlock, toast } from './ui.js';
 import { swVersion } from '../core/serve-version.js';
-import { JOB_PATHS, LAYER_PATHS, PC_INFO_BOXES, PC_INFO_PATHS, THOUGHT_PATHS, matchRoute, parseHash as parseRouteHash } from './routes.js';
+import { AXIS_HOME, JOB_PATHS, LAYER_PATHS, PC_INFO_BOXES, PC_INFO_PATHS, THOUGHT_PATHS, matchRoute, parseHash as parseRouteHash, rememberAxisHash } from './routes.js';
 import { appActions } from './app-actions.js';
 import { applySyncBusy, applySyncStatus, isSyncing, recordSyncResult, trackSync } from './sync-busy.js';
 import { noteActions } from './note-actions.js';
@@ -52,6 +52,8 @@ function markPicksSeen(ids) {
 }
 let currentPath = null;
 let currentHash = null;
+// 軸（読書メモ / 価格）ごとに最後に開いた画面。上のバーの切り替えで、その画面へ戻す（NIH-286）
+let axisHashes = AXIS_HOME;
 
 const parseHash = () => parseRouteHash(location.hash);
 
@@ -69,6 +71,12 @@ function render({ keepScroll = false } = {}) {
   mountCommon();
   for (const a of document.querySelectorAll('.tabbar a')) {
     if (a.dataset.tab === match.tab) a.setAttribute('aria-current', 'page');
+    else a.removeAttribute('aria-current');
+  }
+  axisHashes = rememberAxisHash(axisHashes, match, location.hash);
+  for (const a of document.querySelectorAll('.axis-switch a')) {
+    a.setAttribute('href', axisHashes[a.dataset.axis]);
+    if (a.dataset.axis === match.axis) a.setAttribute('aria-current', 'true');
     else a.removeAttribute('aria-current');
   }
   // 書き出し・設定の画面では PC の出力先と最後に書き出した時刻を取り直す（10 秒に 1 回まで）

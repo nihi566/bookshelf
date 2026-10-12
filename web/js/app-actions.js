@@ -238,7 +238,7 @@ export function appActions({ state, openSheet, toast, persist, saveAnalysis, syn
       const line = (state.analysis?.lines || []).find((l) => l.id === el.dataset.id) || { id: el.dataset.id, name: '' };
       const on = toggleLineStar(state.library, line);
       await persist();
-      toast(on ? '★をつけました（★の一覧はホームの「★」から）' : '★を外しました');
+      toast(on ? '★をつけました（★の一覧は下のタブの「★」から）' : '★を外しました');
       render({ keepScroll: true });
       sync();
     },
