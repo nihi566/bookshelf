@@ -34,8 +34,8 @@ export const ROUTES = [
   [/^\/lines$/, linesView, 'knowledge'],
   [/^\/planes$/, planesView, 'knowledge'],
   [/^\/solid$/, solidView, 'knowledge'],
-  // ★をつけた線(グループ)と点（入口はホームの「★ N」と線(グループ)の画面）
-  [/^\/stars$/, starsView, 'home'],
+  // ★をつけた線(グループ)と点（入口は下のタブの★・ホームの「★ N」・線(グループ)の画面。NIH-286）
+  [/^\/stars$/, starsView, 'stars'],
   [/^\/knowledge\/line\/(?<id>[\w-]+)$/, lineView, 'knowledge'],
   [/^\/knowledge\/plane\/(?<id>[\w-]+)$/, planeView, 'knowledge'],
   [/^\/knowledge\/isolated$/, isolatedView, 'knowledge'],
@@ -83,13 +83,27 @@ function notFoundView(path) {
   };
 }
 
-/** パスに合う画面・タブ・URL の中の値。どれにも合わなければ、案内つきのホーム（notFound に開いたパス） */
+// 上のバーで切り替える 2 つの軸（NIH-286）。価格チェックの画面が「価格」、ほかはすべて「読書メモ」。
+// 値はまだ開いていない軸の入口
+export const AXIS_HOME = Object.freeze({ memo: '#/', price: '#/wishlist' });
+const axisOfTab = (tab) => (tab === 'price' ? 'price' : 'memo');
+
+/**
+ * 軸ごとに最後に開いた画面（hash）を覚え直した新しい表。切り替えで、その軸で見ていた画面に戻すため。
+ * match は matchRoute の戻り値。どのルートにも合わない URL は覚えない（戻った先が「このページはありません」にならないように）
+ */
+export function rememberAxisHash(last, match, hash) {
+  if (match.notFound) return last;
+  return { ...last, [match.axis]: hash || AXIS_HOME[match.axis] };
+}
+
+/** パスに合う画面・タブ・軸・URL の中の値。どれにも合わなければ、案内つきのホーム（notFound に開いたパス） */
 export function matchRoute(path) {
   for (const [re, view, tab] of ROUTES) {
     const m = path.match(re);
-    if (m) return { view, tab, params: m.groups || {} };
+    if (m) return { view, tab, axis: axisOfTab(tab), params: m.groups || {} };
   }
-  return { view: notFoundView(path), tab: 'home', params: {}, notFound: path };
+  return { view: notFoundView(path), tab: 'home', axis: 'memo', params: {}, notFound: path };
 }
 
 // 思いつきを出している画面（受け箱・メモの一覧・点の検索）
