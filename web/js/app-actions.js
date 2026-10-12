@@ -207,6 +207,28 @@ export function appActions({ state, openSheet, toast, persist, saveAnalysis, syn
         sync();
       });
     },
+    // 点の★と同じく、描き直さずにボタンだけ変える
+    async 'thought-fav'(el) {
+      const cur = thoughtsOf(state.library)[el.dataset.id];
+      if (!cur || cur.deleted) return;
+      const t = updateThought(state.library, cur.id, { favorite: !cur.favorite });
+      await persist();
+      el.classList.toggle('on', t.favorite);
+      el.textContent = t.favorite ? '★' : '☆';
+      el.setAttribute('aria-pressed', String(t.favorite));
+      sync();
+    },
+    // 編集を開かずに消す（編集シートの「このメモを削除」と同じく、墓標は戻せないので確かめてから）
+    async 'thought-delete'(el) {
+      const t = thoughtsOf(state.library)[el.dataset.id];
+      if (!t || t.deleted) return;
+      if (!confirm('このメモを削除しますか？（書いた文は戻せません）')) return;
+      deleteThought(state.library, t.id);
+      await persist();
+      toast('削除しました');
+      render({ keepScroll: true });
+      sync();
+    },
     async 'thought-status'(el) {
       const t = updateThought(state.library, el.dataset.id, { status: el.dataset.status });
       await persist();
