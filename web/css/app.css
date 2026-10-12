@@ -551,3 +551,8 @@ a.mb:hover { text-decoration: none; background: var(--surface-2); }
 @media (prefers-reduced-motion: reduce) {
   * { transition: none !important; animation: none !important; }
 }
+/* 知識の画面の PC の分析の欄（普段は 1 行にたたむ。NIH-284） */
+details.pc-panel { padding: 8px 16px; }
+details.pc-panel[open] { padding-bottom: 16px; }
+.pc-panel > summary .muted { font-weight: normal; }
+.pc-panel > .stack { margin-top: 8px; }
