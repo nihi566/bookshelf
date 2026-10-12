@@ -164,8 +164,10 @@ export function thoughtCard(t, { lines = [], query = '', moves = false, assigned
         ${pcSync && isThoughtUnsynced(t, pcSync.lastSync) ? html`<span class="badge unsynced" title="この端末にだけあります。PC と同期すると消えます">PC に未同期</span>` : ''}
       </div>
       <div class="hl-actions">
+        <button class="icon-btn ${t.favorite ? 'on' : ''}" data-action="thought-fav" data-id="${t.id}" aria-pressed="${String(Boolean(t.favorite))}" aria-label="お気に入り">${t.favorite ? '★' : '☆'}</button>
         <button class="icon-btn" data-action="edit-thought" data-id="${t.id}" aria-label="メモを編集">✎</button>
         <a class="icon-btn" href="#/point/${t.id}" aria-label="点のページを開く（永久ノート）">↗</a>
+        <button class="icon-btn" data-action="thought-delete" data-id="${t.id}" aria-label="メモを削除" title="メモを削除">×</button>
       </div>
     </div>
     ${moves

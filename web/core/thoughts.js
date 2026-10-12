@@ -3,8 +3,10 @@
 // 「メモ」と呼ぶものは他にもある（読書メモ = source 'memo' の点 / 取り込んだメモ = 点の note /
 // 自分のメモ = 点の userNote）。混ざらないよう、コードではこれを thought（思いつき）と呼ぶ。
 //
-// Thought = { id: 't…', text, status: 'inbox' | 'done' | 'discarded', statusAt, answerTo?, createdAt, updatedAt }
+// Thought = { id: 't…', text, status: 'inbox' | 'done' | 'discarded', statusAt, favorite?, favoriteAt?, answerTo?, createdAt, updatedAt }
 //   statusAt: 状態を変えた時刻（本文の書き直しと状態の変更が別の端末で重なっても、両方を残すため）
+//   favorite: ★（点の★と同じく、線を作る AI に優先して見せる）。favoriteAt: ★を付け外しした時刻（statusAt と同じ理由）。
+//   一度も★を付けていないメモは、どちらも持たない（古い形のデータと同じ）
 // 消したものは墓標 { id, deleted: true, createdAt, updatedAt } だけを残す（同期で戻らないように）
 
 import { newerItem } from './collections.js';
@@ -36,21 +38,27 @@ export function normalizeThought(t, now = new Date().toISOString()) {
   if (!text) return null;
   const createdAt = isoStamp(t.createdAt, now);
   const out = { id: t.id, text, status: isStatus(t.status) ? t.status : 'inbox', statusAt: isoStamp(t.statusAt, now) || createdAt, createdAt, updatedAt: isoStamp(t.updatedAt, now) };
+  const favoriteAt = isoStamp(t.favoriteAt, now);
+  if (favoriteAt) Object.assign(out, { favorite: t.favorite === true, favoriteAt });
   const answerTo = normalizeAnswerTo(t.answerTo);
   if (answerTo) out.answerTo = answerTo;
   return out;
 }
 
 /**
- * 両方の端末にある思いつきの統合。本文などは updatedAt が新しい方、状態は statusAt が新しい方
- * （PC で捨てたあと、未同期のスマホで本文を直しても、捨てたままにする）
+ * 両方の端末にある思いつきの統合。本文などは updatedAt が新しい方、状態は statusAt・★は favoriteAt が新しい方
+ * （PC で捨てたあと、未同期のスマホで本文を直しても、捨てたままにする。★も同じ）
  */
 export function mergeThought(a, b) {
   const base = newerItem(a, b);
   const sa = a.statusAt || a.createdAt || '';
   const sb = b.statusAt || b.createdAt || '';
   const src = sa === sb ? base : sa > sb ? a : b;
-  return { ...base, status: src.status, statusAt: src.statusAt || src.createdAt || '' };
+  const fa = a.favoriteAt || '';
+  const fb = b.favoriteAt || '';
+  const fav = fa === fb ? base : fa > fb ? a : b;
+  const { favorite, favoriteAt, ...rest } = base;
+  return { ...rest, status: src.status, statusAt: src.statusAt || src.createdAt || '', ...(fav.favoriteAt ? { favorite: fav.favorite === true, favoriteAt: fav.favoriteAt } : {}) };
 }
 
 /** どの問いへの答えか（立体・線の問い、問いかけの質問）。形が違えば持たない */
@@ -82,7 +90,7 @@ export function addThought(library, { text, answerTo } = {}, now = new Date().to
   return t;
 }
 
-/** 本文・状態を変える。何も変わらなければ時刻も進めない（別の端末の新しい編集を負かさない） */
+/** 本文・状態・★を変える。何も変わらなければ時刻も進めない（別の端末の新しい編集を負かさない） */
 export function updateThought(library, id, patch, now = new Date().toISOString()) {
   const cur = Object.hasOwn(thoughtsOf(library), id) ? thoughtsOf(library)[id] : null;
   if (!cur || cur.deleted) throw new Error('メモが見つかりません');
@@ -93,7 +101,11 @@ export function updateThought(library, id, patch, now = new Date().toISOString()
     if (patch.status !== cur.status) next.statusAt = now;
     next.status = patch.status;
   }
-  if (next.text === cur.text && next.status === cur.status) return cur;
+  if ('favorite' in patch && Boolean(patch.favorite) !== Boolean(cur.favorite)) {
+    next.favorite = Boolean(patch.favorite);
+    next.favoriteAt = now;
+  }
+  if (next.text === cur.text && next.status === cur.status && next.favorite === cur.favorite) return cur;
   next.updatedAt = now;
   library.thoughts = { ...thoughtsOf(library), [id]: next };
   library.updatedAt = now;
@@ -154,12 +166,13 @@ export function thoughtCounts(library) {
 
 /**
  * 思いつきを探す（空白区切りの AND）。新しい順。
- * status を指定しなければ捨てたものは出さない（捨てたものは「捨てた」の一覧でだけ見られる）
+ * status を指定しなければ捨てたものは出さない（捨てたものは「捨てた」の一覧でだけ見られる）。favorite: ★のものだけ
  */
-export function searchThoughts(library, query = '', { status = '' } = {}) {
+export function searchThoughts(library, query = '', { status = '', favorite = false } = {}) {
   const terms = normalizeText(query).split(' ').filter(Boolean);
   return liveThoughts(library)
     .filter((t) => (status ? t.status === status : t.status !== 'discarded'))
+    .filter((t) => !favorite || t.favorite)
     .filter((t) => {
       if (!terms.length) return true;
       const hay = normalizeText(`${t.text} ${THOUGHT_LABEL} ${t.answerTo?.question || ''}`);
