@@ -19,53 +19,104 @@ import { wishlist } from './views/wishlist.js';
 import { records } from './views/records.js';
 import { thoughtsView } from './views/thoughts.js';
 
+// 「すべての画面」（サイトマップ。NIH-286 の残り = NIH-296）の見出し。読書メモ側は下のタブの順、最後に価格
+const SITEMAP_GROUPS = [
+  ['home', 'ホーム'],
+  ['books', '読んだ本'],
+  ['stars', '★'],
+  ['knowledge', '知識'],
+  ['records', '読書記録'],
+  ['settings', '設定'],
+  ['price', '価格'],
+];
+
+/** ルートの正規表現から、そのまま開ける URL（#/ の後ろ）を取り出す。URL に値を含むルート（本 1 冊など）は null */
+export function fixedPath(re) {
+  const m = re.source.match(/^\^((?:\\\/|[\w-])*)\$$/);
+  return m ? m[1].replace(/\\\//g, '/') || '/' : null;
+}
+
+/**
+ * 「すべての画面」に並べる画面。ROUTES の URL に値を含まない画面を、タブごとにまとめる（画面を足すと自動で出る）。
+ * 戻り値は [{ axis, title, pages: [{ href, name }] }]（中身の無い見出しは出さない）
+ */
+export function siteMap() {
+  return SITEMAP_GROUPS.map(([tab, title]) => ({
+    axis: axisOfTab(tab),
+    title,
+    pages: ROUTES.filter(([re, , t]) => t === tab && fixedPath(re) !== null).map(([re, , , name]) => ({ href: `#${fixedPath(re)}`, name })),
+  })).filter((g) => g.pages.length);
+}
+
+const siteMapGroup = (g) => html`<div class="card stack">
+        <div class="small muted">${g.title}</div>
+        ${g.pages.map((p) => html`<a class="row spread" href="${p.href}"><b>${p.name}</b><span class="muted">›</span></a>`)}
+      </div>`;
+
+// すべての画面（入口は設定の先頭）
+const siteMapView = {
+  render() {
+    const map = siteMap();
+    const side = (axis) => map.filter((g) => g.axis === axis).map(siteMapGroup);
+    return html`<a class="back" href="#/settings">‹ 設定</a>
+      <div class="page-head"><div><h1>すべての画面</h1><div class="sub">下のタブに無い画面も、ここから開けます</div></div></div>
+      <div class="section"><h2>読書メモ</h2></div>
+      ${side('memo')}
+      <div class="section"><h2>価格</h2></div>
+      ${side('price')}`;
+  },
+};
+
+// [URL, 画面, タブ, 画面名]。画面名は「すべての画面」に出す名前で、URL に値を含まない画面には必ず付ける（test/sitemap.test.js）
 export const ROUTES = [
-  [/^\/$/, home, 'home'],
-  [/^\/books$/, books, 'books'],
+  [/^\/$/, home, 'home', 'ホーム'],
+  [/^\/books$/, books, 'books', '読んだ本'],
   [/^\/book\/(?<id>[\w-]+)$/, book, 'books'],
-  [/^\/wishlist$/, wishlist, 'price'],
+  [/^\/wishlist$/, wishlist, 'price', '価格チェック'],
   // 全ての点の一覧（点の専用ページ。言葉・意味で探せる）。入口はホームの点の数・読んだ本・知識の画面
-  [/^\/search$/, search, 'books'],
-  [/^\/records$/, records, 'records'],
+  [/^\/search$/, search, 'books', '全ての点'],
+  [/^\/records$/, records, 'records', '読書記録'],
   // 思いつき（フリートノート）の一覧。受け箱はホームにあるので、タブはホーム
-  [/^\/thoughts$/, thoughtsView, 'home'],
-  [/^\/knowledge$/, knowledge, 'knowledge'],
+  [/^\/thoughts$/, thoughtsView, 'home', 'メモ（思いつき）'],
+  [/^\/knowledge$/, knowledge, 'knowledge', '知識'],
   // 線・面・立体の専用ページ（一覧。点の一覧は全ての点 = #/search）
-  [/^\/lines$/, linesView, 'knowledge'],
-  [/^\/planes$/, planesView, 'knowledge'],
-  [/^\/solid$/, solidView, 'knowledge'],
+  [/^\/lines$/, linesView, 'knowledge', '線(グループ)'],
+  [/^\/planes$/, planesView, 'knowledge', '面'],
+  [/^\/solid$/, solidView, 'knowledge', '立体'],
   // ★をつけた線(グループ)と点（入口は下のタブの★・ホームの「★ N」・線(グループ)の画面。NIH-286）
-  [/^\/stars$/, starsView, 'stars'],
+  [/^\/stars$/, starsView, 'stars', '★をつけた線(グループ)と点'],
   [/^\/knowledge\/line\/(?<id>[\w-]+)$/, lineView, 'knowledge'],
   [/^\/knowledge\/plane\/(?<id>[\w-]+)$/, planeView, 'knowledge'],
-  [/^\/knowledge\/isolated$/, isolatedView, 'knowledge'],
+  [/^\/knowledge\/isolated$/, isolatedView, 'knowledge', 'まだつながっていない点'],
   // 前回の分析のあとに増えた点（知識の画面・ホームの「増えた点 N 件」から）
-  [/^\/knowledge\/pending$/, pendingView, 'knowledge'],
+  [/^\/knowledge\/pending$/, pendingView, 'knowledge', '前回の分析のあとに増えた点'],
   // 前回の分析のあとに消えた点（「減った点 N 件」から。理由と戻す画面への入口）
-  [/^\/knowledge\/removed$/, removedView, 'knowledge'],
+  [/^\/knowledge\/removed$/, removedView, 'knowledge', '前回の分析のあとに消えた点'],
   // 遠いつながり（別の本・別の面の点の組を AI が読み、共通する考えがあったもの）
-  [/^\/knowledge\/far$/, farView, 'knowledge'],
+  [/^\/knowledge\/far$/, farView, 'knowledge', '遠いつながり'],
   // 永久ノート（1 ノート = 1 アイデア）と、点 1 つ（それを根拠にしている永久ノート）
-  [/^\/notes$/, notesView, 'knowledge'],
+  [/^\/notes$/, notesView, 'knowledge', '永久ノート'],
   [/^\/note\/(?<id>[\w-]+)$/, noteView, 'knowledge'],
   [/^\/point\/(?<id>[\w-]+)$/, pointView, 'knowledge'],
   // リンクを張る相手を選ぶ（点・メモ・永久ノートから）
   [/^\/link\/(?<id>[\w-]+)$/, linkPickerView, 'knowledge'],
   // 問いかける（PC の AI が、自分の点を根拠に答える）
-  [/^\/ask$/, askView, 'knowledge'],
+  [/^\/ask$/, askView, 'knowledge', '問いかける'],
   // 文章の骨組み（一覧・材料を選んで作る・骨組み 1 つ）
-  [/^\/outlines$/, outlinesView, 'knowledge'],
-  [/^\/outline\/new$/, outlineNewView, 'knowledge'],
+  [/^\/outlines$/, outlinesView, 'knowledge', '文章の骨組み'],
+  [/^\/outline\/new$/, outlineNewView, 'knowledge', '骨組みを作る'],
   [/^\/outline\/(?<id>[\w-]+)$/, outlineView, 'knowledge'],
   // 過去の分析（履歴は PC にだけある）
   [/^\/knowledge\/history\/(?<id>[0-9TZ]+)$/, historyView, 'knowledge'],
   // 発見（ホームの「発見」から開く）
   [/^\/discovery\/(?<id>[\w-]+)$/, discoveryView, 'home'],
-  [/^\/discoveries$/, discoveriesView, 'home'],
-  [/^\/import$/, importView, 'settings'],
-  [/^\/settings$/, settingsView, 'settings'],
+  [/^\/discoveries$/, discoveriesView, 'home', 'すべての発見'],
+  [/^\/import$/, importView, 'settings', '取り込み'],
+  [/^\/settings$/, settingsView, 'settings', '設定'],
   // 削除した点（通知の「元に戻す」が消えた後でも戻せる。入口は設定の「データ」）
-  [/^\/trash$/, trashView, 'settings'],
+  [/^\/trash$/, trashView, 'settings', '削除した点'],
+  // すべての画面（NIH-296）
+  [/^\/sitemap$/, siteMapView, 'settings', 'すべての画面'],
 ];
 
 /** location.hash（「#/book/x?q=y」）を、パスと問い合わせに分ける */

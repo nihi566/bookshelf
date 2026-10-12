@@ -235,6 +235,7 @@ export const settingsView = {
     return html`<div class="page-head"><h1>設定</h1></div>
       <div class="card stack">
         <a class="row spread" href="#/import"><b>取り込み</b><span class="muted">Kindle・Play ブックス・<span class="nowrap">読書メモ ›</span></span></a>
+        <a class="row spread" href="#/sitemap"><b>すべての画面</b><span class="muted">タブに無い画面も ›</span></a>
       </div>
 
       <div class="section"><h2>AI（ローカル LLM）</h2></div>
