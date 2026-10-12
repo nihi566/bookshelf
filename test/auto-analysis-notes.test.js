@@ -8,7 +8,8 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createStore } from '../cli/store.js';
 import { createCompanionServer } from '../cli/server.js';
-import { autoAnalyzeDue, notesChanged, notesKey } from '../web/core/auto-analysis.js';
+import { notesChanged, notesKey } from '../web/core/auto-analysis.js';
+import { AUTO_ON, autoAnalyzeDue } from './helpers/auto-on.js';
 import { addNote, deleteNote, notesForAnalysis, updateNote } from '../web/core/notes.js';
 import { startFakeLlm } from './helpers/fake-llm.js';
 
@@ -80,7 +81,7 @@ test('NIH-83: bh serve は永久ノートだけを直した日にも自動で分
   const dataDir = mkdtempSync(path.join(tmpdir(), 'bh-auto-notes-'));
   const fake = await startFakeLlm();
   const store = createStore(dataDir);
-  await store.saveConfig({ llm: { baseUrl: fake.url, chatModel: 'fake-chat', embedModel: 'fake-embed' } });
+  await store.saveConfig({ llm: { baseUrl: fake.url, chatModel: 'fake-chat', embedModel: 'fake-embed' }, autoAnalyze: AUTO_ON });
   const server = createCompanionServer({ store, log: () => {}, catalogFetch: async () => new Response(JSON.stringify({ items: [] })) });
   await new Promise((r) => server.listen(0, '127.0.0.1', r));
   const base = `http://127.0.0.1:${server.address().port}`;

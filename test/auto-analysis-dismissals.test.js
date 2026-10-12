@@ -8,7 +8,8 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createStore } from '../cli/store.js';
 import { createCompanionServer } from '../cli/server.js';
-import { autoAnalyzeDue, dismissalsChanged, dismissalsKey } from '../web/core/auto-analysis.js';
+import { dismissalsChanged, dismissalsKey } from '../web/core/auto-analysis.js';
+import { AUTO_ON, autoAnalyzeDue } from './helpers/auto-on.js';
 import { dismiss, undoDismiss } from '../web/core/dismissals.js';
 import { startFakeLlm } from './helpers/fake-llm.js';
 
@@ -78,7 +79,7 @@ test('NIH-210: bh serve は、面を消した翌日に自動で分析し直し�
   const dataDir = mkdtempSync(path.join(tmpdir(), 'bh-auto-dismiss-'));
   const fake = await startFakeLlm();
   const store = createStore(dataDir);
-  await store.saveConfig({ llm: { baseUrl: fake.url, chatModel: 'fake-chat', embedModel: 'fake-embed' } });
+  await store.saveConfig({ llm: { baseUrl: fake.url, chatModel: 'fake-chat', embedModel: 'fake-embed' }, autoAnalyze: AUTO_ON });
   const server = createCompanionServer({ store, log: () => {}, catalogFetch: async () => new Response(JSON.stringify({ items: [] })) });
   await new Promise((r) => server.listen(0, '127.0.0.1', r));
   const base = `http://127.0.0.1:${server.address().port}`;

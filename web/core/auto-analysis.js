@@ -7,8 +7,8 @@ import { currentPointId } from './point-ids.js';
 import { isThoughtId, thoughtsOf } from './thoughts.js';
 import { dismissalsOf } from './dismissals.js';
 
-// 既定: 前回の分析のあとに点が 10 件増える・減るか、24 時間たって 1 件以上増えた・減ったら分析する
-export const AUTO_DEFAULTS = { enabled: true, minPoints: 10, maxHours: 24 };
+// 既定: 切ってある（手動で分析する。NIH-307）。入れたら、前回の分析のあとに点が 10 件増える・減るか、24 時間たって 1 件以上増えた・減ったら分析する
+export const AUTO_DEFAULTS = { enabled: false, minPoints: 10, maxHours: 24 };
 // 自動の分析が失敗したあと、次に試すまで待つ時間（LLM が止まっているときに試し続けない）
 export const AUTO_RETRY_MS = 30 * 60 * 1000;
 // 分析に要る点の数（analyzeLibrary と同じ）
@@ -134,8 +134,9 @@ function readNumber(v) {
 /** 設定の値を確かめて既定値で埋める（bh config で変えた値・手で直した config.json・古い版の設定） */
 export function autoConfig(c = {}) {
   const num = (v, d, ok) => (Number.isFinite(readNumber(v)) && ok(readNumber(v)) ? readNumber(v) : d);
-  const off = [false, 0, 'false', 'off', '0'].includes(c?.enabled);
-  return { enabled: !off, minPoints: num(c?.minPoints, AUTO_DEFAULTS.minPoints, (n) => n >= 1), maxHours: num(c?.maxHours, AUTO_DEFAULTS.maxHours, (n) => n > 0) };
+  // 入切を決めていない（無い・null）なら既定に従う
+  const enabled = c?.enabled == null ? AUTO_DEFAULTS.enabled : ![false, 0, 'false', 'off', '0'].includes(c.enabled);
+  return { enabled, minPoints: num(c?.minPoints, AUTO_DEFAULTS.minPoints, (n) => n >= 1), maxHours: num(c?.maxHours, AUTO_DEFAULTS.maxHours, (n) => n > 0) };
 }
 
 /**
