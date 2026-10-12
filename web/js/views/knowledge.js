@@ -141,15 +141,42 @@ function runAnalysisButton(state) {
   return html`<button class="btn primary" data-action="run-analysis" ${disabled ? 'disabled' : ''}>${state.analysis ? '分析し直す' : '点をつないで分析する'}</button>`;
 }
 
+/**
+ * PC の分析の欄を開いて出すか（NIH-284。普段は月に 1 回使うかどうかなので 1 行にたたむ）。
+ * 分析中・終わった直後・失敗・状況不明・自動の分析の失敗・まだ分析していない・点が 4 件未満・AI が未設定のときは開く
+ */
+export function pcPanelNeedsAttention(state) {
+  if (state.job || !state.analysis || libraryStats(state.library).points < 4) return true;
+  if (!aiSummary(state.settings, state.servedByCompanion)) return true;
+  const au = state.pcInfo?.autoAnalysis;
+  return Boolean(au?.lastError) && !(au.lastSuccessAt && au.lastErrorAt && au.lastSuccessAt >= au.lastErrorAt);
+}
+
+/**
+ * たたんだ PC の分析の欄の 1 行（前回の分析の日付と自動の分析の入切）。
+ * PC の情報（/api/info）を取り直したときに、この行だけ差し替える（app.js の PC_INFO_BOXES）
+ */
+export function pcPanelHead(state) {
+  const a = state.analysis;
+  const au = state.settings.ai.mode === 'companion' ? state.pcInfo?.autoAnalysis : null;
+  const parts = [a ? `前回の分析 ${isoDate(a.createdAt)}` : '', au ? `自動の分析 ${au.enabled ? 'オン' : 'オフ'}` : ''].filter(Boolean);
+  return html`<span>PC の分析${parts.length ? html` <span class="small muted">${parts.map((p, i) => html`${i ? '・' : ''}<span class="nowrap">${p}</span>`)}</span>` : ''}</span>`;
+}
+
+// 利用者が開いた PC の分析の欄を、同期・編集の描き直しでたたまないように覚えておく（このページを開いているあいだだけ）
+let pcPanelOpened = false;
+
 export const knowledge = {
-  render({ state }) {
+  render({ state, refresh = false }) {
+    if (!refresh) pcPanelOpened = false;
     const a = state.analysis;
     const s = libraryStats(state.library);
     const job = state.job;
     const summary = aiSummary(state.settings, state.servedByCompanion);
     const runBtn = runAnalysisButton(state);
+    const open = pcPanelNeedsAttention(state) || pcPanelOpened;
     const head = html`<div class="page-head"><div><h1>知識</h1><div class="sub">点 ${s.points} → 線 ${a?.lines.length ?? '–'} → 面 ${a?.planes.length ?? '–'} → 立体</div></div><a class="btn small" href="#/ask">問いかける</a></div>
-      <div class="card stack">
+      <details class="card pc-panel" id="pc-analysis"${open ? ' open' : ''}><summary id="pc-analysis-head">${pcPanelHead(state)}</summary><div class="stack">
         <p class="small">AI: ${summary || html`<b>未設定</b> — <a href="#/settings">AI の接続を設定する</a>`}</p>
         ${s.points < 4 ? html`<p class="notice">分析には 4 件以上の点が必要です。<a href="#/import">取り込む</a>か、上の「メモ」で思いつきを書いてください。</p>` : ''}
         <div class="row">${runBtn}${a ? html`<button class="btn" data-action="rerun-recommend" ${job?.running ? 'disabled' : ''}>おすすめを選び直す</button>` : ''}</div>
@@ -158,7 +185,7 @@ export const knowledge = {
         <div id="auto-status">${autoStatusBlock(state)}</div>
         ${a ? html`<p class="small"><button type="button" class="btn small" data-action="run-analysis-full" ${job?.running ? 'disabled' : ''}>最初から作り直す</button> <span class="muted">線(グループ)・面を前回から引き継がず、すべて作り直します（時間がかかります）</span></p>` : ''}
         ${a?.model?.embed === 'tfidf' ? html`<p class="notice">${TFIDF_HINT}</p>` : ''}
-      </div>
+      </div></details>
       ${jobPanel(job)}`;
     if (!a) {
       return html`${head}
@@ -205,6 +232,10 @@ export const knowledge = {
       ${pcConfigured(state) ? html`<div class="section"><h2>分析の履歴 <span class="small muted pin-count" id="history-pin-count"></span></h2><span class="small muted">PC に直近 12 回分（「残す」の回は消えない）</span></div><div id="analysis-history"><p class="small muted">PC に問い合わせています…</p></div>` : ''}`;
   },
   mount(root, ctx) {
+    // 注意が要って開いているときの開け閉めは覚えない（注意が済んだら、また 1 行にたたむ）
+    root.querySelector('#pc-analysis')?.addEventListener('toggle', (e) => {
+      if (ctx?.state && !pcPanelNeedsAttention(ctx.state)) pcPanelOpened = e.currentTarget.open;
+    });
     if (ctx?.state && pcConfigured(ctx.state)) {
       const pinnedOnly = historyPinnedOnly(ctx.query);
       renderHistoryList(root.querySelector('#analysis-history'), root.querySelector('#history-pin-count'), ctx.state, pinnedOnly);

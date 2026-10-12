@@ -15,6 +15,7 @@ import { askActions } from './ask-actions.js';
 import { outlineStatusBlock } from './views/outlines.js';
 import { outlineActions } from './outline-actions.js';
 import { googleLabel, importOutcome, importResultBlock, kindleLabel } from './views/settings.js';
+import { pcPanelNeedsAttention } from './views/knowledge.js';
 import { addHighlight, emptyLibrary, listBooks, mergeParsed, parseSeenPicks, parseShuffleRecord, recentPickIds, recordSeenPicks, shuffleRecord, shuffleSeedFor } from '../core/model.js';
 import { COVER_MAX_LENGTH } from '../core/covers.js';
 import { parseFiles } from '../core/parsers/index.js';
@@ -399,6 +400,8 @@ async function refreshPcInfo() {
       box.innerHTML = String(block(state));
       if (open) box.querySelector('details')?.setAttribute('open', '');
     }
+    // 届いた PC の情報で自動の分析の失敗が分かったら、たたんでいた PC の分析の欄を開く（NIH-284）
+    if (path === '/knowledge' && pcPanelNeedsAttention(state)) document.querySelector('#view #pc-analysis')?.setAttribute('open', '');
   } else if (PC_INFO_PATHS.includes(path) && !typing) render({ keepScroll: true });
 }
 

@@ -2,7 +2,7 @@
 import { html } from './html.js';
 import { homeAlertBlock } from './ui.js';
 import { book, books, home, search } from './views/library.js';
-import { autoStatusBlock, historyView, isolatedView, knowledge, lineView, pendingView, planeView } from './views/knowledge.js';
+import { autoStatusBlock, historyView, pcPanelHead, isolatedView, knowledge, lineView, pendingView, planeView } from './views/knowledge.js';
 import { linesView, planesView, solidView } from './views/layers.js';
 import { starsView } from './views/stars.js';
 import { trashView } from './views/trash.js';
@@ -107,5 +107,5 @@ export const PC_INFO_PATHS = ['/settings', '/import', '/', '/knowledge'];
 export const PC_INFO_BOXES = {
   '/import': [['#kindle-sync', kindleSyncBlock], ['#playbooks-sync', playbooksSyncBlock]],
   '/': [['#home-alert', homeAlertBlock]],
-  '/knowledge': [['#auto-status', autoStatusBlock]],
+  '/knowledge': [['#auto-status', autoStatusBlock], ['#pc-analysis-head', pcPanelHead]],
 };
