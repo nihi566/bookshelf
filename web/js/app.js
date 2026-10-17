@@ -14,7 +14,7 @@ import { askResultBlock, semanticAvailability } from './views/ask.js';
 import { askActions } from './ask-actions.js';
 import { outlineStatusBlock } from './views/outlines.js';
 import { outlineActions } from './outline-actions.js';
-import { googleLabel, importOutcome, importResultBlock, kindleLabel } from './views/settings.js';
+import { importOutcome, importResultBlock, kindleLabel } from './views/settings.js';
 import { pcPanelNeedsAttention } from './views/knowledge.js';
 import { addHighlight, emptyLibrary, listBooks, mergeParsed, parseSeenPicks, parseShuffleRecord, recentPickIds, recordSeenPicks, shuffleRecord, shuffleSeedFor } from '../core/model.js';
 import { COVER_MAX_LENGTH } from '../core/covers.js';
@@ -421,7 +421,7 @@ function autoSyncAfterChange() {
   syncTimer = setTimeout(() => sync({ quiet: true }), 1500);
 }
 
-// PC が Play ブックスの線を取り込んだら、開いている画面にも届ける。
+// PC が Kindle の線を取り込んだら、開いている画面にも届ける。
 // 1 分ごと（と画面に戻ったとき）に PC の更新日時だけを聞き、この端末より新しいときだけ同期する
 const PULL_INTERVAL_MS = 60_000;
 const canAutoSync = () => state.settings.ai.mode === 'companion' && state.settings.autoSync && (state.servedByCompanion || state.settings.ai.companionUrl);
@@ -692,7 +692,7 @@ const forms = {
         out.innerHTML = String(html`<p class="notice ok">接続できました。モデル: ${models.join('、') || '（なし）'}</p>`);
       } else {
         const [info, appVersion] = await Promise.all([companion.info(), ownSwVersion()]);
-        out.innerHTML = String(html`<p class="notice ${info.llm.configured ? 'ok' : ''}">PC に接続できました。点 ${info.stats.points ?? info.stats.highlights} 件・チャットモデル: ${info.llm.chatModel || '未設定（PC で bh config model …）'}・埋め込み: ${info.llm.embedModel || '文字 n-gram'}・Play ブックスの自動取り込み: ${googleLabel(info.google)}・Kindle の自動取り込み: ${kindleLabel(info.kindleSync)}</p>
+        out.innerHTML = String(html`<p class="notice ${info.llm.configured ? 'ok' : ''}">PC に接続できました。点 ${info.stats.points ?? info.stats.highlights} 件・チャットモデル: ${info.llm.chatModel || '未設定（PC で bh config model …）'}・埋め込み: ${info.llm.embedModel || '文字 n-gram'}・Kindle の自動取り込み: ${kindleLabel(info.kindleSync)}</p>
           ${serveVersionBlock(info.server, appVersion)}`);
       }
     } catch (e) {

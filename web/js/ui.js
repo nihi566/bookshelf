@@ -1,6 +1,6 @@
 // 画面の部品（ハイライト・思いつきのカード、本の行、トースト、シート）
 import { html, mark } from './html.js';
-import { isTextEdited, listBooks, SOURCES } from '../core/model.js';
+import { isTextEdited, listBooks } from '../core/model.js';
 import { hash, isoDate, truncate } from '../core/text.js';
 import { kindleSyncState } from '../core/kindle-status.js';
 import { bookCoverUrl } from '../core/covers.js';
@@ -18,8 +18,6 @@ export const COLOR_VAR = {
   red: 'var(--hl-red)',
   purple: 'var(--hl-purple)',
 };
-
-export const sourceBadge = (s) => html`<span class="badge ${s}">${SOURCES[s] || s}</span>`;
 
 export function spineColor(title) {
   const h = parseInt(hash(title).slice(0, 4), 36) % 360;
@@ -67,7 +65,7 @@ export function highlightCard(h, { library, lines = [], query = '', showBook = t
       <div class="hl-meta">
         ${showBook && book ? html`<a class="book-link" href="#/book/${book.id}">${book.title}</a>` : ''}
         <span>${locationParts(h).map((p, i) => html`${i ? ' · ' : ''}<span class="nowrap">${p}</span>`)}</span>
-        ${sourceBadge(h.source)}${isTextEdited(h) ? html` <span class="badge edited" title="取り込んだときの文から直しています（✎ で元に戻せます）">直した文</span>` : ''}
+        ${isTextEdited(h) ? html` <span class="badge edited" title="取り込んだときの文から直しています（✎ で元に戻せます）">直した文</span>` : ''}
         ${joinHint ? html` <button type="button" class="badge join-hint" data-action="edit" data-id="${h.id}" title="文の途中で切れていて、次の点と位置が続いています。押すと編集を開きます（くっつけるボタンがあります）">次の点とくっつける?</button>` : ''}
       </div>
       <div class="hl-actions">
@@ -187,7 +185,7 @@ export function bookRow(b, { joinCandidates = 0 } = {}) {
     ${bookSpine(b)}
     <span class="grow">
       <span class="title">${b.title}</span>
-      <span class="meta">${b.author || '著者不明'} ${b.sources.map(sourceBadge)}${b.isTechnical ? html` <span class="badge tech">技術書</span>` : ''}${joinCandidates > 0 ? html` <span class="badge join-hint">くっつける候補 ${joinCandidates}</span>` : ''}</span>
+      <span class="meta">${b.author || '著者不明'}${b.isTechnical ? html` <span class="badge tech">技術書</span>` : ''}${joinCandidates > 0 ? html` <span class="badge join-hint">くっつける候補 ${joinCandidates}</span>` : ''}</span>
     </span>
     <span class="count">${b.count}<span class="unit"> ${b.isTechnical ? '件' : '点'}</span><small>${isoDate(b.lastHighlightedAt) || '-'}</small></span>
   </a></li>`;
@@ -380,33 +378,13 @@ export function kindleAlertBlock(state) {
   return text ? html`<a class="notice err" href="#/import" style="${ALERT_STYLE}">${text}（詳しく）</a>` : '';
 }
 
-// ホームの 1 行に収めるため、失敗の理由はここまでで切る
-const ANALYSIS_ALERT_REASON_MAX = 80;
-const alertReason = (s) => {
-  const error = String(s);
-  return error.length > ANALYSIS_ALERT_REASON_MAX ? `${error.slice(0, ANALYSIS_ALERT_REASON_MAX)}…` : error;
-};
-
 /**
- * ホームに出す Play ブックス（Google ドライブ）の自動取り込みの警告（1 行）。
- * Google を使う設定をしていないとき（configured が true でない。古い bh も含む）・取り込めているときは空文字。
- * 取り込めない本（problemCount）は直るまで続く状態なので、取り込みの画面にだけ出す
- * @param {{ configured?: boolean, error?: string } | null | undefined} g /api/info の google
- * @returns {string}
- */
-export function playbooksSyncAlert(g) {
-  if (g?.configured !== true || !g.error) return '';
-  return `Play ブックスの自動取り込みに失敗しています（${alertReason(g.error)}）`;
-}
-
-/**
- * ホームの先頭の警告欄（Kindle・Play ブックスの自動取り込み）。PC モードで PC の情報を取れているときだけ出す。
+ * ホームの先頭の警告欄（Kindle の自動取り込み）。PC モードで PC の情報を取れているときだけ出す。
  * 分析の失敗は出さない（手動で分析するので。理由は知識の画面に出る。NIH-307）
  */
 export function homeAlertBlock(state) {
   if (state.settings.ai.mode !== 'companion' || !state.pcInfo) return '';
-  const playbooks = playbooksSyncAlert(state.pcInfo.google);
-  return html`${kindleAlertBlock(state)}${playbooks ? html`<a class="notice err" href="#/import" style="${ALERT_STYLE}">${playbooks}（詳しく）</a>` : ''}`;
+  return kindleAlertBlock(state);
 }
 
 /**
