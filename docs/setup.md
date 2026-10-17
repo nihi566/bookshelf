@@ -55,6 +55,8 @@ node cli/bh.js serve
 
 データは既定でリポジトリの `data/`（`.gitignore` 済み）に保存されます。`BH_DATA=/path` で変更できます。
 
+Play ブックスの自動取り込み(Google ドライブ連携)は廃止しました。以前ログインしていた場合、`data/google-token.json` と `data/google-sync.json` は使われないまま残るので、削除してください。Google 側の許可は [Google アカウントのサードパーティ接続](https://myaccount.google.com/connections) で取り消せます。
+
 常駐させたい場合は、macOS なら launchd、Windows ならタスク スケジューラ、Linux なら systemd のユーザーサービスで `node /path/to/cli/bh.js serve` を起動します。
 
 ### 新しいコードに入れ替える（`bh update`）

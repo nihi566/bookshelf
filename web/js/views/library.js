@@ -36,7 +36,7 @@ export const home = {
     if (!s.highlights && !s.technical && !liveThoughts(lib).length) {
       return html`${alert}<section class="card hero">
           <h1>本に引いた線を、<br>知識の立体へ。</h1>
-          <p class="help">Kindle と Play ブックスのハイライトを 1 か所に集めます。PC のローカル LLM が「点」をつないで「線(グループ)」「面」「立体」に組み立て、次に読む本も提案します。</p>
+          <p class="help">Kindle のハイライトと自分のメモを 1 か所に集めます。PC のローカル LLM が「点」をつないで「線(グループ)」「面」「立体」に組み立て、次に読む本も提案します。</p>
           ${flow}
           <div class="row">
             <a class="btn primary" href="#/import">ハイライトを取り込む</a>
