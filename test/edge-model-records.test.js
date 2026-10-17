@@ -1085,19 +1085,6 @@ test('edge model: 伸ばしたハイライトと古い点への未同期の編�
   assert.deepEqual(mergeLibraries(ab, b), ab, '同じ端末ともう一度統合しても変わらない');
 });
 
-test('edge model: 読書メモは既にある線に含まれる文を増やさず、短い書名は 1 冊だけ含むときに合わせる', () => {
-  const lib = libWith([kindle('新版 ハマトンの知的生活', [{ text: '知的生活とは、自分の時間を自分の目的のために使うことである。' }])]);
-  const stats = mergeParsed(lib, [{ title: 'ハマトン', author: '', source: 'memo', highlights: [{ text: '自分の時間を自分の目的のために使う' }, { text: '新しいメモの文' }] }], { now: T2 });
-  assert.deepEqual(stats.memoTitles, [{ from: 'ハマトン', to: '新版 ハマトンの知的生活' }]);
-  assert.equal(stats.added, 1);
-  assert.equal(stats.unchanged, 1);
-  // 候補が 2 冊なら合わせない
-  mergeParsed(lib, [kindle('ハマトンの別の本', [{ text: 'x' }])], { now: T2 });
-  const s2 = mergeParsed(lib, [{ title: 'ハマトン', author: '', source: 'memo', highlights: [{ text: 'y' }] }], { now: T3 });
-  assert.deepEqual(s2.memoTitles, []);
-  assert.ok(lib.books[bookIdFor('ハマトン')]);
-});
-
 test('edge model: ゼロ幅文字・BOM・CRLF の違いは同じ点になる', () => {
   const lib = libWith([play('本', [{ text: '﻿同じ​文\r\n二行目' }, { text: '同じ文\n二行目' }])]);
   assert.equal(Object.keys(lib.highlights).length, 1);

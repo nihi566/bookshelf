@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // bookshelf の PC 用コマンド
 //
-//   bh import <ファイル|フォルダ...>  Kindle / Play Books のハイライト・メモ（.md）を取り込む
+//   bh import <ファイル|フォルダ...>  Kindle / Play Books のハイライトを取り込む
 //   bh analyze                    ローカル LLM で 点→線→面→立体 を分析し、おすすめの本を選ぶ
 //   bh recommend                   おすすめの本だけ選び直す
 //   bh serve                       コンパニオンサーバを起動（Web アプリ + 同期 + LLM 中継）
@@ -32,8 +32,7 @@ const HELP = `使い方: bh <コマンド> [オプション]
   import <ファイル|フォルダ...> [--dry-run]
                                       ハイライトを取り込む（My Clippings.txt / Kindle のエクスポート HTML /
                                       ブックマークレットの JSON / Play Books のメモ .docx .html .md / それらの .zip /
-                                      自分で書いたメモ .md）。フォルダは中のファイルをすべて（入れ子も）読むので、
-                                      ノートアプリの保管場所全体ではなく、メモのフォルダを指定する。
+                                      ）。フォルダは中のファイルをすべて（入れ子も）読む。
                                       --dry-run は保存せずに結果だけ表示する
   analyze [--no-recommend] [--full]   ローカル LLM で 点→線→面→立体 を分析（前回の線・面を引き継ぎ、変わったところだけ
                                       AI を呼ぶ。--full は最初から作り直す）
@@ -117,7 +116,6 @@ async function main() {
         if (r.analysisChanged) await store.saveAnalysis(r.analysis);
       }
       const s = r.stats;
-      for (const m of s.memoTitles) console.log(`→ メモ「${m.from}」は既にある本『${m.to}』にまとめました`);
       console.log(`${dryRun ? '（試し・保存していません）' : ''}取り込み: 新しい点 ${s.added} 件、更新 ${s.updated} 件、既存 ${s.unchanged} 件（新しい本 ${s.booksAdded} 冊）${r.analysisChanged ? '。バックアップの新しい分析結果も反映しました' : ''}`);
       break;
     }

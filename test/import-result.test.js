@@ -85,7 +85,6 @@ test('案内の宛先はファイルの拡張子で決まり、分からない�
   assert.deepEqual(ids('a.html'), ['help-kindle-export']);
   assert.deepEqual(ids('a.htm'), ['help-kindle-export']);
   assert.deepEqual(ids('kindle.json'), ['help-kindle-bookmarklet']);
-  assert.deepEqual(ids('memo.md'), ['help-reading-notes']);
   assert.deepEqual(ids('photo.png'), ['help-kindle-device', 'help-kindle-export']);
   assert.deepEqual(ids('拡張子なし'), ['help-kindle-device', 'help-kindle-export']);
   for (const name of ['a.constructor', 'a.__proto__', 'a.toString']) {
