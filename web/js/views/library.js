@@ -14,7 +14,7 @@ import { noteRow } from './notes.js';
 import { searchNotes } from '../../core/notes.js';
 import { meaningResults, semanticAvailability, unavailableNotice } from './ask.js';
 import { companion } from '../services.js';
-import { homeRecordsLine, loadMonthReading } from './records.js';
+import { homeRecordsLine, loadMonthReading, mountBookRecord } from './records.js';
 
 const flow = html`<div class="flow" aria-label="点から立体へ">
   <div class="f-point"><b>点</b>線を引いた一文</div>
@@ -173,17 +173,11 @@ export const book = {
       items.push(highlightCard(h, { library: state.library, lines: idx.get(h.id), showBook: false, joinHint: joinHints.has(h.id) }));
     }
     const technical = isTechnicalBook(b);
-    // 紙の本には線を引いた文を手で足す欄を出す（章は前に入れたものから選べる）
-    const chapters = [...new Set(hs.map((h) => h.chapter).filter(Boolean))];
+    // 紙の本には線を引いた文を手で足す欄を出す（ページ・章は入れない）
     const addForm = b.sources.includes('paper')
       ? html`<form class="card stack" data-form="add-highlight" data-id="${b.id}" style="margin-top:16px">
           <h2 style="font-size:1rem;margin:0">線を引いた文を足す</h2>
           <label class="field"><span>文</span><textarea name="text" rows="3" required placeholder="本で線を引いた箇所を書き写す"></textarea></label>
-          <div class="row" style="flex-wrap:nowrap;gap:8px">
-            <label class="field" style="flex:0 0 6.5em;margin:0"><span>ページ</span><input type="text" name="page" inputmode="numeric" autocomplete="off"></label>
-            <label class="field grow" style="margin:0"><span>章（任意）</span><input type="text" name="chapter" list="chapter-list" autocomplete="off"></label>
-          </div>
-          <datalist id="chapter-list">${chapters.map((c) => html`<option value="${c}">`)}</datalist>
           <div class="row" style="justify-content:flex-end"><button class="btn primary" type="submit">追加</button></div>
         </form>`
       : '';
@@ -196,14 +190,19 @@ export const book = {
         </div>
       </div>
       <div class="row">
-        <a class="btn small" href="#/records?book=${encodeURIComponent(b.id)}">読み終えた日を記録</a>
         <button class="btn small" data-action="edit-book" data-id="${b.id}">本の情報を編集</button>
         <button class="btn small danger" data-action="delete-book" data-id="${b.id}">この本を削除</button>
       </div>
+      <div id="book-record"></div>
       ${addForm}
       ${b.sources.includes('paper') && !hs.length ? html`<p class="empty">まだ線を引いた文がありません。上の欄から足せます。</p>` : ''}
       ${linesHere.length ? html`<div class="section"><h2>この本から伸びる線(グループ)</h2></div><div class="hl-lines">${linesHere.map((l) => html`<a class="line-chip" href="#/knowledge/line/${l.id}">${l.name}</a>`)}</div>` : ''}
       <div style="margin-top:16px">${items}</div>`;
+  },
+  mount(root, { state, params }) {
+    const box = root.querySelector('#book-record');
+    const b = state.library.books[params.id];
+    if (box && b && !b.deleted) mountBookRecord(box, state, b);
   },
 };
 

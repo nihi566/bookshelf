@@ -233,6 +233,66 @@ function openRecordSheet(state, { bookId = '', onSaved }) {
 }
 
 /**
+ * 本の画面に埋め込む「読み終えた日」の欄。シートも読書記録の画面も開かず、その場で日付を入れて記録する。
+ * 記録済みの日付・線から自動で付いた日付は初期値に入れる（ページ数は触らず、記録済みの値を引き継ぐ）
+ */
+export function mountBookRecord(box, state, book) {
+  const token = loadToken();
+  const draw = () => {
+    if (!box.isConnected) return;
+    if (rec.status === 'loading' || rec.status === 'idle') {
+      box.innerHTML = String(html`<p class="small muted">読書記録を読み込み中…</p>`);
+    } else if (rec.status === 'error') {
+      box.innerHTML = String(html`<p class="notice err">${recordsErrorMessage(rec.error)}</p><p class="small"><a href="#/records">読書記録の画面へ</a></p>`);
+    } else if (!token) {
+      box.innerHTML = String(html`<p class="small muted">読み終えた日を記録するには、<a href="#/records">読書記録の画面</a>で GitHub のトークンを一度だけ保存してください。</p>`);
+    } else {
+      const existing = Object.hasOwn(rec.file.records, book.id) ? rec.file.records[book.id] : null;
+      const { dated } = existing ? { dated: {} } : autoRecords(state.library, rec.file);
+      const auto = Object.hasOwn(dated, book.id) ? dated[book.id] : null;
+      box.innerHTML = String(html`<form class="card row" data-book-record style="margin-top:16px;align-items:flex-end">
+          <label class="field grow" style="margin:0"><span>読み終えた日${existing ? '（記録済み）' : auto ? '（線を引いた日で自動）' : ''}</span><input type="date" name="read_on" required value="${existing?.read_on || auto?.read_on || todayLocal()}"></label>
+          <button class="btn primary" type="submit">${existing ? '更新' : '記録'}</button>
+        </form>`);
+    }
+  };
+  redraw = draw;
+  draw();
+  // 失敗したまま本の画面を開き直すたびに GitHub へ問い合わせない（ホームと同じ間隔を空ける）
+  if (rec.status === 'idle' || (rec.status === 'error' && Date.now() - rec.failedAt >= HOME_RETRY_MS)) reload();
+  box.onsubmit = async (e) => {
+    const form = e.target.closest('form[data-book-record]');
+    if (!form) return;
+    e.preventDefault();
+    const button = form.querySelector('button');
+    button.disabled = true;
+    try {
+      // ページ数は別の端末で付けた値を消さないよう、保存の直前に最新の記録から引き継ぐ
+      const latest = await fetchRecords(loadToken());
+      const existing = Object.hasOwn(latest.records, book.id) ? latest.records[book.id] : null;
+      applySaved(
+        await saveChange(loadToken(), {
+          type: 'read',
+          book_id: book.id,
+          title: book.title,
+          author: book.author,
+          asin: book.asin,
+          volumeId: book.volumeId,
+          read_on: String(new FormData(form).get('read_on') || ''),
+          pages: existing?.pages ?? null,
+        }),
+      );
+      toast('読み終えた日を記録しました');
+      draw();
+    } catch (err) {
+      // 入れた日付を残すため描き直さず、ボタンだけ戻す
+      button.disabled = false;
+      toast(err.kind ? recordsErrorMessage(err) : err.message, 5000);
+    }
+  };
+}
+
+/**
  * ホームに出す今月の冊数・ページ数。記録はこの画面と同じものを使い、読み込み済みなら GitHub に問い合わせ直さない。
  * 読めないときは例外（呼び出し側は何も出さない）
  */

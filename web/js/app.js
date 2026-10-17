@@ -627,17 +627,12 @@ const forms = {
   },
   async 'add-highlight'(form) {
     const d = new FormData(form);
-    const chapter = String(d.get('chapter') || '');
-    const r = addHighlight(state.library, form.dataset.id, { text: d.get('text'), page: d.get('page'), chapter });
+    const r = addHighlight(state.library, form.dataset.id, { text: d.get('text') });
     await persistLibrary();
     toast(r.added ? '追加しました' : '同じ文が既にあります');
     render({ keepScroll: true });
-    // 続けて同じ章の文を入れやすいよう、章は残して文の欄に戻る
-    const next = view.querySelector('form[data-form="add-highlight"]');
-    if (next) {
-      next.elements.chapter.value = chapter;
-      next.elements.text.focus();
-    }
+    // 続けて入れやすいよう、文の欄に戻る
+    view.querySelector('form[data-form="add-highlight"]')?.elements.text.focus();
     autoSyncAfterChange();
   },
   'auto-config': (form, submitter) => appOps.saveAutoConfig(new FormData(form), submitter),
