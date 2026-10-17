@@ -11,14 +11,12 @@ import { BACKUP_FORMAT } from '../importing.js';
 import { looksLikeClippings, parseKindleClippings } from './kindle-clippings.js';
 import { isNotebookJson, looksLikeKindleExport, parseKindleExportHtml, parseNotebookJson } from './kindle-notebook.js';
 import { looksLikePlayBooksMarkdown, parsePlayBooksDocx, parsePlayBooksHtml, parsePlayBooksMarkdown, playBooksHtmlProblem, titleFromFileName } from './playbooks.js';
-import { noteTitleFromFileName, parseReadingNote } from './reading-notes.js';
 
 export const FORMAT_LABELS = {
   'kindle-clippings': 'Kindle（My Clippings.txt）',
   'kindle-export': 'Kindle（ノートブックのエクスポート HTML）',
   'kindle-notebook': 'Kindle（ノートブックのブックマークレット）',
   playbooks: 'Play Books（ドライブのメモ）',
-  'reading-note': 'メモ（Markdown）',
   library: 'このアプリのバックアップ',
   parsed: '汎用 JSON',
 };
@@ -60,20 +58,13 @@ function isLibraryBackup(data) {
   return data && typeof data === 'object' && data.books && data.highlights && !Array.isArray(data.books) && typeof data.highlights === 'object';
 }
 
-/**
- * .md は Play ブックスの書き出し（表の形）なら Play Books、それ以外は自分で書いた読書メモとして読む。
- * 読書メモに Play ブックスのページへのリンクを貼っただけのものもあるので、表の形で線が取れたときだけ Play Books にする
- */
+/** .md は Play ブックスの書き出し（表の形）だけを読む。自分で書いたメモの取り込みは廃止した */
 function parseMarkdown(text, base) {
   if (looksLikePlayBooksMarkdown(text)) {
     const books = parsePlayBooksMarkdown(text, titleFromFileName(base));
     if (books.some((b) => b.highlights.length)) return { format: 'playbooks', books };
   }
-  const { images, ...note } = parseReadingNote(text, noteTitleFromFileName(base));
-  if (!note.highlights.length) {
-    return { error: images.length ? `本文が無く、画像 ${images.length} 枚だけのメモです（画像は取り込めません）` : '本文の無いメモです' };
-  }
-  return { format: 'reading-note', books: [note], images: images.length };
+  return { error: '対応していない Markdown です（Play ブックスの書き出しだけ読めます）' };
 }
 
 /** 1 ファイル → { format, books?, library?, error?, images?（取り込めなかった画像の数） } */
@@ -106,7 +97,7 @@ async function parseOne(name, bytes) {
       return { error: '対応していない JSON です' };
     }
   }
-  // .txt / .md の本文には <div> などが普通に出てくる（技術書のハイライト・読書メモのインライン HTML）ので、文書の頭が HTML のときだけ HTML として読む
+  // .txt / .md の本文には <div> などが普通に出てくる（技術書のハイライトのインライン HTML）ので、文書の頭が HTML のときだけ HTML として読む
   const textExt = e === 'txt' || e === 'md' || e === 'markdown';
   if (textExt ? /^\s*<(!doctype|html)/i.test(text) : /<html|<body|<div|<table|<p[\s>]/i.test(text)) {
     if (looksLikeKindleExport(text)) return { format: 'kindle-export', books: parseKindleExportHtml(text) };
@@ -120,7 +111,7 @@ async function parseOne(name, bytes) {
     }
     return { error: 'ハイライトが見つからない HTML です（Kindle のエクスポートか Play ブックスのメモを選んでください）' };
   }
-  // .md は読書メモを先に見る（Setext 見出しの ===== と「作成日」などで Clippings に見えることがある）
+  // .md は先に Markdown として読む（Setext 見出しの ===== と「作成日」などで Clippings に見えることがある）
   if (e === 'md' || e === 'markdown') return parseMarkdown(text, base);
   if (looksLikeClippings(text)) return { format: 'kindle-clippings', books: parseKindleClippings(text) };
   if (looksLikePlayBooksMarkdown(text)) return { format: 'playbooks', books: parsePlayBooksMarkdown(text, titleFromFileName(base)) };

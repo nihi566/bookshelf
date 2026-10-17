@@ -5,7 +5,6 @@ import { parseFiles, decodeText } from '../web/core/parsers/index.js';
 import { looksLikeClippings, parseClippingMeta, parseKindleClippings, splitTitleAuthor } from '../web/core/parsers/kindle-clippings.js';
 import { isNotebookJson, looksLikeKindleExport, parseKindleDate, parseKindleExportHtml, parseNoteHeading, parseNotebookJson } from '../web/core/parsers/kindle-notebook.js';
 import { looksLikePlayBooksMarkdown, parsePlayBooksDocx, parsePlayBooksHtml, parsePlayBooksMarkdown, playBooksVolumeId, titleFromFileName } from '../web/core/parsers/playbooks.js';
-import { noteTitleFromFileName, parseReadingNote } from '../web/core/parsers/reading-notes.js';
 import { blocksToText, colorName, docxXmlToBlocks, htmlToBlocks } from '../web/core/parsers/blocks.js';
 import { createZip } from '../web/core/zip.js';
 import { makeDeflateZip, playBooksDocumentXml } from './helpers/docx.js';
@@ -384,50 +383,6 @@ test('htmlToBlocks: 閉じ引用符の無い属性がたくさんあっても固
   assert.ok(Date.now() - t0 < 3000);
 });
 
-// ---------------------------------------------------------------- 読書メモ
-
-test('reading note: 空・空白だけ・BOM だけ・front matter だけ', () => {
-  for (const s of ['', '   \n\n', BOM, '---\ntags: [a]\n---\n', undefined, null]) {
-    const r = parseReadingNote(s, 't');
-    assert.deepEqual(r.highlights, [], JSON.stringify(s));
-  }
-});
-
-test('reading note: CR だけ・CRLF の改行と BOM 付きの front matter', () => {
-  const md = `${BOM}---\ntitle: x\n---\n# 章\n\nこれは一つ目の段落です。\n\n- 項目A\n- 項目B\n`;
-  const a = parseReadingNote(md, 't').highlights;
-  assert.deepEqual(parseReadingNote(md.replace(/\n/g, '\r\n'), 't').highlights, a);
-  assert.deepEqual(parseReadingNote(md.replace(/\n/g, '\r'), 't').highlights, a);
-  assert.deepEqual(a.map((h) => [h.text, h.chapter]), [['これは一つ目の段落です。', '章'], ['項目A', '章'], ['項目B', '章']]);
-});
-
-test('reading note: 閉じていない front matter は本文として残す', () => {
-  const r = parseReadingNote('---\ntitle: x\n\n本文の文章です。', 't');
-  assert.ok(r.highlights.some((h) => h.text.includes('本文の文章です。')));
-});
-
-test('reading note: 画像だけ・壊れたリンクや埋め込み', () => {
-  const r = parseReadingNote('![[a.png]]\n![alt](b.jpg)\n![[unclosed\n[link](no close', 't');
-  assert.deepEqual(r.images, ['a.png', 'b.jpg']);
-  assert.ok(r.highlights.every((h) => !h.text.includes('a.png')));
-});
-
-test('reading note: 巨大な 1 行・大量の行でも短時間で終わる', () => {
-  const t0 = Date.now();
-  parseReadingNote('[' + 'a'.repeat(200000) + '\n' + '![[' + 'x'.repeat(100000), 't');
-  const many = Array.from({ length: 50000 }, (_, i) => (i % 3 ? `- 項目 ${i}` : '')).join('\n');
-  const r = parseReadingNote(many, 't');
-  assert.ok(r.highlights.length > 30000);
-  assert.ok(Date.now() - t0 < 5000);
-});
-
-test('noteTitleFromFileName: 空・拡張子だけ・Windows パス', () => {
-  assert.equal(noteTitleFromFileName(''), '');
-  assert.equal(noteTitleFromFileName(undefined), '');
-  assert.equal(noteTitleFromFileName('C:\\notes\\本.MD'), '本');
-  assert.equal(noteTitleFromFileName('「」のメモ.md'), '「」のメモ');
-});
-
 // ---------------------------------------------------------------- 形式の判定（index.js）
 
 test('parseFiles: 空のファイル・空白だけのファイルはエラーとして返り、落ちない', async () => {
@@ -461,24 +416,11 @@ test('parseFiles: ハイライトに HTML のタグを含む My Clippings.txt（
   assert.equal(r.highlights, 1);
 });
 
-test('parseFiles: インライン HTML を含む読書メモ（.md）は読書メモとして読む', async () => {
-  const r = await one('本.md', '# 第1章\n\n<div align="center">中央寄せの見出し</div>\n\nこれは本文の文章です。<br>改行もある。\n');
-  assert.equal(r.format, 'reading-note');
-  assert.ok(r.highlights >= 1);
-});
-
-test('parseFiles: Setext 見出し（=====）と「作成日」を含む読書メモは Clippings と誤認しない', async () => {
-  const md = '読書メモ\n==========\n\n作成日: 2024-01-01\n\nこの本はとても面白かった。\n\n- 第一の学び\n- 第二の学び\n';
-  const r = await one('本.md', md);
-  assert.equal(r.format, 'reading-note');
-  assert.equal(r.highlights, 4);
-});
-
 test('parseFiles: 拡張子の無い Clippings・大文字の拡張子', async () => {
   const text = clip('本 (著者)', '- 位置No. 1-2のハイライト |作成日: 2024年1月1日', '本文');
   assert.equal((await one('clippings', text)).format, 'kindle-clippings');
   assert.equal((await one('MY CLIPPINGS.TXT', text)).format, 'kindle-clippings');
-  assert.equal((await one('note.MD', '# 章\n\n本文の文章です。')).format, 'reading-note');
+  assert.match((await one('note.MD', '# 章\n\n本文の文章です。')).error, /対応していない Markdown/, '自分で書いたメモの取り込みは廃止した');
 });
 
 test('parseFiles: BOM 付き・Shift_JIS の Clippings', async () => {
@@ -523,7 +465,3 @@ test('parseFiles: 汎用 JSON は source を 3 種類に丸める', async () => 
   assert.equal(r.books[0].source, 'manual');
 });
 
-test('parseFiles: 本文が画像だけの読書メモは画像の数を知らせるエラー', async () => {
-  const r = await one('a.md', '![[a.png]]\n![[b.png]]');
-  assert.match(r.error, /画像 2 枚/);
-});

@@ -19,7 +19,7 @@ import { wishlist } from './views/wishlist.js';
 import { records } from './views/records.js';
 import { thoughtsView } from './views/thoughts.js';
 
-// 「すべての画面」（サイトマップ。NIH-286 の残り = NIH-296）の見出し。読書メモ側は下のタブの順、最後に価格
+// 「すべての画面」（サイトマップ。NIH-286 の残り = NIH-296）の見出し。本の側は下のタブの順、最後に価格
 const SITEMAP_GROUPS = [
   ['home', 'ホーム'],
   ['books', '読んだ本'],
@@ -134,7 +134,7 @@ function notFoundView(path) {
   };
 }
 
-// 上のバーで切り替える 2 つの軸（NIH-286）。価格チェックの画面が「価格」、ほかはすべて「読書メモ」。
+// 上のバーで切り替える 2 つの軸（NIH-286）。価格チェックの画面が「価格」、ほかはすべて「本」。
 // 値はまだ開いていない軸の入口
 export const AXIS_HOME = Object.freeze({ memo: '#/', price: '#/wishlist' });
 const axisOfTab = (tab) => (tab === 'price' ? 'price' : 'memo');

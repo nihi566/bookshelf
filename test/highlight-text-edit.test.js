@@ -58,13 +58,6 @@ test('再取り込み: Kindle で伸ばしたハイライトは取り込んだ�
   assert.equal(live[0].textEditedAt, T2);
 });
 
-test('再取り込み: 読書メモの重複判定は取り込んだときの文で行う', () => {
-  const { lib, id } = oneHighlight('習慣は第二の天性である、と古い人は言った');
-  updateHighlight(lib, id, { text: '全く別の言葉に直した' }, T2);
-  const s = mergeParsed(lib, [{ title: '本', source: 'memo', highlights: [{ text: '習慣は第二の天性である、と古い人' }] }], { now: T3 });
-  assert.equal(s.added, 0);
-});
-
 test('同期: 文は直した時刻が新しい方を採る。別の端末でタグを後から直しても文の編集は負けない', () => {
   const { lib: pc, id } = oneHighlight();
   const phone = structuredClone(pc);
