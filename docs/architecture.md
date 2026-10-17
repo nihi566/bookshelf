@@ -2,7 +2,7 @@
 
 ## 方針
 
-- **静的サイト + PC のコンパニオン**：画面は GitHub Pages に置ける静的ファイルだけで作り、AI（ローカル LLM）は PC 側が受け持つ。ハイライトと分析結果はこのシステムだけで管理する（Obsidian などへの書き出しはしない）
+- **静的サイト + PC のコンパニオン**：画面は GitHub Pages に置ける静的ファイルだけで作り、AI（ローカル LLM）は PC 側が受け持つ。ハイライトと分析結果はこのシステムで管理する。ただし壊れたときの備えとして、読書メモだけは Obsidian の 1 フォルダに 1 冊 1 つの Markdown として持ち、こちらが正とする（§読書メモの Markdown。NIH-311）
 - **同じコードをブラウザと PC で使う**：`web/core/` はブラウザと Node の両方で動く純粋な ES モジュール（DOM や `fs` に依存しない）。パーサ・モデル・分析パイプラインは 1 か所にしかない
 - **画面の入口は配線だけ**：`web/js/app.js` は読み込んだ時点で DOM に触れるので、テストから import できない。ルート表は `web/js/routes.js`、ボタンの操作は `web/js/app-actions.js`・`note-actions.js` などに置き、画面の部品・保存・同期・画面の移動を引数で受け取る（テストは偽物を渡して呼ぶ。`test/helpers/app-actions.js`）。`app.js` に残すのは描画・取り込み・分析と PC のジョブ監視・同期・イベントの配線・起動だけ。`app.js` を文字列として読むテストは増やさない（`test/app-source-reads.test.js`）
 - **依存ライブラリは 1 つだけ**：zip の読み書き、docx の解析、HTML の分解、k-means まで自前。例外は知識マップの図（重ならない並べ方・拡大縮小・指での移動）を描く Cytoscape.js（MIT）で、ビルド済みの 1 ファイルを `web/vendor/` に同梱している（npm では入れない）。ビルド不要で `web/` をそのまま公開できる
@@ -116,6 +116,14 @@ Outline   = { id: 'o'+時刻+乱数, title, sources: [{ kind: 'plane'|'line'|'no
 - 遠いつながりへの反応（面白い・ちがう。`web/core/far-reactions.js`）は `library.farReactions` に、組の点と説明ごと持つ（分析の結果から消えても「面白い」の組を出すため）。同じ反応をもう一度付けると外す（`status: ''`）。同期では `updatedAt` が新しい方を採る（`mergeCollections`）。古い版のデータ（`farReactions` が無い）は空として読む
 - バックアップは `{ format: 'book-highlights/backup', library, analysis }`。取り込み（Web・`bh import`・サーバ共通の `web/core/importing.js`）では、ライブラリを統合し、分析結果は手元より新しいときだけ採用する
 - リポジトリ名は `bookshelf` に変えたが、データ形式名（`book-highlights/backup` など）・IndexedDB の名前・`bh serve` の応答の `app` は旧名 `book-highlights` のまま残す（変えると既存のバックアップ・端末に保存したデータ・古い版のアプリと合わなくなる）
+
+## 読書メモの Markdown（`web/core/book-notes.js`・`cli/notes-sync.js`。NIH-311）
+
+- 1 冊 = 1 ファイル（`<書名>.md`。Windows と Obsidian で使えない文字は `_` にする）を `config.json` の `notesDir`（Obsidian の `400_読書メモ`）に置く。`bh config notes <フォルダ>` で決め、`bh notes sync` で今すぐ 1 回揃える。`bh serve` は 5 秒ごとに揃える
+- 書式: front matter（`bookId` / `title` / `author`）+ 章の見出し（`##`）+ 点ごとの箇条書き。点の行末に Obsidian のブロック ID `^<点の ID>`、字下げした子の項目に `メモ:` / `タグ:` / `★`。ID の無い箇条書きは Obsidian で足した新しい点
+- **Markdown が正**。1 回の同期は「Markdown の直したところ（文・メモ・タグ・★・足した点）をライブラリへ → ライブラリの内容を Markdown へ」の順。読むのは、前回の同期より新しく、こちらが最後に書いた中身と違うファイルだけ（`since` は `state.json` の `notesSyncedAt`。止めている間にライブラリだけ変わった本を古いファイルで戻さない）
+- 安全側の決まり: Markdown から消えた点はライブラリから消さない / `bookId` の無いファイル（Obsidian の他のメモ）は読まず書き換えない / 同じ名前で `bookId` が違うファイルは上書きしない
+- 書き出さないもの: 位置・ページ・取り込みの日時（Kindle などから取り込み直せる）、表紙、技術書の印、削除した点
 
 ## 分析結果（`web/core/analysis/pipeline.js`）
 

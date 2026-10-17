@@ -137,6 +137,18 @@ Amazon には Kindle のハイライトを外部に渡す公式の API があり
 - **削除との関係**: Web アプリで削除した本は、自動の取り込みでは復活しない（手動で取り込み直すと戻る）
 - 拡張機能のフォルダを移動すると ID が変わるので、もう一度 `bh config origin` を実行する
 
+## 5.6 読書メモを Obsidian に持つ（任意。NIH-311）
+
+システムが壊れても読書メモが残るよう、1 冊 1 つの Markdown を Obsidian のフォルダに置く。Markdown が正で、Obsidian で直した文・メモ・タグ・★・足した点はシステムに入り、システムで書いたものは Markdown にも書かれる。
+
+```bash
+bh config notes "C:/Users/<あなた>/vault/obsidian_vault/リモート保管庫/400_読書メモ"
+bh notes sync     # 初回: 全冊の Markdown を書き出す（以後 bh serve が 5 秒ごとに揃える）
+```
+
+- `bh serve` を起動し直すと有効になる。`bh config notes ""` で同期をやめる
+- Markdown の書式と安全側の決まり（消えた点は消さない・`bookId` の無いファイルは触らない）は [architecture.md](architecture.md) の §読書メモの Markdown
+
 ## うまくいかないとき
 
 | 症状 | 対処 |

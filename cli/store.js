@@ -20,6 +20,8 @@ export const DEFAULT_CONFIG = {
   host: '127.0.0.1',
   allowedOrigins: ['https://nihi566.github.io'],
   token: '',
+  // Obsidian の読書メモ（1 冊 1 つの Markdown）を置くフォルダ。空なら同期しない（NIH-311）
+  notesDir: '',
   // bh serve が人の操作なしに分析し直す条件（前回のあとに点が minPoints 件増えた・減った / maxHours 時間たって 1 件以上増えた・減った）
   autoAnalyze: { ...AUTO_DEFAULTS },
 };

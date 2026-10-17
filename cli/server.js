@@ -23,6 +23,7 @@ import { swVersion } from '../web/core/serve-version.js';
 import { restoreAnalysis } from '../web/core/analysis/restore.js';
 import { wishlistForRecommend } from '../web/core/wishlist.js';
 import { parseFiles } from '../web/core/parsers/index.js';
+import { createNotesSync } from './notes-sync.js';
 // 画面に出すエラーの文から、URL に書いたパスワード（http://user:pass@…）を伏せる
 import { maskSecrets } from '../web/core/text.js';
 import { askLibrary, cleanQuery, createSemanticIndex, searchTargets, semanticSearch } from '../web/core/ask.js';
@@ -68,7 +69,7 @@ const AI_CONCURRENCY = 2;
 
 // catalogFetch: おすすめの本を探す書誌 DB への fetch（テストで差し替える）
 // auto: { intervalMs } を渡すと、その間隔で自動の分析を始めるかを確かめる（bh serve。テストでは渡さず checkAutoAnalyze を呼ぶ）
-export function createCompanionServer({ store, log = console.log, catalogFetch, auto = null }) {
+export function createCompanionServer({ store, log = console.log, catalogFetch, auto = null, notesSync = null }) {
   // trigger: 'manual'（画面のボタン・bh）/ 'auto'（点が増えたので PC が自分で始めた）
   // bh update が「止めた後に起動したプロセス（= 新しいコード）か」を確かめるのに使う
   const serverStartedAt = new Date().toISOString();
@@ -559,6 +560,28 @@ export function createCompanionServer({ store, log = console.log, catalogFetch, 
   });
   server.job = job;
   server.checkAutoAnalyze = checkAutoAnalyze;
+  // Obsidian の読書メモ（config.notesDir）と揃える（NIH-311）。フォルダが変わったら作り直す。分析や取り込みの最中も、ロックで順番に処理する
+  let notes = null;
+  async function syncNotes() {
+    const { notesDir } = await store.config();
+    if (!notesDir) return null;
+    return store.lock(async () => {
+      if (notes?.dir !== notesDir) notes = createNotesSync({ dir: notesDir, since: (await store.state()).notesSyncedAt || 0 });
+      const library = await store.library();
+      const r = await notes.sync(library);
+      if (r.changed + r.added > 0) await store.saveLibrary(library);
+      if (r.changed + r.added + r.written > 0) await store.saveState({ ...(await store.state()), notesSyncedAt: r.syncedAt });
+      if (r.changed + r.added + r.written > 0) log(`[notes] 読書メモと同期しました（Markdown から ${r.changed} 件直し ${r.added} 件足し、${r.written} 冊を書き出し）`);
+      return r;
+    });
+  }
+  server.syncNotes = syncNotes;
+  if (notesSync?.intervalMs) {
+    const timers = [];
+    const tick = () => syncNotes().catch((e) => log(`[notes] ${e.message}`));
+    server.on('listening', () => timers.push(setTimeout(tick, notesSync.firstDelayMs ?? 3_000), setInterval(tick, notesSync.intervalMs)));
+    server.on('close', () => timers.forEach((t) => clearTimeout(t)));
+  }
   // 自動の分析: 決まった間隔で条件を確かめる（起動の少しあとに 1 回目）。間隔を空けてまとめて分析する
   if (auto?.intervalMs) {
     const timers = [];

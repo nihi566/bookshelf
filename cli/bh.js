@@ -14,6 +14,7 @@ import path from 'node:path';
 import { REPO_ROOT, createStore } from './store.js';
 import { createCompanionServer } from './server.js';
 import { runUpdate } from './update.js';
+import { createNotesSync } from './notes-sync.js';
 import { startCoverLookup } from './covers.js';
 import { listBooks, libraryStats, searchHighlights } from '../web/core/model.js';
 import { applyImport } from '../web/core/importing.js';
@@ -26,6 +27,8 @@ import { truncate } from '../web/core/text.js';
 
 // bh serve が自動の分析の条件を確かめる間隔（点が増えるたびではなく、間隔を空けてまとめて分析する）
 const AUTO_CHECK_MS = 60_000;
+// bh serve が Obsidian の読書メモと揃える間隔
+const NOTES_SYNC_MS = 5_000;
 
 const HELP = `使い方: bh <コマンド> [オプション]
 
@@ -49,7 +52,10 @@ const HELP = `使い方: bh <コマンド> [オプション]
   config embed <名前>                 埋め込みモデル（例: bge-m3。空なら文字 n-gram で代用）
   config origin <URL>                 接続を許可する Web アプリのオリジン（GitHub Pages など）を追加
   config token <文字列>               API にトークンを要求する（インターネットに公開する場合は必須）
-  config auto on|off                  bh serve の自動の分析を入れる・切る（既定: off）
+  config notes <フォルダ>             Obsidian の読書メモ（1 冊 1 つの Markdown）を置くフォルダ。bh serve が 5 秒ごとに
+                                      ライブラリと揃える（Markdown が正）。空にすると同期しない
+  notes sync                          読書メモを今すぐ 1 回揃える（初回は全冊の Markdown を書き出す）
+  config auto on|off                bh serve の自動の分析を入れる・切る（既定: off）
   config auto-points <件数>           前回の分析のあとに点がこの件数増えたら自動で分析する（既定: 10）
   config auto-hours <時間>            前回からこの時間たち、点が 1 件以上増えた・減ったら自動で分析する（既定: 24）
 
@@ -175,15 +181,31 @@ async function main() {
       const port = Number(args.port || cfg.port);
       const host = args.host || cfg.host;
       startCoverLookup({ store });
-      const server = createCompanionServer({ store, auto: { intervalMs: AUTO_CHECK_MS } });
+      const server = createCompanionServer({ store, auto: { intervalMs: AUTO_CHECK_MS }, notesSync: { intervalMs: NOTES_SYNC_MS } });
       const auto = autoConfig(cfg.autoAnalyze);
       server.listen(port, host, () => {
         console.log(`コンパニオンサーバ: http://${host === '0.0.0.0' ? 'localhost' : host}:${port}`);
         console.log(`  LLM: ${cfg.llm.baseUrl}（チャット: ${cfg.llm.chatModel || '未設定'} / 埋め込み: ${cfg.llm.embedModel || '文字 n-gram'}）`);
         console.log(`  自動の分析: ${auto.enabled ? `前回のあとに点が ${auto.minPoints} 件増える・減るか、${auto.maxHours} 時間たって 1 件以上増えた・減ったら分析（bh config auto off で止める）` : '切ってあります（bh config auto on）'}`);
+        console.log(`  読書メモ: ${cfg.notesDir ? `${cfg.notesDir} と ${NOTES_SYNC_MS / 1000} 秒ごとに揃える（Markdown が正）` : '同期しない（bh config notes <フォルダ>）'}`);
         console.log('  表紙: 表紙の取れない Play ブックスの本は、国立国会図書館サーチで書名・著者から ISBN を探す（10 分ごと）');
         console.log(`  スマホから使うには: tailscale serve --bg ${port}`);
       });
+      break;
+    }
+    case 'notes': {
+      if (rest[0] !== 'sync') throw new Error('使い方: bh notes sync');
+      const { notesDir } = await store.config();
+      if (!notesDir) throw new Error('先にフォルダを決めてください（bh config notes <フォルダ>）');
+      const sync = createNotesSync({ dir: notesDir, since: (await store.state()).notesSyncedAt || 0 });
+      const r = await store.lock(async () => {
+        const library = await store.library();
+        const out = await sync.sync(library);
+        if (out.changed + out.added > 0) await store.saveLibrary(library);
+        await store.saveState({ ...(await store.state()), notesSyncedAt: out.syncedAt });
+        return out;
+      });
+      console.log(`${notesDir}\n  Markdown から ${r.changed} 件直し・${r.added} 件足しました / ${r.written} 冊を書き出しました${r.skipped ? ` / 読まなかったファイル ${r.skipped} 件（bookId が無い）` : ''}`);
       break;
     }
     case 'update': {
@@ -231,6 +253,8 @@ async function main() {
           cfg.port = port;
         },
         host: () => (cfg.host = value),
+        // 空にすると同期しない
+        notes: () => (cfg.notesDir = value ? path.resolve(value) : ''),
         auto: () => {
           if (!['on', 'off'].includes(value)) throw new Error('使い方: bh config auto on | off');
           cfg.autoAnalyze = { ...cfg.autoAnalyze, enabled: value === 'on' };
