@@ -82,16 +82,14 @@ test('読めなかったファイルの行には取り出し方の案内が出�
 test('案内の宛先はファイルの拡張子で決まり、分からない形式は主な取り出し方を並べる', () => {
   const ids = (name) => importHelpTargets(name).map((t) => t.id);
   assert.deepEqual(ids('My Clippings.TXT'), ['help-kindle-device']);
-  assert.deepEqual(ids('a.html'), ['help-kindle-export', 'help-playbooks']);
-  assert.deepEqual(ids('a.htm'), ['help-kindle-export', 'help-playbooks']);
-  assert.deepEqual(ids('a.docx'), ['help-playbooks']);
-  assert.deepEqual(ids('a.zip'), ['help-playbooks']);
+  assert.deepEqual(ids('a.html'), ['help-kindle-export']);
+  assert.deepEqual(ids('a.htm'), ['help-kindle-export']);
   assert.deepEqual(ids('kindle.json'), ['help-kindle-bookmarklet']);
   assert.deepEqual(ids('memo.md'), ['help-reading-notes']);
-  assert.deepEqual(ids('photo.png'), ['help-kindle-device', 'help-kindle-export', 'help-playbooks']);
-  assert.deepEqual(ids('拡張子なし'), ['help-kindle-device', 'help-kindle-export', 'help-playbooks']);
+  assert.deepEqual(ids('photo.png'), ['help-kindle-device', 'help-kindle-export']);
+  assert.deepEqual(ids('拡張子なし'), ['help-kindle-device', 'help-kindle-export']);
   for (const name of ['a.constructor', 'a.__proto__', 'a.toString']) {
-    assert.deepEqual(ids(name), ['help-kindle-device', 'help-kindle-export', 'help-playbooks'], `${name} でも結果欄が壊れない`);
+    assert.deepEqual(ids(name), ['help-kindle-device', 'help-kindle-export'], `${name} でも結果欄が壊れない`);
   }
 });
 

@@ -1,13 +1,13 @@
 // ホーム・本・検索の画面
 import { html } from '../html.js';
 import { joinCandidateIds } from '../../core/join-hints.js';
-import { bookHighlights, bookJoinCandidateCounts, dailyPicks, guessTechnical, isTechnicalBook, libraryStats, listBooks, searchHighlights, SOURCES } from '../../core/model.js';
+import { bookHighlights, bookJoinCandidateCounts, dailyPicks, guessTechnical, isTechnicalBook, libraryStats, listBooks, searchHighlights } from '../../core/model.js';
 import { searchPoints } from '../../core/points.js';
 import { THOUGHT_LABEL, liveThoughts } from '../../core/thoughts.js';
 import { normalizeText } from '../../core/text.js';
 import { browserStore, formatPrice, loadMarks, searchWishlist, wishlistSummary } from '../../core/wishlist.js';
 import { loadWishlist } from '../wishlist-data.js';
-import { bookRow, bookSpine, emptyBooksBlock, highlightCard, homeAlertBlock, lineIndex, pendingNudge, pointCard, sourceBadge } from '../ui.js';
+import { bookRow, bookSpine, emptyBooksBlock, highlightCard, homeAlertBlock, lineIndex, pendingNudge, pointCard } from '../ui.js';
 import { inboxBlock } from './thoughts.js';
 import { discoveriesBlock, partnerBlock } from './discoveries.js';
 import { noteRow } from './notes.js';
@@ -45,7 +45,7 @@ export const home = {
         </section>
         <div class="section"><h2>使い方</h2></div>
         <ol class="card stack help" style="padding-left:2em">
-          <li><b>取り込む</b> — Kindle（端末の My Clippings.txt・アプリのノートブック）と Play ブックス（ドライブのメモ）、読書メモ（Markdown）に対応。紙の本は「読んだ本」から登録して、線を引いた文を入力できます。</li>
+          <li><b>取り込む</b> — Kindle（端末の My Clippings.txt・アプリのノートブック）とメモ（Markdown）に対応。紙の本は「読んだ本」から登録して、線を引いた文を入力できます。</li>
           <li><b>AI で立体にする</b> — PC のローカル LLM（Ollama など）が点を線(グループ)・面・立体に組み立て、おすすめの本を選びます。</li>
         </ol>`;
     }
@@ -53,7 +53,7 @@ export const home = {
     markPicksSeen?.(picks.map((p) => p.id));
     const idx = lineIndex(a);
     const recent = searchHighlights(lib, '').slice(0, 5);
-    const bySource = [...Object.entries(s.bySource).map(([k, v]) => `${SOURCES[k] || k} ${v}`), ...(s.thoughts ? [`${THOUGHT_LABEL} ${s.thoughts}`] : [])];
+    const counts = s.thoughts ? [`${THOUGHT_LABEL} ${s.thoughts}`] : [];
     return html`${alert}
       <div class="stats">
         <a class="stat point" href="#/search"><b>${s.points}</b><span>点</span></a>
@@ -61,7 +61,7 @@ export const home = {
         <a class="stat plane" href="#/planes"><b>${a ? a.planes.length : '–'}</b><span>面</span></a>
         <a class="stat solid" href="#/solid"><b>${a ? 1 : '–'}</b><span>立体</span></a>
       </div>
-      <p class="small muted" style="margin-top:8px">${[`本 ${s.books} 冊`, ...bySource, html`<a href="#/stars">★ ${s.favorites}</a>`].map((x, i) => html`${i ? ' ・ ' : ''}<span class="nowrap">${x}</span>`)}${s.technical ? ` ・ 技術書の線 ${s.technical} 件は点に数えていません` : ''}</p>
+      <p class="small muted" style="margin-top:8px">${[`本 ${s.books} 冊`, ...counts, html`<a href="#/stars">★ ${s.favorites}</a>`].map((x, i) => html`${i ? ' ・ ' : ''}<span class="nowrap">${x}</span>`)}${s.technical ? ` ・ 技術書の線 ${s.technical} 件は点に数えていません` : ''}</p>
       <p id="home-records" class="small muted"></p>
 
       ${discoveriesBlock(state)}
@@ -132,11 +132,10 @@ function renderHomeWishlist(box) {
 
 export const books = {
   render({ state, query }) {
-    const source = query.get('source') || '';
     const sort = query.get('sort') || 'recent';
     const q = (query.get('q') || '').trim().toLowerCase();
     // 登録しただけで線がまだ無い紙の本も出す（開いて線を足せるように）
-    let list = listBooks(state.library, { includeEmpty: true }).filter((b) => (!source || b.sources.includes(source)) && (!q || `${b.title} ${b.author}`.toLowerCase().includes(q)));
+    let list = listBooks(state.library, { includeEmpty: true }).filter((b) => (!q || `${b.title} ${b.author}`.toLowerCase().includes(q)));
     if (sort === 'title') list = list.sort((a, b) => a.title.localeCompare(b.title, 'ja'));
     if (sort === 'count') list = list.sort((a, b) => b.count - a.count);
     // 文の途中で切れていそうな点の多い本から直せるように、本の画面の印の数を行に添える
@@ -148,10 +147,9 @@ export const books = {
       const on = (query.get(key) || '') === value || (!query.get(key) && key === 'sort' && value === 'recent');
       return html`<a class="chip ${on ? 'on' : ''}" href="#/books?${params}" ${on ? html`aria-current="true"` : ''}>${label}</a>`;
     };
-    return html`<div class="page-head"><div><h1>読んだ本</h1><div class="sub">${list.length} 冊</div></div><span class="row"><button class="btn small" data-action="register-book">＋ 紙の本</button><a class="btn small" href="#/import">＋ 取り込む</a></span></div>
+    return html`<div class="page-head"><div><h1>読んだ本</h1><div class="sub">${list.length} 冊</div></div><span class="row"><button class="btn small" data-action="register-book">＋ 本を登録</button><a class="btn small" href="#/import">＋ 取り込む</a></span></div>
       <div class="row" style="margin-bottom:12px"><a class="btn small" href="#/search">全ての点の一覧・検索</a></div>
       <form class="search-box" data-form="book-filter" role="search"><input type="search" name="q" value="${query.get('q') || ''}" placeholder="書名・著者で絞り込む" aria-label="書名・著者で絞り込む"></form>
-      <div class="chips" role="group" aria-label="読み方で絞り込む">${chip('source', '', 'すべて')}${chip('source', 'kindle', 'Kindle')}${chip('source', 'playbooks', 'Play Books')}${chip('source', 'paper', '紙の本')}${chip('source', 'memo', '読書メモ')}</div>
       <div class="chips" style="margin-top:6px" role="group" aria-labelledby="books-sort-label"><span class="chips-label" id="books-sort-label">並び順</span>${chip('sort', 'recent', '最近')}${chip('sort', 'title', '書名')}${chip('sort', 'count', '点の数')}</div>
       ${list.length ? html`<ul class="book-list">${list.map((b) => bookRow(b, { joinCandidates: joinCounts.get(b.id) }))}</ul>` : emptyBooksBlock(state)}`;
   },
@@ -193,7 +191,7 @@ export const book = {
       <div class="page-head">
         <div class="row" style="flex-wrap:nowrap;align-items:flex-start;gap:12px">
           ${bookSpine(b)}
-          <div><h1>${b.title}</h1><div class="sub">${b.author || '著者不明'} ${b.sources.map(sourceBadge)} <span class="nowrap">・ ${hs.length} ${technical ? '件' : '点'}</span>${technical ? html` <span class="badge tech">技術書</span>` : ''}</div>
+          <div><h1>${b.title}</h1><div class="sub">${b.author || '著者不明'} <span class="nowrap">・ ${hs.length} ${technical ? '件' : '点'}</span>${technical ? html` <span class="badge tech">技術書</span>` : ''}</div>
             ${technical ? html`<p class="small muted" style="margin:4px 0 0">技術書の線は点に数えません（点の数・今日の点・AI 分析から外します）</p>` : ''}</div>
         </div>
       </div>
@@ -223,7 +221,7 @@ export const TECHNICAL_VALUES = { auto: null, yes: true, no: false };
 
 /** 紙の本を登録するシート */
 export function registerBookSheet() {
-  return html`<h2>紙の本を登録</h2>
+  return html`<h2>本を登録</h2>
     <label class="field"><span>書名</span><input type="text" name="title" autocomplete="off"></label>
     <label class="field"><span>著者（任意）</span><input type="text" name="author" autocomplete="off"></label>
     <label class="field"><span>表紙の画像（任意）</span><input type="file" name="cover" accept="image/*"></label>
@@ -358,7 +356,7 @@ function renderResults(root, ctx, q) {
     for (const [k, v] of Object.entries(patch)) v ? p.set(k, v) : p.delete(k);
     return html`<a class="chip ${on ? 'on' : ''}" href="#/search?${p}" ${on ? html`aria-current="true"` : ''}>${label}</a>`;
   };
-  root.querySelector('#search-filters').innerHTML = String(html`${link({ source: '' }, 'すべて', !source)}${link({ source: 'kindle' }, 'Kindle', source === 'kindle')}${link({ source: 'playbooks' }, 'Play Books', source === 'playbooks')}${link({ source: 'paper' }, '紙の本', source === 'paper')}${link({ source: 'memo' }, '読書メモ', source === 'memo')}${link({ source: 'thought' }, THOUGHT_LABEL, source === 'thought')}${link({ fav: fav ? '' : '1' }, '★ お気に入り', fav)}${link({ edited: edited ? '' : '1' }, '直した文', edited)}`);
+  root.querySelector('#search-filters').innerHTML = String(html`${link({ source: '' }, 'すべて', !source)}${link({ source: 'thought' }, THOUGHT_LABEL, source === 'thought')}${link({ fav: fav ? '' : '1' }, '★ お気に入り', fav)}${link({ edited: edited ? '' : '1' }, '直した文', edited)}`);
   const shown = results.slice(0, 200);
   // 検索語に当たる永久ノート（先頭 5 件。ノートは点ではないので、点の件数とは分けて出す）
   const notes = q.trim() ? searchNotes(state.library, q) : [];

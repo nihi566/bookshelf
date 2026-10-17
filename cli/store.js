@@ -20,8 +20,6 @@ export const DEFAULT_CONFIG = {
   host: '127.0.0.1',
   allowedOrigins: ['https://nihi566.github.io'],
   token: '',
-  // Play ブックスのメモ（Google ドライブ）の自動取り込み。clientId が空なら使わない
-  google: { clientId: '', clientSecret: '', folderId: '', intervalSec: 60 },
   // bh serve が人の操作なしに分析し直す条件（前回のあとに点が minPoints 件増えた・減った / maxHours 時間たって 1 件以上増えた・減った）
   autoAnalyze: { ...AUTO_DEFAULTS },
 };
@@ -111,11 +109,11 @@ export function createStore(dataDir = process.env.BH_DATA || path.join(REPO_ROOT
     dataDir,
     lock,
     async config() {
-      // vault / root / autoExport は Obsidian への書き出しを削除する前の設定。次に保存したときに消えるよう読み捨てる
+      // vault / root / autoExport は Obsidian への書き出し、google は Play ブックスの自動取り込みを削除する前の設定。次に保存したときに消えるよう読み捨てる
       // JSON として正しくても null・配列などオブジェクトでない中身なら、既定の設定で読む
       const saved = await readJson('config.json', {});
-      const { vault, root, autoExport, ...c } = saved && typeof saved === 'object' && !Array.isArray(saved) ? saved : {};
-      return { ...DEFAULT_CONFIG, ...c, llm: { ...DEFAULT_CONFIG.llm, ...(c.llm || {}) }, google: { ...DEFAULT_CONFIG.google, ...(c.google || {}) }, autoAnalyze: { ...DEFAULT_CONFIG.autoAnalyze, ...(c.autoAnalyze || {}) } };
+      const { vault, root, autoExport, google, ...c } = saved && typeof saved === 'object' && !Array.isArray(saved) ? saved : {};
+      return { ...DEFAULT_CONFIG, ...c, llm: { ...DEFAULT_CONFIG.llm, ...(c.llm || {}) }, autoAnalyze: { ...DEFAULT_CONFIG.autoAnalyze, ...(c.autoAnalyze || {}) } };
     },
     saveConfig: (c) => writeJson('config.json', c),
     library: () => readJson('library.json', emptyLibrary()),
@@ -164,13 +162,6 @@ export function createStore(dataDir = process.env.BH_DATA || path.join(REPO_ROOT
       return deserializeCache(await readJson('cache.json', null));
     },
     saveCache: (c) => writeJson('cache.json', serializeCache(c)),
-    // Google のリフレッシュトークン（ドライブを読む鍵なので本人だけが読めるように保存する）
-    googleToken: () => readJson('google-token.json', null),
-    saveGoogleToken: (t) => writeJson('google-token.json', t, { mode: 0o600 }),
-    removeGoogleToken: () => rm(file('google-token.json'), { force: true }),
-    // 取り込み済みのドキュメントと、その時点の更新日時
-    googleSync: () => readJson('google-sync.json', { files: {} }),
-    saveGoogleSync: (s) => writeJson('google-sync.json', s),
     // Kindle の拡張機能の確認結果など、設定ではない状態
     state: () => readJson('state.json', {}),
     saveState: (st) => writeJson('state.json', st),

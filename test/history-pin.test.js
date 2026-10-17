@@ -103,7 +103,7 @@ test('NIH-102: PC の POST /api/history/<id>/pin で付け外しでき、上限�
   const { store } = tempStore();
   await store.saveConfig({ llm: { baseUrl: 'http://127.0.0.1:1', chatModel: 'fake', embedModel: 'fake-embed' } });
   for (let i = 0; i < HISTORY_KEEP; i++) await store.saveAnalysis(analysisAt(at(i)));
-  const server = createCompanionServer({ store, log: () => {}, catalogFetch: async () => new Response('{}'), drive: null });
+  const server = createCompanionServer({ store, log: () => {}, catalogFetch: async () => new Response('{}') });
   await new Promise((r) => server.listen(0, '127.0.0.1', r));
   const base = `http://127.0.0.1:${server.address().port}`;
   const pin = (id, body) => fetch(`${base}/api/history/${id}/pin`, { method: 'POST', body: JSON.stringify(body) });
