@@ -26,7 +26,7 @@ export const SOURCES = {
   playbooks: 'Play Books',
   paper: '紙の本',
   // Obsidian などに書いていた読書メモ（Markdown）から移したもの
-  memo: '読書メモ',
+  memo: 'メモ',
   manual: '手入力',
 };
 

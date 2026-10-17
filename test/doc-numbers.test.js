@@ -31,8 +31,6 @@ const HEADING_MAX = { file: 'web/core/outlines.js', name: 'HEADING_MAX' };
 // per: 文書の単位にそろえるために定数を割る数（ミリ秒の定数を秒・分で書いた文と比べる）
 const KINDLE_INTERVAL_MIN = { file: 'extension/sync-core.js', name: 'intervalMin' };
 const KINDLE_STATUS_INTERVAL_MIN = { file: 'web/core/kindle-status.js', name: 'DEFAULT_INTERVAL_MIN' };
-const GOOGLE_INTERVAL_SEC = { file: 'cli/store.js', name: 'intervalSec' };
-const GOOGLE_MIN_INTERVAL_SEC = { file: 'cli/google.js', name: 'MIN_INTERVAL_SEC' };
 const SERVE_PORT = { file: 'cli/store.js', name: 'port' };
 const UPDATE_WAIT_SEC = { file: 'cli/update.js', name: 'DEFAULT_WAIT_MS', per: 1000 };
 // setup.md の「表示中は 1 分ごとに」（web/js/app.js の PULL_INTERVAL_MS）は照合しない。app.js を文字列で読むテストは増やさない（NIH-86）
@@ -82,10 +80,6 @@ const CHECKS = [
   { doc: ARCH, re: /上限（題 \d+ 字・節 \d+・見出し (\d+) 字/g, constant: HEADING_MAX },
   { doc: SETUP, re: /以後は既定で (\d+) 分ごとに確認する/g, constant: KINDLE_INTERVAL_MIN },
   { doc: SETUP, re: /以後は既定で (\d+) 分ごとに確認する/g, constant: KINDLE_STATUS_INTERVAL_MIN },
-  { doc: SETUP, re: /bh serve が確認（既定 (\d+) 秒ごと）/g, constant: GOOGLE_INTERVAL_SEC },
-  { doc: SETUP, re: /以後、(\d+) 秒ごとに確認/g, constant: GOOGLE_INTERVAL_SEC },
-  { doc: SETUP, re: /確認の間隔（既定 (\d+)、最短 \d+）/g, constant: GOOGLE_INTERVAL_SEC },
-  { doc: SETUP, re: /確認の間隔（既定 \d+、最短 (\d+)）/g, constant: GOOGLE_MIN_INTERVAL_SEC },
   { doc: SETUP, re: /設定のポート（既定 (\d+)）/g, constant: SERVE_PORT },
   { doc: SETUP, re: /起動したサーバが (\d+) 秒以内に応答し/g, constant: UPDATE_WAIT_SEC },];
 

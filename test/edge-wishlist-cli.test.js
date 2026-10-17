@@ -1,5 +1,5 @@
 // 境界・異常系のテスト（欲しい本 / PC 側の CLI・サーバ・保存 / 拡張の共通部分 / html.js）
-import { test, mock } from 'node:test';
+import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
 import http from 'node:http';
@@ -33,7 +33,6 @@ import { esc, html, mark, raw, safeUrl } from '../web/js/html.js';
 import { chunk, importBody, isReachableCompanionUrl, pickBooksToFetch, statusReport, toBase64Utf8 } from '../extension/sync-core.js';
 import { createStore, historyId } from '../cli/store.js';
 import { createCompanionServer } from '../cli/server.js';
-import { createGoogleClient, isFolderId, startDriveWatcher } from '../cli/google.js';
 
 const run = promisify(execFile);
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -331,9 +330,9 @@ test('edge store: 無いフォルダ・壊れたファイル・null の設定', 
   const cfg = await store.config();
   assert.equal(cfg.port, 8787);
   assert.equal(cfg.llm.baseUrl, 'http://127.0.0.1:11434');
-  writeFileSync(path.join(dir, 'config.json'), '{"llm": null, "google": null, "autoAnalyze": null}');
+  writeFileSync(path.join(dir, 'config.json'), '{"llm": null, "google": {"clientId": "x"}, "autoAnalyze": null}');
   const cfg2 = await store.config();
-  assert.equal(cfg2.google.intervalSec, 60);
+  assert.equal(cfg2.google, undefined, "古い google 設定は読み捨てる");
   assert.equal(typeof cfg2.autoAnalyze, 'object');
 });
 
@@ -543,82 +542,6 @@ test('edge server: トークンを設定したら API は要求し、静的フ�
   );
 });
 
-// ---------------------------------------------------------------- cli/google.js
-
-const json = (data, status = 200) => new Response(JSON.stringify(data), { status, headers: { 'Content-Type': 'application/json' } });
-
-function fakeDrive({ docs = [], tokenResponse } = {}) {
-  const calls = { token: 0, exports: 0 };
-  const fetchImpl = async (url) => {
-    const u = new URL(url);
-    if (u.href.startsWith('https://oauth2.googleapis.com/token')) {
-      calls.token++;
-      return tokenResponse ? tokenResponse() : json({ access_token: 'at-1', expires_in: 'abc' });
-    }
-    if (u.pathname === '/drive/v3/files') {
-      if (u.searchParams.get('q').includes('vnd.google-apps.folder')) return json({ files: [{ id: 'folder-1' }] });
-      return json({ files: docs });
-    }
-    calls.exports++;
-    return new Response('<html><body>not play books</body></html>');
-  };
-  return { fetchImpl, calls };
-}
-
-async function googleSetup(opts) {
-  const store = createStore(tmp('bh-edge-google-'));
-  await store.saveConfig({ google: { clientId: 'cid', clientSecret: 's' } });
-  await store.saveGoogleToken({ refreshToken: 'rt' });
-  const drive = fakeDrive(opts);
-  return { store, drive, client: createGoogleClient({ store, fetchImpl: drive.fetchImpl }) };
-}
-
-test('edge google: 取り込み記録に files が無くても（壊れた・古い google-sync.json）落ちない', async () => {
-  const { store, client } = await googleSetup({ docs: [{ id: 'd1', name: 'メモ', modifiedTime: '2026-01-01T00:00:00Z' }] });
-  writeFileSync(path.join(store.dataDir, 'google-sync.json'), '{}');
-  const r = await client.sync();
-  assert.equal(r.checked, 1);
-  assert.equal(r.changed, 1);
-  assert.equal((await store.googleSync()).files.d1, '2026-01-01T00:00:00Z');
-});
-
-test('edge google: トークンの応答が JSON でない・Drive の一覧が空・folder ID の形', async () => {
-  const { client } = await googleSetup({ tokenResponse: () => new Response('<html>oops</html>', { status: 500 }) });
-  await assert.rejects(client.sync(), /HTTP 500/);
-  const empty = await googleSetup({ docs: [] });
-  assert.deepEqual(await empty.client.sync(), { checked: 0, changed: 0, added: 0, updated: 0, booksAdded: 0, errors: [], problems: [] });
-  // 読めないドキュメントはエラーとして返し、落ちない
-  const bad = await googleSetup({ docs: [{ id: 'd1', name: '../x', modifiedTime: 't' }] });
-  const r = await bad.client.sync();
-  assert.equal(r.changed, 1);
-  assert.equal(r.errors.length, 1);
-  for (const s of ['', null, undefined, 'short', "abcdefghij'or'1", 'abc def ghij k', '../../../../x']) assert.equal(isFolderId(s), false, String(s));
-  assert.equal(isFolderId('1AbC-dEf_ghIJ'), true);
-});
-
-test('edge google: 設定を読んでいる最中に stop しても、次の確認を予約しない', async () => {
-  mock.timers.enable({ apis: ['setTimeout'] });
-  try {
-    let syncs = 0;
-    let releaseConfig;
-    const configGate = new Promise((r) => (releaseConfig = r));
-    const store = { config: async () => (await configGate, { google: { intervalSec: 15 } }) };
-    const client = { sync: async () => (syncs++, { checked: 0, changed: 0, added: 0, updated: 0, errors: [] }) };
-    const w = startDriveWatcher({ store, client, log: () => {} });
-    // sync が終わり、finally で設定を待っている
-    for (let i = 0; i < 5; i++) await Promise.resolve();
-    assert.equal(syncs, 1);
-    w.stop();
-    releaseConfig();
-    for (let i = 0; i < 10; i++) await new Promise((r) => setImmediate(r));
-    mock.timers.tick(60_000);
-    for (let i = 0; i < 10; i++) await new Promise((r) => setImmediate(r));
-    assert.equal(syncs, 1, 'stop した後は確認しない');
-  } finally {
-    mock.timers.reset();
-  }
-});
-
 // ---------------------------------------------------------------- cli/bh.js
 
 const bh = (args, env = {}) => run(process.execPath, [BH, ...args], { env: { ...process.env, ...env } });
@@ -633,13 +556,9 @@ test('edge bh: 設定の値の確かめ（ポート・不明なキー・空の�
   await bh(['config', 'port', '9000'], env);
   assert.equal(JSON.parse(readFileSync(path.join(data, 'config.json'), 'utf8')).port, 9000);
   await assert.rejects(bh(['config', 'nope', 'x'], env), /不明な設定: nope/);
-  await assert.rejects(bh(['config', 'google-interval', '5'], env), /15 秒以上/);
-  await assert.rejects(bh(['config', 'google-interval', 'NaN'], env), /15 秒以上/);
   await assert.rejects(bh(['config', 'auto-points', '1.5'], env), /整数/);
   await assert.rejects(bh(['config', 'auto-hours', '0'], env), /0 より大きい/);
   await assert.rejects(bh(['config', 'auto', 'maybe'], env), /on \| off/);
-  await assert.rejects(bh(['config', 'google-folder', "x' or '1"], env), /フォルダ ID/);
-  await assert.rejects(bh(['google', 'bogus'], env), /使い方: bh google/);
 });
 
 test('edge bh: --data=値 に = を含むパス・無いファイル・空のフォルダ・空の検索', async () => {

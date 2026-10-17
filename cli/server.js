@@ -50,8 +50,6 @@ async function diskSwVersion() {
     return '';
   }
 }
-// 画面に渡す、Play ブックスの取り込めないドキュメントの数の上限（件数は problemCount で全部を渡す）
-const DRIVE_PROBLEMS_MAX = 30;
 const MIME = {
   '.html': 'text/html; charset=utf-8',
   '.js': 'text/javascript; charset=utf-8',
@@ -69,9 +67,8 @@ const AI_BODY_MAX = 64 * 1024;
 const AI_CONCURRENCY = 2;
 
 // catalogFetch: おすすめの本を探す書誌 DB への fetch（テストで差し替える）
-// drive: Play ブックスのメモ（Google ドライブ）の見張り役（startDriveWatcher の戻り値。無ければ null）
 // auto: { intervalMs } を渡すと、その間隔で自動の分析を始めるかを確かめる（bh serve。テストでは渡さず checkAutoAnalyze を呼ぶ）
-export function createCompanionServer({ store, log = console.log, catalogFetch, drive = null, auto = null }) {
+export function createCompanionServer({ store, log = console.log, catalogFetch, auto = null }) {
   // trigger: 'manual'（画面のボタン・bh）/ 'auto'（点が増えたので PC が自分で始めた）
   // bh update が「止めた後に起動したプロセス（= 新しいコード）か」を確かめるのに使う
   const serverStartedAt = new Date().toISOString();
@@ -225,7 +222,6 @@ export function createCompanionServer({ store, log = console.log, catalogFetch, 
           kindleSync: st.kindleSync || null,
           analysis: analysis ? { createdAt: analysis.createdAt, recommendedAt: analysis.recommendedAt, ...analysis.stats } : null,
           job: publicJob(),
-          google: drive ? { ...publicDrive(drive.status), lastNew: st.playbooksSync?.lastNew || null } : null,
           // 自動の分析の設定と、最後に成功した時刻・失敗の理由（知識の画面に出す）
           autoAnalysis: autoInfo({ library: lib, analysis, st, cfg, points }),
         });
@@ -381,12 +377,6 @@ export function createCompanionServer({ store, log = console.log, catalogFetch, 
     }
   }
 
-  function publicDrive({ active, configured, lastCheck, lastImport, error, problems = [] }) {
-    // 取り込めないドキュメントは画面に出すだけなので、数と長さを切って渡す
-    const cut = (s, n) => String(s || '').slice(0, n);
-    return { active, configured, lastCheck, lastImport, error, problemCount: problems.length, problems: problems.slice(0, DRIVE_PROBLEMS_MAX).map((p) => ({ name: cut(p.name, 200), error: cut(p.error, 300), modifiedTime: cut(p.modifiedTime, 40) })) };
-  }
-
   function publicJob() {
     const { controller, ...rest } = job;
     return rest;
@@ -501,7 +491,7 @@ export function createCompanionServer({ store, log = console.log, catalogFetch, 
     // checkAutoAnalyze が始めない場面では「まもなく始めます」と出さない
     const wait = (reason) => ({ due: false, reason, nextAt: null });
     if (job.running) return wait('分析の最中です。終わってから判断します');
-    if (activeImports > 0 || drive?.status?.checking) return wait('取り込みの最中です。終わってから判断します');
+    if (activeImports > 0) return wait('取り込みの最中です。終わってから判断します');
     if (!cfg.llm.chatModel) return wait('チャットモデルが設定されていません（PC で bh config model <モデル名>）');
     const { due, reason, nextAt } = autoDecision({ library, analysis, st, cfg });
     return { due, reason, nextAt };
@@ -509,12 +499,12 @@ export function createCompanionServer({ store, log = console.log, catalogFetch, 
 
   /**
    * 自動の分析を始めるか確かめ、条件を満たしていれば始める（終わるのは待たない）。
-   * 手動の分析中・取り込みの最中（拡張・Google ドライブ・画面からの取り込み）には始めない
+   * 手動の分析中・取り込みの最中（拡張・画面からの取り込み）には始めない
    * @returns {Promise<{ started: boolean, reason: string, pending?: number }>}
    */
   async function checkAutoAnalyze(now = new Date()) {
     if (job.running) return { started: false, reason: '分析の最中です' };
-    if (activeImports > 0 || drive?.status?.checking) return { started: false, reason: '取り込みの最中です' };
+    if (activeImports > 0) return { started: false, reason: '取り込みの最中です' };
     const cfg = await store.config();
     if (!cfg.llm.chatModel) return { started: false, reason: 'チャットモデルが設定されていません' };
     const [library, analysis, st] = await Promise.all([store.library(), store.analysis(), store.state()]);

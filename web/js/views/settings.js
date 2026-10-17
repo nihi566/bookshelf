@@ -18,46 +18,15 @@ function shortTime(iso) {
   return Number.isNaN(d.getTime()) ? '—' : `${d.getMonth() + 1}/${d.getDate()} ${d.toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' })}`;
 }
 
-/** 自動取り込み（Play ブックス・Kindle）で最後に新しい点が届いた時刻・件数（PC の state.json に残るので、bh serve を起動し直しても消えない） */
+/** Kindle の自動取り込みで最後に新しい点が届いた時刻・件数（PC の state.json に残るので、bh serve を起動し直しても消えない） */
 function lastNewText(n) {
   return n?.at ? `${shortTime(n.at)}・${Number(n.added) || 0} 件${n.updated ? `（更新 ${n.updated} 件）` : ''}` : 'まだ届いていません';
-}
-
-/** 設定 → 接続を確認 の Play ブックスの要約（取り込み画面と同じ「最後に新しい点」を出す） */
-export function googleLabel(g) {
-  if (!g) return '未対応（PC の bh を更新してください）';
-  if (!g.active) return g.error || '未設定';
-  const problems = g.problemCount ?? g.problems?.length ?? 0;
-  return `有効（最終確認 ${shortTime(g.lastCheck)}・最後に新しい点 ${lastNewText(g.lastNew)}）${problems ? ` ／ 取り込めない本 ${problems} 冊（取り込みの画面に理由）` : ''}${g.error ? ` ／ ${g.error}` : ''}`;
 }
 
 /** 設定 → 接続を確認 の Kindle（ブラウザ拡張）の要約。拡張から連絡が無いとき（取り込み画面と同じく確認の報告が無い）は、新しい点が無いのと区別して出す */
 export function kindleLabel(ks) {
   if (!ks?.lastCheck) return '拡張から連絡がありません（取り込み画面に設定の手順）';
   return `最後に新しい点 ${lastNewText(ks.lastNew)}`;
-}
-
-/**
- * 取り込み画面の Play ブックス自動取り込みの状態欄の中身（PC がドライブを見張っている結果）。
- * 取り込めない本は、文書が直るまで出し続ける（PC の記録に残っている）
- */
-export function playbooksSyncBlock(state) {
-  if (state.settings.ai.mode !== 'companion' || !state.pcInfo) return '';
-  const g = state.pcInfo.google;
-  if (!g) return html`<p class="small">自動取り込み: 未対応（PC の bh を更新してください）</p>`;
-  if (!g.active) return html`<p class="small">自動取り込み: ${g.error || '未設定'}</p>`;
-  const problems = Array.isArray(g.problems) ? g.problems : [];
-  const count = Number.isInteger(g.problemCount) ? g.problemCount : problems.length;
-  return html`<p class="small">自動取り込み: 有効（最終確認 ${shortTime(g.lastCheck)}）</p>
-    <p class="small">最後に新しい点: ${lastNewText(g.lastNew)}</p>
-    ${count
-      ? html`<details class="pb-problems">
-          <summary class="small">取り込めない本 ${count} 冊（押すと理由）</summary>
-          <ul class="plain small">${problems.map((p) => html`<li><b>${p.name}</b><br><span class="muted">${p.error}</span></li>`)}</ul>
-          ${count > problems.length ? html`<p class="small muted">ほか ${count - problems.length} 冊</p>` : ''}
-          <p class="help">Play ブックスがハイライトの文をドライブのメモに書き出していない本は、ここからは取り込めません（出版社の設定によります）。文書が更新されて読めるようになると、自動で取り込んでこの一覧から消えます。</p>
-        </details>`
-      : ''}`;
 }
 
 /**
@@ -83,17 +52,14 @@ const HELP = {
   kindleDevice: { id: 'help-kindle-device', label: 'Kindle 端末' },
   kindleExport: { id: 'help-kindle-export', label: 'Kindle のエクスポート' },
   kindleBookmarklet: { id: 'help-kindle-bookmarklet', label: 'ブックマークレット' },
-  playbooks: { id: 'help-playbooks', label: 'Play ブックスのメモ' },
-  readingNotes: { id: 'help-reading-notes', label: '読書メモ' },
+  notes: { id: 'help-reading-notes', label: 'メモ（.md）' },
 };
 const HELP_BY_EXT = {
   txt: [HELP.kindleDevice],
-  html: [HELP.kindleExport, HELP.playbooks],
-  htm: [HELP.kindleExport, HELP.playbooks],
-  docx: [HELP.playbooks],
-  zip: [HELP.playbooks],
+  html: [HELP.kindleExport],
+  htm: [HELP.kindleExport],
   json: [HELP.kindleBookmarklet],
-  md: [HELP.readingNotes],
+  md: [HELP.notes],
 };
 
 /**
@@ -104,7 +70,7 @@ const HELP_BY_EXT = {
 export function importHelpTargets(name) {
   const ext = /\.([^.]+)$/.exec(String(name ?? ''))?.[1].toLowerCase();
   // a.constructor のような名前で Object の持ち物を拾わないよう、自分の持ち物だけを見る
-  return (ext && Object.hasOwn(HELP_BY_EXT, ext)) ? HELP_BY_EXT[ext] : [HELP.kindleDevice, HELP.kindleExport, HELP.playbooks];
+  return (ext && Object.hasOwn(HELP_BY_EXT, ext)) ? HELP_BY_EXT[ext] : [HELP.kindleDevice, HELP.kindleExport];
 }
 
 /** 読めなかったファイルの行の、取り出し方の説明を開くボタン */
@@ -138,7 +104,7 @@ export function importResultBlock(result, state) {
   return html`<div class="card" style="margin-top:12px">
         <p class="notice${o.tone ? ` ${o.tone}` : ''}">${o.note}${result.analysisChanged ? '（バックアップの新しい分析結果も反映）' : ''}</p>
         <ul class="result-list">${results.map((r) => html`<li>${r.error ? '✗' : '✓'} <b>${r.name}</b><br><span class="small muted">${r.error || `${r.formatLabel} — 本 ${r.books} 冊 / 点 ${r.highlights} 件${r.images ? `（画像 ${r.images} 枚は取り込めません）` : ''}`}</span>${r.error ? importHelpLinks(r.name) : ''}</li>`)}</ul>
-        ${stats.memoTitles?.length ? html`<p class="small muted">既にある本にまとめた読書メモ: ${stats.memoTitles.map((m) => `「${m.from}」→『${m.to}』`).join('、')}</p>` : ''}
+        ${stats.memoTitles?.length ? html`<p class="small muted">既にある本にまとめたメモ: ${stats.memoTitles.map((m) => `「${m.from}」→『${m.to}』`).join('、')}</p>` : ''}
         ${analyze.note}
         <div class="row" style="margin-top:8px">${analyze.button}<a class="btn small" href="#/books">本を見る</a></div>
       </div>`;
@@ -193,25 +159,10 @@ export const importView = {
         </details>
       </div>
 
-      <div class="section"><h2>Play ブックス</h2></div>
-      <div class="card">
-        <div id="playbooks-sync">${playbooksSyncBlock(state)}</div>
-        <details id="help-playbooks">
-          <summary>Google ドライブの「Play ブックスのメモ」から</summary>
-          <ol class="help">
-            <li>Play ブックスの設定で「メモ、ハイライト、しおりを Google ドライブに保存」をオンにします（本ごとのドキュメントが自動で作られます）。</li>
-            <li>PC: Google ドライブで <b>「Play ブックスのメモ」フォルダを右クリック → ダウンロード</b>。できた zip をそのまま取り込めます。</li>
-            <li>スマホ: ドキュメントを開き「共有とエクスポート → 形式を指定して保存 → Word（.docx）」で保存し、ここで選びます。</li>
-          </ol>
-          <p class="help">.docx / .html / .md のどれでも読めます。ドキュメントが自動で更新されるので、時々ダウンロードし直すと差分だけ増えます。</p>
-          <p class="help"><b>自動で取り込むには:</b> PC で <code>bh google login</code> して <code>bh serve</code> を動かしておくと、PC がドライブを 1 分ごとに確認し、新しく引いた線を取り込みます（Google がドキュメントを更新するまで数分かかることがあります）。この画面にも PC との同期で届きます。手順は docs/setup.md の「Play ブックスの自動取り込み」。</p>
-        </details>
-      </div>
-
-      <div class="section"><h2>紙の本・読書メモ</h2></div>
+      <div class="section"><h2>紙の本・メモ</h2></div>
       <div class="card" id="help-reading-notes">
         <p class="help">紙の本は <a href="#/books">読んだ本</a> の「＋ 紙の本」で書名と表紙を登録し、本の画面で線を引いた文を入力します。</p>
-        <p class="help">Obsidian などに書いた<b>読書メモ（.md）</b>は、上の欄でそのまま選べます（複数可）。ファイル名を書名にし、見出しを章、段落・箇条書きの項目を 1 点ずつにします。書名の一部が同じ本が 1 冊だけあればその本にまとめ、既にある線と同じ文は増やしません。画像の埋め込みは取り込めません。PC では <code>bh import &lt;フォルダ&gt;</code> でフォルダごと取り込めます。</p>
+        <p class="help">Obsidian などに書いた<b>メモ（.md）</b>は、上の欄でそのまま選べます（複数可）。ファイル名を書名にし、見出しを章、段落・箇条書きの項目を 1 点ずつにします。書名の一部が同じ本が 1 冊だけあればその本にまとめ、既にある線と同じ文は増やしません。画像の埋め込みは取り込めません。PC では <code>bh import &lt;フォルダ&gt;</code> でフォルダごと取り込めます。</p>
       </div>
 
       <div class="section"><h2>ほかに</h2></div>
@@ -234,7 +185,7 @@ export const settingsView = {
     const s = libraryStats(state.library);
     return html`<div class="page-head"><h1>設定</h1></div>
       <div class="card stack">
-        <a class="row spread" href="#/import"><b>取り込み</b><span class="muted">Kindle・Play ブックス・<span class="nowrap">読書メモ ›</span></span></a>
+        <a class="row spread" href="#/import"><b>取り込み</b><span class="muted">Kindle・紙の本・<span class="nowrap">メモ ›</span></span></a>
         <a class="row spread" href="#/sitemap"><b>すべての画面</b><span class="muted">タブに無い画面も ›</span></a>
       </div>
 

@@ -121,7 +121,7 @@ test('parseFiles: .md の読書メモは「読書メモ」として読み、画�
   assert.equal(r.books.length, 1);
   assert.equal(r.books[0].title, 'ハマトン');
   assert.equal(r.books[0].source, 'memo');
-  assert.equal(r.results[0].formatLabel, '読書メモ（Markdown）');
+  assert.equal(r.results[0].formatLabel, 'メモ（Markdown）');
   assert.equal(r.results[0].highlights, 2);
   assert.match(r.results[1].error, /画像 1 枚/);
 });
@@ -172,7 +172,7 @@ test('bh import <フォルダ>: 入れ子のフォルダの .md を読み、--dr
   const bh = new URL('../cli/bh.js', import.meta.url);
   const env = { ...process.env, BH_DATA: dataDir };
   const dry = await run('node', [bh.pathname.replace(/^\/([A-Za-z]:)/, '$1'), 'import', notes, '--dry-run'], { env });
-  assert.match(dry.stdout, /01_哲学\/パンセ\.md: 読書メモ（Markdown） — 本 1 冊 \/ 点 2 件/);
+  assert.match(dry.stdout, /01_哲学\/パンセ\.md: メモ（Markdown） — 本 1 冊 \/ 点 2 件/);
   assert.match(dry.stdout, /耳読書\.md: 本文が無く、画像 1 枚だけのメモです/);
   assert.doesNotMatch(dry.stdout, /a\.png/);
   assert.match(dry.stdout, /（試し・保存していません）取り込み: 新しい点 2 件/);

@@ -65,12 +65,12 @@ test('NIH-107: 前回の分析に入っていた点が消えたときも、増�
   assert.equal(autoAnalyzeDue({ points: pts(4), analysis, now: NOW, lastFailureAt: new Date(NOW - AUTO_RETRY_MS / 2).toISOString() }).due, false, '失敗の直後は待つ');
 });
 
-async function withServer(fn, { llmUrl, drive = null } = {}) {
+async function withServer(fn, { llmUrl } = {}) {
   const dataDir = mkdtempSync(path.join(tmpdir(), 'bh-auto-'));
   const fake = await startFakeLlm();
   const store = createStore(dataDir);
   await store.saveConfig({ llm: { baseUrl: llmUrl || fake.url, chatModel: 'fake-chat', embedModel: 'fake-embed' }, autoAnalyze: AUTO_ON });
-  const server = createCompanionServer({ store, log: () => {}, catalogFetch: async () => new Response(JSON.stringify({ items: [] })), drive });
+  const server = createCompanionServer({ store, log: () => {}, catalogFetch: async () => new Response(JSON.stringify({ items: [] })) });
   await new Promise((r) => server.listen(0, '127.0.0.1', r));
   const base = `http://127.0.0.1:${server.address().port}`;
   try {
@@ -139,14 +139,6 @@ test('G5-1: bh serve は取り込みのあと、人の操作なしに分析を�
     assert.equal((await server.checkAutoAnalyze()).started, true, '取り込みが終われば始める');
     await waitJob(base);
   });
-  // Google ドライブからの取り込みの最中は始めない
-  await withServer(
-    async ({ base, server }) => {
-      await importFiles(base, [{ name: 'My Clippings.txt', base64: await b64(fixture('My Clippings.txt')) }, { name: 'playbooks-ja.html', base64: await b64(fixture('playbooks-ja.html')) }]);
-      assert.deepEqual(await server.checkAutoAnalyze(), { started: false, reason: '取り込みの最中です' });
-    },
-    { drive: { status: { checking: true } } },
-  );
 });
 
 test('NIH-107: 本を技術書にして点が減ると、bh serve は自動で分析し直し、消えた点を線から外す（分析のあとは始め直さない）', async () => {

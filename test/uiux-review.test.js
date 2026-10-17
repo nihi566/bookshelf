@@ -12,22 +12,23 @@ function sampleState() {
 
 const chipsOf = (out) => [...out.matchAll(/<a class="chip[^"]*"[^>]*>[^<]*<\/a>/g)].map((m) => m[0]);
 
-test('読んだ本: 選んでいる絞り込み・並び順のチップだけ aria-current="true" を持つ', async () => {
+test('読んだ本: 選んでいる並び順のチップだけ aria-current="true" を持つ', async () => {
   const { books } = await import('../web/js/views/library.js');
-  const out = String(books.render({ state: sampleState(), query: new URLSearchParams('source=kindle&sort=title') }));
+  const out = String(books.render({ state: sampleState(), query: new URLSearchParams('sort=title') }));
   const current = chipsOf(out).filter((c) => c.includes('aria-current="true"'));
-  assert.deepEqual(current.map((c) => c.replace(/<[^>]+>/g, '')), ['Kindle', '書名']);
+  assert.deepEqual(current.map((c) => c.replace(/<[^>]+>/g, '')), ['書名']);
 });
 
-test('読んだ本: 並び順の行には見える見出しとグループ名がある（絞り込みの行と見分けられる）', async () => {
+test('読んだ本: 並び順の行には見える見出しとグループ名があり、出どころ（Kindle・Play Books・紙の本・読書メモ）の区分は出さない', async () => {
   const { books } = await import('../web/js/views/library.js');
   const out = String(books.render({ state: sampleState(), query: new URLSearchParams() }));
-  assert.match(out, /role="group" aria-label="読み方で絞り込む"/);
   assert.match(out, /role="group" aria-labelledby="books-sort-label"/);
   assert.match(out, /<span class="chips-label" id="books-sort-label">並び順<\/span>/);
-  // 何も選んでいないときは「すべて」「最近」が選択中
+  // 何も選んでいないときは「最近」が選択中
   const current = chipsOf(out).filter((c) => c.includes('aria-current="true"'));
-  assert.deepEqual(current.map((c) => c.replace(/<[^>]+>/g, '')), ['すべて', '最近']);
+  assert.deepEqual(current.map((c) => c.replace(/<[^>]+>/g, '')), ['最近']);
+  assert.doesNotMatch(out, /読み方で絞り込む|class="badge (kindle|playbooks|paper|memo)"/);
+  assert.doesNotMatch(out, />(Play Books|読書メモ)</);
 });
 
 test('ハイライトの検索: 選んでいる絞り込みのチップだけ aria-current="true" を持つ', async () => {
@@ -42,8 +43,8 @@ test('ハイライトの検索: 選んでいる絞り込みのチップだけ ar
   };
   search.mount(root, { state: sampleState(), query: new URLSearchParams('fav=1') });
   const chips = chipsOf(boxes['#search-filters'].innerHTML);
-  // すべて・Kindle・Play Books・紙の本・読書メモ・思いつき・★ お気に入り・直した文
-  assert.equal(chips.length, 8);
+  // すべて・思いつき・★ お気に入り・直した文（出どころごとの絞り込みは持たない）
+  assert.equal(chips.length, 4);
   const current = chips.filter((c) => c.includes('aria-current="true"'));
   assert.deepEqual(current.map((c) => c.replace(/<[^>]+>/g, '')), ['すべて', '★ お気に入り']);
   const page = String(search.render({ state: sampleState(), query: new URLSearchParams() }));

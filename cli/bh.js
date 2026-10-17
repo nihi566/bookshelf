@@ -1,12 +1,11 @@
 #!/usr/bin/env node
 // bookshelf の PC 用コマンド
 //
-//   bh import <ファイル|フォルダ...>  Kindle / Play Books のハイライト・読書メモ（.md）を取り込む
+//   bh import <ファイル|フォルダ...>  Kindle / Play Books のハイライト・メモ（.md）を取り込む
 //   bh analyze                    ローカル LLM で 点→線→面→立体 を分析し、おすすめの本を選ぶ
 //   bh recommend                   おすすめの本だけ選び直す
-//   bh serve                       コンパニオンサーバを起動（Web アプリ + 同期 + LLM 中継 + Play ブックスの自動取り込み）
+//   bh serve                       コンパニオンサーバを起動（Web アプリ + 同期 + LLM 中継）
 //   bh update                      マージした main を取り込み、常駐の bh serve を新しいコードで起動し直す
-//   bh google login|sync|logout    Play ブックスのメモ（Google ドライブ）との連携
 //   bh list / bh search <語>       一覧・検索
 //   bh config [キー 値]            設定の表示・変更
 
@@ -15,9 +14,8 @@ import path from 'node:path';
 import { REPO_ROOT, createStore } from './store.js';
 import { createCompanionServer } from './server.js';
 import { runUpdate } from './update.js';
-import { createGoogleClient, describeSync, isFolderId, MIN_INTERVAL_SEC, startDriveWatcher } from './google.js';
 import { startCoverLookup } from './covers.js';
-import { SOURCES, listBooks, libraryStats, searchHighlights } from '../web/core/model.js';
+import { listBooks, libraryStats, searchHighlights } from '../web/core/model.js';
 import { applyImport } from '../web/core/importing.js';
 import { ACCEPT, parseFiles } from '../web/core/parsers/index.js';
 import { createLlmClient } from '../web/core/analysis/llm.js';
@@ -34,20 +32,16 @@ const HELP = `使い方: bh <コマンド> [オプション]
   import <ファイル|フォルダ...> [--dry-run]
                                       ハイライトを取り込む（My Clippings.txt / Kindle のエクスポート HTML /
                                       ブックマークレットの JSON / Play Books のメモ .docx .html .md / それらの .zip /
-                                      自分で書いた読書メモ .md）。フォルダは中のファイルをすべて（入れ子も）読むので、
-                                      ノートアプリの保管場所全体ではなく、読書メモのフォルダを指定する。
+                                      自分で書いたメモ .md）。フォルダは中のファイルをすべて（入れ子も）読むので、
+                                      ノートアプリの保管場所全体ではなく、メモのフォルダを指定する。
                                       --dry-run は保存せずに結果だけ表示する
   analyze [--no-recommend] [--full]   ローカル LLM で 点→線→面→立体 を分析（前回の線・面を引き継ぎ、変わったところだけ
                                       AI を呼ぶ。--full は最初から作り直す）
   recommend                           おすすめの本を選び直す
-  serve [--port 8787] [--host 127.0.0.1]  コンパニオンサーバを起動（Google にログイン済みなら Play ブックスの線を自動で取り込む。
-                                      自動の分析を入れていれば、点が増えたら分析し直す）
+  serve [--port 8787] [--host 127.0.0.1]  コンパニオンサーバを起動（自動の分析を入れていれば、点が増えたら分析し直す）
   update                              マージした main を常駐の bh serve に反映する（data/ の library.json・analysis.json を
                                       退避 → git pull --ff-only origin main → bh serve を止めて起動し直す → 新しい版で
                                       動いているか確かめる。取り込めなければ bh serve は止めない）
-  google login                        Google にログインする（ドライブの読み取りだけを許可）
-  google sync                         Play ブックスのメモを今すぐ取り込む
-  google logout                       ログアウトする（Google 側の許可も取り消す）
   list                                本の一覧
   search <語...>                       ハイライトを検索
   config                              設定を表示
@@ -56,9 +50,6 @@ const HELP = `使い方: bh <コマンド> [オプション]
   config embed <名前>                 埋め込みモデル（例: bge-m3。空なら文字 n-gram で代用）
   config origin <URL>                 接続を許可する Web アプリのオリジン（GitHub Pages など）を追加
   config token <文字列>               API にトークンを要求する（インターネットに公開する場合は必須）
-  config google-client <ID> <シークレット>  Google Cloud で作った OAuth クライアント（種類: デスクトップ アプリ）
-  config google-folder <フォルダ ID>  「Play ブックスのメモ」フォルダを名前で探せないときに指定（空で自動に戻す）
-  config google-interval <秒>         ドライブを確認する間隔（既定: 60、最短 ${MIN_INTERVAL_SEC}）
   config auto on|off                  bh serve の自動の分析を入れる・切る（既定: off）
   config auto-points <件数>           前回の分析のあとに点がこの件数増えたら自動で分析する（既定: 10）
   config auto-hours <時間>            前回からこの時間たち、点が 1 件以上増えた・減ったら自動で分析する（既定: 24）
@@ -126,7 +117,7 @@ async function main() {
         if (r.analysisChanged) await store.saveAnalysis(r.analysis);
       }
       const s = r.stats;
-      for (const m of s.memoTitles) console.log(`→ 読書メモ「${m.from}」は既にある本『${m.to}』にまとめました`);
+      for (const m of s.memoTitles) console.log(`→ メモ「${m.from}」は既にある本『${m.to}』にまとめました`);
       console.log(`${dryRun ? '（試し・保存していません）' : ''}取り込み: 新しい点 ${s.added} 件、更新 ${s.updated} 件、既存 ${s.unchanged} 件（新しい本 ${s.booksAdded} 冊）${r.analysisChanged ? '。バックアップの新しい分析結果も反映しました' : ''}`);
       break;
     }
@@ -185,14 +176,12 @@ async function main() {
       const cfg = await store.config();
       const port = Number(args.port || cfg.port);
       const host = args.host || cfg.host;
-      const drive = startDriveWatcher({ store, client: createGoogleClient({ store }) });
       startCoverLookup({ store });
-      const server = createCompanionServer({ store, drive, auto: { intervalMs: AUTO_CHECK_MS } });
+      const server = createCompanionServer({ store, auto: { intervalMs: AUTO_CHECK_MS } });
       const auto = autoConfig(cfg.autoAnalyze);
       server.listen(port, host, () => {
         console.log(`コンパニオンサーバ: http://${host === '0.0.0.0' ? 'localhost' : host}:${port}`);
         console.log(`  LLM: ${cfg.llm.baseUrl}（チャット: ${cfg.llm.chatModel || '未設定'} / 埋め込み: ${cfg.llm.embedModel || '文字 n-gram'}）`);
-        console.log(`  Play ブックス: ${cfg.google.clientId ? `${Math.max(MIN_INTERVAL_SEC, cfg.google.intervalSec)} 秒ごとに Google ドライブを確認` : '未設定（docs/setup.md の「Play ブックスの自動取り込み」）'}`);
         console.log(`  自動の分析: ${auto.enabled ? `前回のあとに点が ${auto.minPoints} 件増える・減るか、${auto.maxHours} 時間たって 1 件以上増えた・減ったら分析（bh config auto off で止める）` : '切ってあります（bh config auto on）'}`);
         console.log('  表紙: 表紙の取れない Play ブックスの本は、国立国会図書館サーチで書名・著者から ISBN を探す（10 分ごと）');
         console.log(`  スマホから使うには: tailscale serve --bg ${port}`);
@@ -203,28 +192,11 @@ async function main() {
       await runUpdate({ repoDir: REPO_ROOT, dataDir: store.dataDir, cfg: await store.config() });
       break;
     }
-    case 'google': {
-      const client = createGoogleClient({ store });
-      const [sub] = rest;
-      if (sub === 'login') {
-        // 取り込みはここでは行わない（動いている bh serve と同時に library.json を書くと、片方の更新が消えるため）
-        await client.login();
-        console.log('ログインしました。bh serve が次の確認から Play ブックスの線を取り込みます（bh serve を使わない場合は bh google sync）');
-      } else if (sub === 'sync') {
-        const r = await client.sync();
-        console.log(describeSync(r));
-        for (const e of r.errors) console.log(`  ! ${e}`);
-      } else if (sub === 'logout') {
-        await client.logout();
-        console.log('ログアウトしました');
-      } else throw new Error('使い方: bh google login | sync | logout');
-      break;
-    }
     case 'list': {
       const lib = await store.library();
       const s = libraryStats(lib);
       console.log(`本 ${s.books} 冊 / 点 ${s.points} 件${s.thoughts ? `（うち思いつき ${s.thoughts} 件）` : ''}`);
-      for (const b of listBooks(lib)) console.log(`${String(b.count).padStart(4)}  ${b.title}${b.author ? ' — ' + b.author : ''}  [${b.sources.map((x) => SOURCES[x]).join(', ')}]`);
+      for (const b of listBooks(lib)) console.log(`${String(b.count).padStart(4)}  ${b.title}${b.author ? ' — ' + b.author : ''}`);
       break;
     }
     case 'search': {
@@ -240,7 +212,7 @@ async function main() {
       const value = vals.join(' ');
       if (!key) {
         const hidden = (v) => (v ? '(設定済み)' : '');
-        console.log(JSON.stringify({ ...cfg, token: hidden(cfg.token), google: { ...cfg.google, clientSecret: hidden(cfg.google.clientSecret) } }, null, 2));
+        console.log(JSON.stringify({ ...cfg, token: hidden(cfg.token) }, null, 2));
         console.log(`データ: ${store.dataDir}`);
         break;
       }
@@ -261,20 +233,6 @@ async function main() {
           cfg.port = port;
         },
         host: () => (cfg.host = value),
-        'google-client': () => {
-          const [clientId, clientSecret = ''] = vals;
-          if (!clientId) throw new Error('使い方: bh config google-client <クライアント ID> <クライアント シークレット>');
-          Object.assign(cfg.google, { clientId, clientSecret });
-        },
-        'google-folder': () => {
-          if (value && !isFolderId(value)) throw new Error('フォルダ ID の形式ではありません（ドライブでフォルダを開いた URL の folders/ の後ろの文字列）');
-          cfg.google.folderId = value;
-        },
-        'google-interval': () => {
-          const sec = Number(value);
-          if (!Number.isFinite(sec) || sec < MIN_INTERVAL_SEC) throw new Error(`${MIN_INTERVAL_SEC} 秒以上を指定してください`);
-          cfg.google.intervalSec = sec;
-        },
         auto: () => {
           if (!['on', 'off'].includes(value)) throw new Error('使い方: bh config auto on | off');
           cfg.autoAnalyze = { ...cfg.autoAnalyze, enabled: value === 'on' };

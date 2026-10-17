@@ -3,7 +3,7 @@
 import { html } from '../html.js';
 import { deletedBooks, deletedHighlights } from '../../core/model.js';
 import { isoDate } from '../../core/text.js';
-import { COLOR_VAR, locationText, sourceBadge } from '../ui.js';
+import { COLOR_VAR, locationText } from '../ui.js';
 
 function trashCard(h, library) {
   const book = library.books[h.bookId];
@@ -17,7 +17,6 @@ function trashCard(h, library) {
         ${h.favorite ? html`<span aria-label="お気に入り">★</span>` : ''}
         <a class="book-link" href="#/book/${book.id}">${book.title}</a>
         <span>${locationText(h)}</span>
-        ${sourceBadge(h.source)}
         <span class="muted">削除: ${isoDate(h.userUpdatedAt || h.updatedAt)}</span>
       </div>
       <button type="button" class="btn small" data-action="restore-highlight" data-id="${h.id}">元に戻す</button>

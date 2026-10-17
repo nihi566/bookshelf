@@ -14,7 +14,7 @@ import { pointView } from './views/point.js';
 import { linkPickerView } from './views/links.js';
 import { askView } from './views/ask.js';
 import { outlineNewView, outlineView, outlinesView } from './views/outlines.js';
-import { importView, kindleSyncBlock, playbooksSyncBlock, settingsView } from './views/settings.js';
+import { importView, kindleSyncBlock, settingsView } from './views/settings.js';
 import { wishlist } from './views/wishlist.js';
 import { records } from './views/records.js';
 import { thoughtsView } from './views/thoughts.js';
@@ -60,7 +60,7 @@ const siteMapView = {
     const side = (axis) => map.filter((g) => g.axis === axis).map(siteMapGroup);
     return html`<a class="back" href="#/settings">‹ 設定</a>
       <div class="page-head"><div><h1>すべての画面</h1><div class="sub">下のタブに無い画面も、ここから開けます</div></div></div>
-      <div class="section"><h2>読書メモ</h2></div>
+      <div class="section"><h2>本</h2></div>
       ${side('memo')}
       <div class="section"><h2>価格</h2></div>
       ${side('price')}`;
@@ -170,7 +170,7 @@ export const JOB_PATHS = ['/knowledge', '/knowledge/pending'];
 export const PC_INFO_PATHS = ['/settings', '/import', '/', '/knowledge'];
 // 描き直さず、欄だけ差し替える画面（描き直すと取り込み結果の表示・開いた説明・今日の点の「別の点」が消える）
 export const PC_INFO_BOXES = {
-  '/import': [['#kindle-sync', kindleSyncBlock], ['#playbooks-sync', playbooksSyncBlock]],
+  '/import': [['#kindle-sync', kindleSyncBlock]],
   '/': [['#home-alert', homeAlertBlock]],
   '/knowledge': [['#auto-status', autoStatusBlock], ['#pc-analysis-head', pcPanelHead]],
 };
