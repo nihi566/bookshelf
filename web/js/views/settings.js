@@ -52,14 +52,12 @@ const HELP = {
   kindleDevice: { id: 'help-kindle-device', label: 'Kindle 端末' },
   kindleExport: { id: 'help-kindle-export', label: 'Kindle のエクスポート' },
   kindleBookmarklet: { id: 'help-kindle-bookmarklet', label: 'ブックマークレット' },
-  notes: { id: 'help-reading-notes', label: 'メモ（.md）' },
 };
 const HELP_BY_EXT = {
   txt: [HELP.kindleDevice],
   html: [HELP.kindleExport],
   htm: [HELP.kindleExport],
   json: [HELP.kindleBookmarklet],
-  md: [HELP.notes],
 };
 
 /**
@@ -104,7 +102,6 @@ export function importResultBlock(result, state) {
   return html`<div class="card" style="margin-top:12px">
         <p class="notice${o.tone ? ` ${o.tone}` : ''}">${o.note}${result.analysisChanged ? '（バックアップの新しい分析結果も反映）' : ''}</p>
         <ul class="result-list">${results.map((r) => html`<li>${r.error ? '✗' : '✓'} <b>${r.name}</b><br><span class="small muted">${r.error || `${r.formatLabel} — 本 ${r.books} 冊 / 点 ${r.highlights} 件${r.images ? `（画像 ${r.images} 枚は取り込めません）` : ''}`}</span>${r.error ? importHelpLinks(r.name) : ''}</li>`)}</ul>
-        ${stats.memoTitles?.length ? html`<p class="small muted">既にある本にまとめたメモ: ${stats.memoTitles.map((m) => `「${m.from}」→『${m.to}』`).join('、')}</p>` : ''}
         ${analyze.note}
         <div class="row" style="margin-top:8px">${analyze.button}<a class="btn small" href="#/books">本を見る</a></div>
       </div>`;
@@ -159,10 +156,9 @@ export const importView = {
         </details>
       </div>
 
-      <div class="section"><h2>紙の本・メモ</h2></div>
-      <div class="card" id="help-reading-notes">
-        <p class="help">紙の本は <a href="#/books">読んだ本</a> の「＋ 紙の本」で書名と表紙を登録し、本の画面で線を引いた文を入力します。</p>
-        <p class="help">Obsidian などに書いた<b>メモ（.md）</b>は、上の欄でそのまま選べます（複数可）。ファイル名を書名にし、見出しを章、段落・箇条書きの項目を 1 点ずつにします。書名の一部が同じ本が 1 冊だけあればその本にまとめ、既にある線と同じ文は増やしません。画像の埋め込みは取り込めません。PC では <code>bh import &lt;フォルダ&gt;</code> でフォルダごと取り込めます。</p>
+      <div class="section"><h2>紙の本</h2></div>
+      <div class="card">
+        <p class="help">紙の本は <a href="#/books">読んだ本</a> の「＋ 本を登録」で書名と表紙を登録し、本の画面で線を引いた文を入力します。</p>
       </div>
 
       <div class="section"><h2>ほかに</h2></div>
@@ -185,7 +181,7 @@ export const settingsView = {
     const s = libraryStats(state.library);
     return html`<div class="page-head"><h1>設定</h1></div>
       <div class="card stack">
-        <a class="row spread" href="#/import"><b>取り込み</b><span class="muted">Kindle・紙の本・<span class="nowrap">メモ ›</span></span></a>
+        <a class="row spread" href="#/import"><b>取り込み</b><span class="muted">Kindle・<span class="nowrap">紙の本 ›</span></span></a>
         <a class="row spread" href="#/sitemap"><b>すべての画面</b><span class="muted">タブに無い画面も ›</span></a>
       </div>
 

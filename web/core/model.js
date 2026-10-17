@@ -25,7 +25,7 @@ export const SOURCES = {
   kindle: 'Kindle',
   playbooks: 'Play Books',
   paper: '紙の本',
-  // Obsidian などに書いていた読書メモ（Markdown）から移したもの
+  // 以前取り込んだ自分のメモ（Markdown）の点。取り込みは廃止したが、データは残っている
   memo: 'メモ',
   manual: '手入力',
 };
@@ -98,14 +98,12 @@ export function highlightIdFor(bookId, text) {
  * reviveDeleted: false … 削除済みの本は復活させずに飛ばす（ブラウザ拡張の自動取り込みなど、人が操作していない取り込み用）
  */
 export function mergeParsed(library, parsedBooks, { now = new Date().toISOString(), reviveDeleted = true } = {}) {
-  // memoTitles: 読書メモの書名を既にある本の書名に合わせたもの（取り込み結果で知らせる）
-  const stats = { books: 0, booksAdded: 0, booksUpdated: 0, added: 0, updated: 0, unchanged: 0, skippedDeleted: 0, skippedDeletedBooks: 0, memoTitles: [] };
+  const stats = { books: 0, booksAdded: 0, booksUpdated: 0, added: 0, updated: 0, unchanged: 0, skippedDeleted: 0, skippedDeletedBooks: 0 };
   for (const pb of parsedBooks) {
     // 書名・著者は 1 行にする（改行入りの書名で Markdown の見出しが崩れないように）
     const rawTitle = cleanText(pb.title).replace(/\s+/g, ' ');
     if (!rawTitle) continue;
-    const title = pb.source === 'memo' ? noteBookTitle(library, rawTitle) : rawTitle;
-    if (title !== rawTitle) stats.memoTitles.push({ from: rawTitle, to: title });
+    const title = rawTitle;
     const bookId = bookIdFor(title);
     let book = library.books[bookId];
     const isNew = !book;
@@ -154,13 +152,6 @@ export function mergeParsed(library, parsedBooks, { now = new Date().toISOString
         }
         if (fillMissing(current, ph, now)) stats.updated++;
         else stats.unchanged++;
-        continue;
-      }
-      // 読書メモは Kindle・Play ブックスの線を写したものが多い。既にある線に含まれる文は増やさない
-      // 短い文（「習慣」など）はどの線にも含まれがちなので、含む判定はある程度の長さの文だけにする
-      const c = compact(ph.text);
-      if (pb.source === 'memo' && existing.some((h) => (c.length >= MEMO_CONTAINED_MIN ? compact(importedText(h)).includes(c) : compact(importedText(h)) === c))) {
-        stats.unchanged++;
         continue;
       }
       // Kindle はハイライトを伸ばすと古い短い版も残るので、包含関係で置き換える
@@ -231,18 +222,6 @@ export function isTextEdited(h) {
 /** 空白・改行の違いを無視して比べるための形 */
 function compact(text) {
   return normalizeText(text).replace(/\s/g, '');
-}
-
-/**
- * 読書メモの書名を、既にある本の書名に合わせる。メモの書名は短く書かれがち（「ハマトン」→『新版 ハマトンの知的生活』）なので、
- * 同じ書名の本が無く、メモの書名を含む本がちょうど 1 冊だけあるときはその本にまとめる（2 冊以上なら決めつけない）
- */
-function noteBookTitle(library, title) {
-  if (library.books[bookIdFor(title)]) return title;
-  const key = bookKey(title);
-  if (key.length < 3) return title;
-  const hits = Object.values(library.books).filter((b) => !b.deleted && bookKey(b.title).includes(key));
-  return hits.length === 1 ? hits[0].title : title;
 }
 
 /** 古い版のデータ（userUpdatedAt 無し）で編集の跡があれば、updatedAt を進める前にその時刻を編集時刻として残す */

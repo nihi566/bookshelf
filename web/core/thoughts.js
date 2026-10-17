@@ -1,6 +1,6 @@
 // 思いつき（フリートノート）: 本に属さないメモ。書いたらそのまま分析の点になり、あとで受け箱で整理する
 //
-// 「メモ」と呼ぶものは他にもある（読書メモ = source 'memo' の点 / 取り込んだメモ = 点の note /
+// 「メモ」と呼ぶものは他にもある（以前取り込んだメモ = source 'memo' の点 / 取り込んだメモ = 点の note /
 // 自分のメモ = 点の userNote）。混ざらないよう、コードではこれを thought（思いつき）と呼ぶ。
 //
 // Thought = { id: 't…', text, status: 'inbox' | 'done' | 'discarded', statusAt, favorite?, favoriteAt?, answerTo?, createdAt, updatedAt }
