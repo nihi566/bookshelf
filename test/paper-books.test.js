@@ -155,3 +155,21 @@ test('bookCoverUrl: アップロードした表紙を先に使い、安全な画
   assert.equal(isUploadedCover('data:image/png;base64,"><script>'), false);
   assert.equal(isUploadedCover('data:image/jpeg;base64,' + 'A'.repeat(600000)), false);
 });
+
+test('紙の本の画面: 線を引いた文の欄にページ・章は無く、読み終えた日の欄をその場に置く', async () => {
+  const { book } = await import('../web/js/views/library.js');
+  const lib = emptyLibrary();
+  const b = registerBook(lib, { title: '手入力の本' });
+  const out = String(book.render({ state: { library: lib, analysis: null }, params: { id: b.id } }));
+  assert.match(out, /線を引いた文を足す/);
+  assert.doesNotMatch(out, /name="page"|name="chapter"/);
+  assert.match(out, /id="book-record"/);
+  assert.doesNotMatch(out, /#\/records\?book=/);
+});
+
+test('下のタブ: 「本を足す」ボタンが紙の本の登録シートを開く', async () => {
+  const { readFileSync } = await import('node:fs');
+  const index = readFileSync(new URL('../web/index.html', import.meta.url), 'utf8');
+  const tabbar = index.match(/<nav class="tabbar"[^>]*>([\s\S]*?)<\/nav>/)[1];
+  assert.match(tabbar, /<button[^>]*data-action="register-book"[^>]*>[\s\S]*?本を足す/);
+});
