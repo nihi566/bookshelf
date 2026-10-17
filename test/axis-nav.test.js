@@ -43,7 +43,7 @@ test('NIH-286: 上のバーに「読書メモ」「価格」の切り替えが�
   const header = index.match(/<header class="topbar">([\s\S]*?)<\/header>/)[1];
   const axis = header.match(/<nav class="axis-switch" aria-label="([^"]+)">([\s\S]*?)<\/nav>/);
   assert.ok(axis, '上のバー（どの画面にも出る）にある');
-  assert.match(axis[2], /<a href="#\/" data-axis="memo">[\s\S]*?読書メモ[\s\S]*?<\/a>/);
+  assert.match(axis[2], /<a href="#\/" data-axis="memo">[\s\S]*?本[\s\S]*?<\/a>/);
   assert.match(axis[2], /<a href="#\/wishlist" data-axis="price">[\s\S]*?価格[\s\S]*?<\/a>/);
   assert.match(header, /data-action="new-thought"/);
 });

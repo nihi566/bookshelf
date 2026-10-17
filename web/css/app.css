@@ -98,7 +98,7 @@ mark { background: var(--mark); color: inherit; border-radius: 2px; padding: 0 1
 .brand:hover { text-decoration: none; }
 .brand-mark { width: 22px; height: 22px; background: url("../icons/icon.svg") center / contain no-repeat; }
 .topbar-status { flex: 1 1 auto; font-size: 0.8rem; color: var(--ink-3); text-align: right; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-/* 読書メモ / 価格の切り替え（NIH-286）。今いる軸を塗る */
+/* 本 / 価格の切り替え（NIH-286）。今いる軸を塗る */
 .axis-switch { flex: none; display: inline-flex; padding: 2px; border-radius: 999px; border: 1px solid var(--line); background: var(--surface-2); }
 .axis-switch a { display: inline-flex; align-items: center; min-height: 32px; padding: 2px 12px; border-radius: 999px; color: var(--ink-2); font-size: 0.85rem; font-weight: 600; white-space: nowrap; }
 .axis-switch a:hover { text-decoration: none; color: var(--accent); }

@@ -60,7 +60,7 @@ const siteMapView = {
     const side = (axis) => map.filter((g) => g.axis === axis).map(siteMapGroup);
     return html`<a class="back" href="#/settings">‹ 設定</a>
       <div class="page-head"><div><h1>すべての画面</h1><div class="sub">下のタブに無い画面も、ここから開けます</div></div></div>
-      <div class="section"><h2>読書メモ</h2></div>
+      <div class="section"><h2>本</h2></div>
       ${side('memo')}
       <div class="section"><h2>価格</h2></div>
       ${side('price')}`;

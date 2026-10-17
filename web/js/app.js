@@ -53,7 +53,7 @@ function markPicksSeen(ids) {
 }
 let currentPath = null;
 let currentHash = null;
-// 軸（読書メモ / 価格）ごとに最後に開いた画面。上のバーの切り替えで、その画面へ戻す（NIH-286）
+// 軸（本 / 価格）ごとに最後に開いた画面。上のバーの切り替えで、その画面へ戻す（NIH-286）
 let axisHashes = AXIS_HOME;
 
 const parseHash = () => parseRouteHash(location.hash);

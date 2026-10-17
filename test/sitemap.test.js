@@ -40,7 +40,7 @@ test('NIH-296: 「すべての画面」は #/sitemap で開け、設定のタブ
   assert.equal(m.tab, 'settings');
   const out = String(m.view.render({ state: st(emptyLibrary()) }));
   assert.match(out, /<h1>すべての画面<\/h1>/);
-  assert.match(out, /<h2>読書メモ<\/h2>/);
+  assert.match(out, /<h2>本<\/h2>/);
   assert.match(out, /<h2>価格<\/h2>/);
   assert.match(out, /<a class="row spread" href="#\/knowledge\/far"><b>遠いつながり<\/b>/);
   assert.match(out, /<a class="row spread" href="#\/trash"><b>削除した点<\/b>/);
