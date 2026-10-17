@@ -18,7 +18,7 @@ export const FORMAT_LABELS = {
   'kindle-export': 'Kindle（ノートブックのエクスポート HTML）',
   'kindle-notebook': 'Kindle（ノートブックのブックマークレット）',
   playbooks: 'Play Books（ドライブのメモ）',
-  'reading-note': '読書メモ（Markdown）',
+  'reading-note': 'メモ（Markdown）',
   library: 'このアプリのバックアップ',
   parsed: '汎用 JSON',
 };
