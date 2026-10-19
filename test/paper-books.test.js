@@ -167,9 +167,11 @@ test('紙の本の画面: 線を引いた文の欄にページ・章は無く、
   assert.doesNotMatch(out, /#\/records\?book=/);
 });
 
-test('下のタブ: 「本を足す」ボタンが紙の本の登録シートを開く', async () => {
+test('上のバー: 「メモ」の左隣の「本を足す」ボタンが紙の本の登録シートを開く（下のタブには無い。NIH-310）', async () => {
   const { readFileSync } = await import('node:fs');
   const index = readFileSync(new URL('../web/index.html', import.meta.url), 'utf8');
+  const header = index.match(/<header class="topbar">([\s\S]*?)<\/header>/)[1];
+  assert.match(header, /<button type="button" class="topbar-add" data-action="register-book" aria-label="読んだ本を足す">[\s\S]*?本を足す<\/span><\/button>\s*(?:<!--[\s\S]*?-->\s*)?<button[^>]*data-action="new-thought"/);
   const tabbar = index.match(/<nav class="tabbar"[^>]*>([\s\S]*?)<\/nav>/)[1];
-  assert.match(tabbar, /<button[^>]*data-action="register-book"[^>]*>[\s\S]*?本を足す/);
+  assert.doesNotMatch(tabbar, /register-book/);
 });
