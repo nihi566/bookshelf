@@ -28,3 +28,12 @@ def classify_kind(title: str) -> str:
     if title and _MANGA_LABEL_PATTERN.search(title):
         return KIND_MANGA
     return KIND_BOOK
+
+
+def is_manga(title: str, kind_override: str = None) -> bool:
+    """マンガか。手で切り替えた種別（book_marks.kind）があればそれを、無ければタイトルからの判定を使う。
+
+    Amazon への取得（本編 ASIN の解決・価格のクロール）からマンガを外すために使う（NIH-309）。
+    """
+    kind = kind_override if kind_override in KINDS else classify_kind(title)
+    return kind == KIND_MANGA

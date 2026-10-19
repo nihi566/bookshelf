@@ -24,6 +24,7 @@ import asyncio
 from typing import Callable, Dict, List, Optional
 
 from src.anti_ban import BanCoordinator, RequestPacer
+from src.book_kind import is_manga
 from src.bookmeter import fetch_wish_books
 from src.crawler import crawl_price_info
 from src.database import get_session
@@ -31,6 +32,7 @@ from src.repository import (
     attach_bookmeter_ids,
     fix_truncated_bookmeter_titles,
     get_bookmeter_asin_overrides,
+    get_kind_overrides,
     get_or_create_by_paid_asin,
     save_price_history,
 )
@@ -75,6 +77,7 @@ async def sync_bookmeter_wishlist(progress_cb: Optional[ProgressCallback] = None
             "total":         int,        # 読書メーターから取得した本の総数
             "registered":    int,        # 登録・クロールまで完了した件数
             "skipped":       int,        # スキップした件数（ASIN解決失敗・登録失敗・クロール失敗）
+            "manga_skipped": int,        # マンガのため検索・クロールしなかった件数（skipped には数えない）
             "failed_titles": list[str],  # スキップした本のタイトル一覧
             "fetch_failed":  bool,       # 読書メーターの一覧を取得できなかった（0 件の成功と区別する）
         }
@@ -94,7 +97,7 @@ async def sync_bookmeter_wishlist(progress_cb: Optional[ProgressCallback] = None
         books = await asyncio.to_thread(fetch_wish_books)
     except Exception as e:
         emit(f"[エラー] 読書メーター取得に失敗しました: {e}")
-        return {"total": 0, "registered": 0, "skipped": 0, "failed_titles": [], "fetch_failed": True}
+        return {"total": 0, "registered": 0, "skipped": 0, "manga_skipped": 0, "failed_titles": [], "fetch_failed": True}
 
     emit(f"[OK] 読書メーターから「読みたい本」を {len(books)} 件取得しました。")
 
@@ -122,11 +125,19 @@ async def sync_bookmeter_wishlist(progress_cb: Optional[ProgressCallback] = None
         overrides = {}
         emit(f"  [Error] 手動で対応づけた ASIN を読めませんでした（いつもどおり検索します）: {e}")
 
+    # 公開ページで手で切り替えた種別（読めなくても、タイトルからの判定だけでマンガを外して続ける）
+    try:
+        kind_overrides = get_kind_overrides()
+    except Exception as e:
+        kind_overrides = {}
+        emit(f"  [Error] 手で切り替えた種別を読めませんでした（タイトルだけで判定します）: {e}")
+
     ban_coordinator = BanCoordinator()
     request_pacer = RequestPacer()
 
     registered = 0
     skipped = 0
+    manga_skipped = 0
     failed_titles: List[str] = []
 
     for i, book in enumerate(books, 1):
@@ -135,6 +146,13 @@ async def sync_bookmeter_wishlist(progress_cb: Optional[ProgressCallback] = None
         emit(f"[{i}/{len(books)}] {title}")
 
         manual_asin = overrides.get(title.strip())
+        # マンガは ASIN の検索も価格のクロールもしない（NIH-309）。手で切り替えた種別は ASIN が分かる本
+        # （bookmeter-asin で対応づけた本）にだけ効く（検索して ASIN を知ること自体が Amazon への取得のため）
+        if is_manga(title, kind_overrides.get(manual_asin)):
+            emit(f"  [Manga-Skip] マンガのため確認をスキップします: {title}")
+            manga_skipped += 1
+            continue
+
         if manual_asin:
             paid_asin = manual_asin
             emit(f"  [OK] 手動で対応づけた ASIN を使います: {paid_asin}")
@@ -197,12 +215,13 @@ async def sync_bookmeter_wishlist(progress_cb: Optional[ProgressCallback] = None
         emit(f"  [OK] クロール成功: 価格=¥{price_data.get('sell_price')}")
         registered += 1
 
-    emit(f"=== 読書メーター同期 完了: 登録 {registered} 件 / スキップ {skipped} 件 ===")
+    emit(f"=== 読書メーター同期 完了: 登録 {registered} 件 / スキップ {skipped} 件 / マンガ {manga_skipped} 件 ===")
 
     return {
         "total": len(books),
         "registered": registered,
         "skipped": skipped,
+        "manga_skipped": manga_skipped,
         "failed_titles": failed_titles,
         "fetch_failed": False,
     }
