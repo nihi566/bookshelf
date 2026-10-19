@@ -1645,6 +1645,33 @@ class BookMarksTest(unittest.TestCase):
         self.assertEqual(len(result["skipped"]), 8)
         self.assertEqual(set(repository.get_book_marks()), {"B0GOOD0001"})
 
+    def test_get_seen_asins_returns_only_seen_without_creating_table(self):
+        """価格を取らない本（NIH-308）。テーブルが無ければ作らずに空、あれば「読んだ」の ASIN だけ。"""
+        self.assertEqual(repository.get_seen_asins(), set())
+        self.assertNotIn("book_marks", self._table_names())
+
+        repository.import_marks(
+            [
+                {"asin": "B0SEEN0001", "title": "読んだ本", "tag": "seen", "rating": 4},
+                {"asin": "B0WANT0001", "title": "読みたい本", "tag": "wanted"},
+                {"asin": "B0KIND0001", "title": "種別だけ", "kind": "manga"},
+            ]
+        )
+        self.assertEqual(repository.get_seen_asins(), {"B0SEEN0001"})
+
+    def test_get_seen_titles_returns_book_mapping_titles_of_seen_books(self):
+        """読書メーターの一覧の書名で、ASIN を探す前に「読んだ」本を見分けるための書名（前後の空白は除く）。"""
+        self.assertEqual(repository.get_seen_titles(), set())
+        self._insert_mapping("B0SEEN0001", " 読んだ本 ")
+        self._insert_mapping("B0WANT0001", "読みたい本")
+        repository.import_marks(
+            [
+                {"asin": "B0SEEN0001", "title": "読んだ本", "tag": "seen"},
+                {"asin": "B0WANT0001", "title": "読みたい本", "tag": "wanted"},
+            ]
+        )
+        self.assertEqual(repository.get_seen_titles(), {"読んだ本"})
+
 
 
 class FixTruncatedBookmeterTitlesTest(unittest.TestCase):

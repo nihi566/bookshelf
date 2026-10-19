@@ -32,6 +32,8 @@ from src.repository import (
     fix_truncated_bookmeter_titles,
     get_bookmeter_asin_overrides,
     get_or_create_by_paid_asin,
+    get_seen_asins,
+    get_seen_titles,
     save_price_history,
 )
 from src.title_resolver import resolve_title_to_paid_asin
@@ -75,6 +77,7 @@ async def sync_bookmeter_wishlist(progress_cb: Optional[ProgressCallback] = None
             "total":         int,        # 読書メーターから取得した本の総数
             "registered":    int,        # 登録・クロールまで完了した件数
             "skipped":       int,        # スキップした件数（ASIN解決失敗・登録失敗・クロール失敗）
+            "seen":          int,        # 「読んだ」を取り込み済みのため検索・価格の取得をしなかった件数（失敗ではない）
             "failed_titles": list[str],  # スキップした本のタイトル一覧
             "fetch_failed":  bool,       # 読書メーターの一覧を取得できなかった（0 件の成功と区別する）
         }
@@ -94,7 +97,7 @@ async def sync_bookmeter_wishlist(progress_cb: Optional[ProgressCallback] = None
         books = await asyncio.to_thread(fetch_wish_books)
     except Exception as e:
         emit(f"[エラー] 読書メーター取得に失敗しました: {e}")
-        return {"total": 0, "registered": 0, "skipped": 0, "failed_titles": [], "fetch_failed": True}
+        return {"total": 0, "registered": 0, "skipped": 0, "seen": 0, "failed_titles": [], "fetch_failed": True}
 
     emit(f"[OK] 読書メーターから「読みたい本」を {len(books)} 件取得しました。")
 
@@ -122,17 +125,31 @@ async def sync_bookmeter_wishlist(progress_cb: Optional[ProgressCallback] = None
         overrides = {}
         emit(f"  [Error] 手動で対応づけた ASIN を読めませんでした（いつもどおり検索します）: {e}")
 
+    # 「読んだ」を取り込んだ本は、それ以後は検索も価格の取得もしない（NIH-308。読めなくても同期は続ける）
+    try:
+        seen_asins = get_seen_asins()
+        seen_titles = get_seen_titles()
+    except Exception as e:
+        seen_asins, seen_titles = set(), set()
+        emit(f"  [Error] 「読んだ」の印を読めませんでした（読んだ本も価格を取ります）: {e}")
+
     ban_coordinator = BanCoordinator()
     request_pacer = RequestPacer()
 
     registered = 0
     skipped = 0
+    seen = 0
     failed_titles: List[str] = []
 
     for i, book in enumerate(books, 1):
         title = book.get("title", "")
         author = book.get("author", "")
         emit(f"[{i}/{len(books)}] {title}")
+
+        if title.strip() in seen_titles:
+            emit("  [Seen-Skip] 読んだ本のため価格を取りません")
+            seen += 1
+            continue
 
         manual_asin = overrides.get(title.strip())
         if manual_asin:
@@ -145,6 +162,11 @@ async def sync_bookmeter_wishlist(progress_cb: Optional[ProgressCallback] = None
                 failed_titles.append(title)
                 continue
             emit(f"  [OK] ASIN解決成功: {paid_asin}")
+
+        if paid_asin in seen_asins:
+            emit(f"  [Seen-Skip] 読んだ本のため価格を取りません（ASIN: {paid_asin}）")
+            seen += 1
+            continue
 
         try:
             with get_session() as session:
@@ -197,12 +219,14 @@ async def sync_bookmeter_wishlist(progress_cb: Optional[ProgressCallback] = None
         emit(f"  [OK] クロール成功: 価格=¥{price_data.get('sell_price')}")
         registered += 1
 
-    emit(f"=== 読書メーター同期 完了: 登録 {registered} 件 / スキップ {skipped} 件 ===")
+    seen_note = f" / 読んだ本 {seen} 件" if seen else ""
+    emit(f"=== 読書メーター同期 完了: 登録 {registered} 件 / スキップ {skipped} 件{seen_note} ===")
 
     return {
         "total": len(books),
         "registered": registered,
         "skipped": skipped,
+        "seen": seen,
         "failed_titles": failed_titles,
         "fetch_failed": False,
     }

@@ -120,6 +120,7 @@ class RunIntegrationLogContractTest(unittest.TestCase):
              patch.object(main, "get_session_processed_asins", return_value={"P5"}), \
              patch.object(main, "extract_samples", return_value=list(self.SAMPLES)), \
              patch.object(main, "get_purchased_asins", return_value=set()), \
+             patch.object(main, "get_seen_asins", return_value=set()), \
              patch.object(main, "get_paid_asin", side_effect=fake_get_paid_asin), \
              patch.object(main, "resolve_sample_to_paid", new=AsyncMock(side_effect=fake_resolve)), \
              patch.object(main, "crawl_price_info", new=AsyncMock(side_effect=fake_crawl)), \
@@ -225,6 +226,7 @@ class RunIntegrationOnlyAsinsTest(unittest.TestCase):
              patch.object(main, "get_session_processed_asins", return_value={"P2"}), \
              patch.object(main, "extract_samples", return_value=list(self.SAMPLES)), \
              patch.object(main, "get_purchased_asins", return_value=set()), \
+             patch.object(main, "get_seen_asins", return_value=set()), \
              patch.object(main, "get_paid_asin", side_effect=lambda s: {"S1": "P1", "S2": "P2", "S3": "P3"}[s]), \
              patch.object(main, "crawl_price_info", new=AsyncMock(side_effect=fake_crawl)), \
              patch.object(main, "save_price_history"), \
@@ -255,11 +257,42 @@ class RunIntegrationOnlyAsinsTest(unittest.TestCase):
         with patch.object(main, "init_db"), \
              patch.object(main, "extract_samples", return_value=[]), \
              patch.object(main, "get_purchased_asins", return_value=set()), \
+             patch.object(main, "get_seen_asins", return_value=set()), \
              patch.object(main, "clear_session"), \
              contextlib.redirect_stdout(io.StringIO()):
             ok = asyncio.run(main.run_integration(xml_path="dummy.xml", workers=1, only_asins={"S1"}))
 
         self.assertIs(ok, True)
+
+
+class RunIntegrationSeenSkipTest(unittest.TestCase):
+    """「読んだ」を付けて取り込んだ本は、それ以後は価格を取りに行かない（NIH-308）。"""
+
+    SAMPLES = [{"asin": f"S{i}", "title": f"本{i}"} for i in range(1, 4)]
+
+    def test_seen_books_are_not_crawled(self):
+        crawled = []
+
+        async def fake_crawl(paid_asin, **kwargs):
+            crawled.append(paid_asin)
+            return {"asin": paid_asin, "sell_price": 100, "point_value": 1}
+
+        buf = io.StringIO()
+        with patch.object(main, "init_db"), \
+             patch.object(main, "get_or_create_session_start", return_value="2026-01-01T00:00:00"), \
+             patch.object(main, "get_session_processed_asins", return_value=set()), \
+             patch.object(main, "extract_samples", return_value=list(self.SAMPLES)), \
+             patch.object(main, "get_purchased_asins", return_value=set()), \
+             patch.object(main, "get_seen_asins", return_value={"P2"}), \
+             patch.object(main, "get_paid_asin", side_effect=lambda s: "P" + s[1:]), \
+             patch.object(main, "crawl_price_info", new=AsyncMock(side_effect=fake_crawl)), \
+             patch.object(main, "save_price_history"), \
+             patch.object(main, "clear_session"), \
+             contextlib.redirect_stdout(buf):
+            asyncio.run(main.run_integration(xml_path="dummy.xml", start=1, workers=1))
+
+        self.assertEqual(sorted(crawled), ["P1", "P3"])
+        self.assertTrue(any("[Seen-Skip]" in l and "P2" in l for l in buf.getvalue().splitlines()))
 
 
 class RunIntegrationXmlFailureTest(unittest.TestCase):

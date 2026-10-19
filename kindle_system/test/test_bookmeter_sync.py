@@ -268,6 +268,71 @@ class SyncBookmeterWishlistCrawlFailureTest(unittest.TestCase):
         mock_save_price.assert_not_called()
 
 
+class SyncBookmeterWishlistSeenSkipTest(unittest.TestCase):
+    """「読んだ」を付けて取り込んだ本は、それ以後は検索も価格の取得もしない（NIH-308）。失敗の一覧にも入れない。"""
+
+    @patch("src.bookmeter_sync.save_price_history")
+    @patch("src.bookmeter_sync.crawl_price_info", new_callable=AsyncMock)
+    @patch("src.bookmeter_sync.get_or_create_by_paid_asin")
+    @patch("src.bookmeter_sync.get_session")
+    @patch("src.bookmeter_sync.resolve_title_to_paid_asin", new_callable=AsyncMock)
+    @patch("src.bookmeter_sync.get_bookmeter_asin_overrides")
+    @patch("src.bookmeter_sync.get_seen_titles")
+    @patch("src.bookmeter_sync.get_seen_asins")
+    @patch("src.bookmeter_sync.fetch_wish_books")
+    def test_seen_books_are_neither_searched_nor_crawled(
+        self, mock_fetch, mock_seen_asins, mock_seen_titles, mock_overrides, mock_resolve,
+        mock_get_session, mock_dedup, mock_crawl, mock_save_price
+    ):
+        mock_fetch.return_value = [
+            {"title": "書名で読んだと分かる本", "author": "a"},
+            {"title": "対応づけた ASIN が読んだ本", "author": "b"},
+            {"title": "検索した ASIN が読んだ本", "author": "c"},
+            {"title": "まだ読んでいない本", "author": "d"},
+        ]
+        mock_seen_titles.return_value = {"書名で読んだと分かる本"}
+        mock_seen_asins.return_value = {"B0SEENMAN1", "B0SEENSRC1"}
+        mock_overrides.return_value = {"対応づけた ASIN が読んだ本": "B0SEENMAN1"}
+        mock_resolve.side_effect = ["B0SEENSRC1", "B0UNREAD01"]
+        ctx, session = _make_session_mock()
+        mock_get_session.return_value = ctx
+        mock_crawl.side_effect = [{"asin": "B0UNREAD01", "sell_price": 1000, "point_value": 0}]
+
+        lines = []
+        result = asyncio.run(sync_bookmeter_wishlist(progress_cb=lines.append))
+
+        self.assertEqual([c.args[0] for c in mock_resolve.call_args_list], ["検索した ASIN が読んだ本", "まだ読んでいない本"])
+        self.assertEqual([c.args[0] for c in mock_crawl.call_args_list], ["B0UNREAD01"])
+        self.assertEqual(result["registered"], 1)
+        self.assertEqual(result["seen"], 3)
+        self.assertEqual(result["skipped"], 0)
+        self.assertEqual(result["failed_titles"], [])
+        self.assertEqual(sum("読んだ" in l and "取りません" in l for l in lines), 3)
+
+    @patch("src.bookmeter_sync.save_price_history")
+    @patch("src.bookmeter_sync.crawl_price_info", new_callable=AsyncMock)
+    @patch("src.bookmeter_sync.get_or_create_by_paid_asin")
+    @patch("src.bookmeter_sync.get_session")
+    @patch("src.bookmeter_sync.resolve_title_to_paid_asin", new_callable=AsyncMock)
+    @patch("src.bookmeter_sync.get_seen_titles", side_effect=RuntimeError("db locked"))
+    @patch("src.bookmeter_sync.get_seen_asins", side_effect=RuntimeError("db locked"))
+    @patch("src.bookmeter_sync.fetch_wish_books")
+    def test_seen_read_failure_does_not_stop_the_sync(
+        self, mock_fetch, _seen_asins, _seen_titles, mock_resolve, mock_get_session, mock_dedup, mock_crawl, mock_save_price
+    ):
+        """「読んだ」の印を読めなくても同期は止めず、いつもどおり価格を取る。"""
+        mock_fetch.return_value = [{"title": "本A", "author": "a"}]
+        mock_resolve.side_effect = ["B0AAAAAAAA"]
+        ctx, session = _make_session_mock()
+        mock_get_session.return_value = ctx
+        mock_crawl.side_effect = [{"asin": "B0AAAAAAAA", "sell_price": 1000, "point_value": 0}]
+
+        lines = []
+        result = asyncio.run(sync_bookmeter_wishlist(progress_cb=lines.append))
+
+        self.assertEqual(result["registered"], 1)
+        self.assertTrue(any("db locked" in l for l in lines))
+
 
 class SyncFixesTruncatedTitlesTest(unittest.TestCase):
     """一覧を取った直後（ASIN 解決の前）に、切れた書名を一覧の完全な書名で直す。"""

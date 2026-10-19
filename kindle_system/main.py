@@ -44,6 +44,7 @@ from src.repository import (
     init_db,
     get_paid_asin,
     get_purchased_asins,
+    get_seen_asins,
     save_mapping,
     save_price_history,
 )
@@ -239,6 +240,10 @@ async def run_integration(
     purchased_asins = get_purchased_asins()
     if purchased_asins:
         print(f"  [購入済み] {len(purchased_asins)} 件は購入済みのためクロールをスキップします。")
+    # 「読んだ」を取り込んだ本も、それ以後は価格を取りに行かない（NIH-308）
+    seen_asins = get_seen_asins()
+    if seen_asins:
+        print(f"  [読んだ] {len(seen_asins)} 件は読んだ本のためクロールをスキップします。")
 
     # BAN コーディネーター（並列数が2以上の場合に有効）
     ban_coordinator = BanCoordinator() if workers > 1 else None
@@ -260,6 +265,11 @@ async def run_integration(
         paid_asin = get_paid_asin(sample_asin)
         if paid_asin and paid_asin in purchased_asins:
             print(f"  [Purchased-Skip] 購入済みのため確認をスキップします（ASIN: {paid_asin}）")
+            continue
+
+        # 読んだ本スキップ
+        if paid_asin and paid_asin in seen_asins:
+            print(f"  [Seen-Skip] 読んだ本のため確認をスキップします（ASIN: {paid_asin}）")
             continue
 
         # レジューム判定スキップ
