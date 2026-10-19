@@ -382,5 +382,77 @@ class SyncFixesTruncatedTitlesTest(unittest.TestCase):
         self.assertTrue(any("database is locked" in line for line in lines))
 
 
+class SyncBookmeterWishlistMangaSkipTest(unittest.TestCase):
+    """マンガと判定した本は ASIN の検索も価格クロールもしない。失敗一覧にも入れない（NIH-309）。"""
+
+    @patch("src.bookmeter_sync.save_price_history")
+    @patch("src.bookmeter_sync.crawl_price_info", new_callable=AsyncMock)
+    @patch("src.bookmeter_sync.get_or_create_by_paid_asin")
+    @patch("src.bookmeter_sync.get_session")
+    @patch("src.bookmeter_sync.resolve_title_to_paid_asin", new_callable=AsyncMock)
+    @patch("src.bookmeter_sync.get_kind_overrides")
+    @patch("src.bookmeter_sync.get_bookmeter_asin_overrides")
+    @patch("src.bookmeter_sync.fetch_wish_books")
+    def test_manga_is_skipped_without_search_or_crawl(
+        self, mock_fetch, mock_asin_overrides, mock_kind_overrides, mock_resolve,
+        mock_get_session, mock_dedup, mock_crawl, mock_save_price,
+    ):
+        mock_fetch.return_value = [
+            {"title": "ONE PIECE 1 (ジャンプコミックス)", "author": "尾田栄一郎"},
+            {"title": "本A", "author": "著者A"},
+            {"title": "手で対応づけたマンガ", "author": "著者M"},
+            {"title": "手で本にしたマンガ (モーニングKC)", "author": "著者K"},
+        ]
+        mock_asin_overrides.return_value = {
+            "手で対応づけたマンガ": "B0MMMMMMMM",
+            "手で本にしたマンガ (モーニングKC)": "B0KKKKKKKK",
+        }
+        mock_kind_overrides.return_value = {"B0MMMMMMMM": "manga", "B0KKKKKKKK": "book"}
+        mock_resolve.return_value = "B0AAAAAAAA"
+        ctx, _session = _make_session_mock()
+        mock_get_session.return_value = ctx
+        mock_crawl.side_effect = lambda asin, **kwargs: {"asin": asin, "sell_price": 1000, "point_value": 0}
+
+        lines = []
+        result = asyncio.run(sync_bookmeter_wishlist(progress_cb=lines.append))
+
+        mock_resolve.assert_awaited_once()
+        self.assertEqual(sorted(c.args[0] for c in mock_crawl.await_args_list), ["B0AAAAAAAA", "B0KKKKKKKK"])
+        self.assertEqual(result["registered"], 2)
+        self.assertEqual(result["skipped"], 0)
+        self.assertEqual(result["manga_skipped"], 2)
+        self.assertEqual(result["failed_titles"], [])
+        self.assertEqual(sum("[Manga-Skip]" in l for l in lines), 2)
+
+    @patch("src.bookmeter_sync.save_price_history")
+    @patch("src.bookmeter_sync.crawl_price_info", new_callable=AsyncMock)
+    @patch("src.bookmeter_sync.get_or_create_by_paid_asin")
+    @patch("src.bookmeter_sync.get_session")
+    @patch("src.bookmeter_sync.resolve_title_to_paid_asin", new_callable=AsyncMock)
+    @patch("src.bookmeter_sync.get_kind_overrides", side_effect=RuntimeError("database is locked"))
+    @patch("src.bookmeter_sync.get_bookmeter_asin_overrides", return_value={})
+    @patch("src.bookmeter_sync.fetch_wish_books")
+    def test_kind_overrides_read_failure_falls_back_to_title(
+        self, mock_fetch, _mock_asin_overrides, _mock_kind_overrides, mock_resolve,
+        mock_get_session, _mock_dedup, mock_crawl, _mock_save_price,
+    ):
+        mock_fetch.return_value = [
+            {"title": "ONE PIECE 1 (ジャンプコミックス)", "author": "尾田栄一郎"},
+            {"title": "本A", "author": "著者A"},
+        ]
+        mock_resolve.return_value = "B0AAAAAAAA"
+        ctx, _session = _make_session_mock()
+        mock_get_session.return_value = ctx
+        mock_crawl.return_value = {"asin": "B0AAAAAAAA", "sell_price": 1000, "point_value": 0}
+
+        lines = []
+        result = asyncio.run(sync_bookmeter_wishlist(progress_cb=lines.append))
+
+        mock_resolve.assert_awaited_once()
+        self.assertEqual(result["registered"], 1)
+        self.assertEqual(result["manga_skipped"], 1)
+        self.assertTrue(any("database is locked" in l for l in lines))
+
+
 if __name__ == "__main__":
     unittest.main()

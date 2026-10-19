@@ -979,6 +979,11 @@ def get_seen_titles() -> set:
         return {m.title.strip() for m in mappings if m.title and m.title.strip()}
 
 
+def get_kind_overrides() -> dict:
+    """公開ページで手で切り替えた種別を {paid_asin: "manga" | "book"} で返す（切り替えていない本は含まない）。"""
+    return {asin: mark["kind"] for asin, mark in get_book_marks().items() if mark["kind"]}
+
+
 def _normalize_mark_item(item) -> Union[dict, str]:
     """
     書き出しファイルの1件を検証して正規化する。不正ならスキップ理由の文字列を返す。

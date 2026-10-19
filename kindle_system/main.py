@@ -40,8 +40,10 @@ MOCK_XML = kindle_sample_extractor.MOCK_XML
 from src.resolver import resolve_sample_to_paid
 from src.crawler import crawl_price_info
 from src.anti_ban import BanCoordinator, RequestPacer, get_profile
+from src.book_kind import is_manga
 from src.repository import (
     init_db,
+    get_kind_overrides,
     get_paid_asin,
     get_purchased_asins,
     get_seen_asins,
@@ -245,6 +247,13 @@ async def run_integration(
     if seen_asins:
         print(f"  [読んだ] {len(seen_asins)} 件は読んだ本のためクロールをスキップします。")
 
+    # 公開ページで手で切り替えた種別（読めなくても、タイトルからの判定だけでマンガを外して続ける）
+    try:
+        kind_overrides = get_kind_overrides()
+    except Exception as e:
+        kind_overrides = {}
+        print(f"  [Error] 手で切り替えた種別を読めませんでした（タイトルだけで判定します）: {e}")
+
     # BAN コーディネーター（並列数が2以上の場合に有効）
     ban_coordinator = BanCoordinator() if workers > 1 else None
     # アクセス間隔調整（並列数が2以上の場合に有効。ワーカー数を増やしても合計アクセス頻度が増えないようにする）
@@ -253,6 +262,7 @@ async def run_integration(
     # ── スキップを事前適用してワークリストを作成 ─────────────────────
     work_items = []  # (i, book) のリスト
     resumed_count = 0  # Resume-Skip で前回処理済みとして飛ばした件数（集計行用）
+    manga_count = 0  # マンガのため Amazon へ取りに行かなかった件数
     for i, book in enumerate(samples, 1):
         sample_asin = book["asin"]
 
@@ -261,8 +271,14 @@ async def run_integration(
             print(f"  [Manual-Skip] 指定位置（{manual_start}冊目）より前の処理をスキップします")
             continue
 
-        # 購入済みスキップ
+        # マンガは本編 ASIN の解決も価格のクロールもしない（NIH-309）
         paid_asin = get_paid_asin(sample_asin)
+        if is_manga(book["title"], kind_overrides.get(paid_asin)):
+            print(f"  [Manga-Skip] マンガのため確認をスキップします（{book['title']}）")
+            manga_count += 1
+            continue
+
+        # 購入済みスキップ
         if paid_asin and paid_asin in purchased_asins:
             print(f"  [Purchased-Skip] 購入済みのため確認をスキップします（ASIN: {paid_asin}）")
             continue
@@ -280,6 +296,8 @@ async def run_integration(
 
         work_items.append((i, book))
 
+    if manga_count:
+        print(f"  [マンガ] {manga_count} 件はマンガのためクロールをスキップしました。")
     print(f"  [OK] 実処理対象: {len(work_items)} 件（並列数: {workers}）")
     print("-" * 60)
 

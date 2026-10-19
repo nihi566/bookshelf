@@ -121,6 +121,7 @@ class RunIntegrationLogContractTest(unittest.TestCase):
              patch.object(main, "extract_samples", return_value=list(self.SAMPLES)), \
              patch.object(main, "get_purchased_asins", return_value=set()), \
              patch.object(main, "get_seen_asins", return_value=set()), \
+             patch.object(main, "get_kind_overrides", return_value={}), \
              patch.object(main, "get_paid_asin", side_effect=fake_get_paid_asin), \
              patch.object(main, "resolve_sample_to_paid", new=AsyncMock(side_effect=fake_resolve)), \
              patch.object(main, "crawl_price_info", new=AsyncMock(side_effect=fake_crawl)), \
@@ -227,6 +228,7 @@ class RunIntegrationOnlyAsinsTest(unittest.TestCase):
              patch.object(main, "extract_samples", return_value=list(self.SAMPLES)), \
              patch.object(main, "get_purchased_asins", return_value=set()), \
              patch.object(main, "get_seen_asins", return_value=set()), \
+             patch.object(main, "get_kind_overrides", return_value={}), \
              patch.object(main, "get_paid_asin", side_effect=lambda s: {"S1": "P1", "S2": "P2", "S3": "P3"}[s]), \
              patch.object(main, "crawl_price_info", new=AsyncMock(side_effect=fake_crawl)), \
              patch.object(main, "save_price_history"), \
@@ -258,6 +260,7 @@ class RunIntegrationOnlyAsinsTest(unittest.TestCase):
              patch.object(main, "extract_samples", return_value=[]), \
              patch.object(main, "get_purchased_asins", return_value=set()), \
              patch.object(main, "get_seen_asins", return_value=set()), \
+             patch.object(main, "get_kind_overrides", return_value={}), \
              patch.object(main, "clear_session"), \
              contextlib.redirect_stdout(io.StringIO()):
             ok = asyncio.run(main.run_integration(xml_path="dummy.xml", workers=1, only_asins={"S1"}))
@@ -284,6 +287,7 @@ class RunIntegrationSeenSkipTest(unittest.TestCase):
              patch.object(main, "extract_samples", return_value=list(self.SAMPLES)), \
              patch.object(main, "get_purchased_asins", return_value=set()), \
              patch.object(main, "get_seen_asins", return_value={"P2"}), \
+             patch.object(main, "get_kind_overrides", return_value={}), \
              patch.object(main, "get_paid_asin", side_effect=lambda s: "P" + s[1:]), \
              patch.object(main, "crawl_price_info", new=AsyncMock(side_effect=fake_crawl)), \
              patch.object(main, "save_price_history"), \
@@ -293,6 +297,91 @@ class RunIntegrationSeenSkipTest(unittest.TestCase):
 
         self.assertEqual(sorted(crawled), ["P1", "P3"])
         self.assertTrue(any("[Seen-Skip]" in l and "P2" in l for l in buf.getvalue().splitlines()))
+
+
+class RunIntegrationMangaSkipTest(unittest.TestCase):
+    """マンガと判定した本は、本編 ASIN の解決も価格クロールもしない（NIH-309）。"""
+
+    SAMPLES = [
+        {"asin": "S1", "title": "コンビニ人間"},
+        {"asin": "S2", "title": "ブルーピリオド（１） (アフタヌーンKC)"},
+        {"asin": "S3", "title": "よつばと！ 1 (電撃コミックス)"},
+        {"asin": "S4", "title": "レーベル表記の無いマンガ"},
+        {"asin": "S5", "title": "まだ ASIN が分からないマンガ (ジャンプコミックスDIGITAL)"},
+    ]
+    PAID = {"S1": "P1", "S2": "P2", "S3": "P3", "S4": "P4", "S5": None}
+
+    def _run(self, kind_overrides, overrides_error=None):
+        crawled = []
+        resolved = []
+
+        async def fake_crawl(paid_asin, **kwargs):
+            crawled.append(paid_asin)
+            return {"asin": paid_asin, "sell_price": 100, "point_value": 1}
+
+        async def fake_resolve(sample_asin, **kwargs):
+            resolved.append(sample_asin)
+            return None
+
+        if overrides_error:
+            overrides = patch.object(main, "get_kind_overrides", side_effect=overrides_error)
+        else:
+            overrides = patch.object(main, "get_kind_overrides", return_value=kind_overrides)
+        buf = io.StringIO()
+        with patch.object(main, "init_db"), \
+             patch.object(main, "get_or_create_session_start", return_value="2026-01-01T00:00:00"), \
+             patch.object(main, "get_session_processed_asins", return_value=set()), \
+             patch.object(main, "extract_samples", return_value=list(self.SAMPLES)), \
+             patch.object(main, "get_purchased_asins", return_value=set()), \
+             patch.object(main, "get_seen_asins", return_value=set()), \
+             overrides, \
+             patch.object(main, "get_paid_asin", side_effect=lambda s: self.PAID[s]), \
+             patch.object(main, "resolve_sample_to_paid", new=AsyncMock(side_effect=fake_resolve)), \
+             patch.object(main, "crawl_price_info", new=AsyncMock(side_effect=fake_crawl)), \
+             patch.object(main, "save_mapping"), \
+             patch.object(main, "save_price_history"), \
+             patch.object(main, "clear_session"), \
+             contextlib.redirect_stdout(buf):
+            asyncio.run(main.run_integration(xml_path="dummy.xml", start=1, workers=1))
+        return buf.getvalue().splitlines(), crawled, resolved
+
+    def test_manga_by_title_is_neither_resolved_nor_crawled(self):
+        lines, crawled, resolved = self._run({})
+
+        self.assertEqual(sorted(crawled), ["P1", "P4"])
+        self.assertEqual(resolved, [])
+        self.assertEqual(sum("[Manga-Skip]" in l for l in lines), 3)
+        self.assertTrue(any("マンガ" in l and "3 件" in l for l in lines))
+
+    def test_kind_switched_by_hand_overrides_the_title(self):
+        # 公開ページで「本」に切り替えたマンガ表記の本はクロールし、「マンガ」に切り替えた本は飛ばす
+        _, crawled, _ = self._run({"P2": "book", "P4": "manga"})
+
+        self.assertEqual(sorted(crawled), ["P1", "P2"])
+
+    def test_manga_is_skipped_even_when_retried_by_asin(self):
+        # 失敗した本だけの再実行でも、マンガは対象外のまま（経路によって Amazon へ取りに行かない）
+        buf = io.StringIO()
+        crawl = AsyncMock(return_value={"asin": "P2", "sell_price": 100, "point_value": 1})
+        with patch.object(main, "init_db"), \
+             patch.object(main, "extract_samples", return_value=list(self.SAMPLES)), \
+             patch.object(main, "get_purchased_asins", return_value=set()), \
+             patch.object(main, "get_seen_asins", return_value=set()), \
+             patch.object(main, "get_kind_overrides", return_value={}), \
+             patch.object(main, "get_paid_asin", side_effect=lambda s: self.PAID[s]), \
+             patch.object(main, "crawl_price_info", new=crawl), \
+             patch.object(main, "save_price_history"), \
+             contextlib.redirect_stdout(buf):
+            asyncio.run(main.run_integration(xml_path="dummy.xml", workers=1, only_asins={"S2"}))
+
+        crawl.assert_not_awaited()
+        self.assertIn("[Manga-Skip]", buf.getvalue())
+
+    def test_reading_overrides_failure_falls_back_to_title(self):
+        lines, crawled, _ = self._run(None, overrides_error=RuntimeError("database is locked"))
+
+        self.assertEqual(sorted(crawled), ["P1", "P4"])
+        self.assertTrue(any("database is locked" in l for l in lines))
 
 
 class RunIntegrationXmlFailureTest(unittest.TestCase):

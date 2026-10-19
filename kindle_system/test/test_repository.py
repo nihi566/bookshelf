@@ -1599,6 +1599,18 @@ class BookMarksTest(unittest.TestCase):
         )
         self.assertNotIn("B0MANGA001", repository.get_book_marks())
 
+    def test_kind_overrides_lists_only_switched_books(self):
+        """クロールから外すかの判定用（NIH-309）。種別を切り替えた本だけを返す。"""
+        self.assertEqual(repository.get_kind_overrides(), {})
+        self._insert_mapping("B0MANGA001", "戦争は女の顔をしていない 6")
+        repository.import_marks(
+            [
+                {"asin": "B0MANGA001", "title": "戦争は女の顔をしていない 6", "tag": "", "kind": "manga"},
+                {"asin": "B0SEEN0001", "title": "見た本", "tag": "seen", "rating": 4, "kind": "book"},
+            ]
+        )
+        self.assertEqual(repository.get_kind_overrides(), {"B0MANGA001": "manga"})
+
     def test_title_from_book_mappings_is_preferred(self):
         self._insert_mapping("B0TITLE001", "DB 上のタイトル (ハルタコミックス)")
         repository.import_marks(

@@ -14,7 +14,7 @@ import unittest
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, BASE_DIR)
 
-from src.book_kind import KIND_BOOK, KIND_MANGA, classify_kind
+from src.book_kind import KIND_BOOK, KIND_MANGA, classify_kind, is_manga
 
 
 class ClassifyKindTest(unittest.TestCase):
@@ -63,6 +63,22 @@ class ClassifyKindTest(unittest.TestCase):
     def test_empty_or_none_title_is_book(self):
         self.assertEqual(classify_kind(""), KIND_BOOK)
         self.assertEqual(classify_kind(None), KIND_BOOK)
+
+
+class IsMangaTest(unittest.TestCase):
+    """クロールの対象外にするかどうかの判定（NIH-309）。手で切り替えた種別があればそちらを優先する。"""
+
+    def test_uses_title_when_no_override(self):
+        self.assertTrue(is_manga("ブルーピリオド（１） (アフタヌーンKC)"))
+        self.assertFalse(is_manga("コンビニ人間"))
+
+    def test_override_wins_over_title(self):
+        self.assertFalse(is_manga("ブルーピリオド（１） (アフタヌーンKC)", KIND_BOOK))
+        self.assertTrue(is_manga("レーベル表記の無いマンガ", KIND_MANGA))
+
+    def test_unknown_override_falls_back_to_title(self):
+        self.assertTrue(is_manga("よつばと！ 1 (電撃コミックス)", "comic"))
+        self.assertFalse(is_manga("コンビニ人間", None))
 
 
 if __name__ == "__main__":
