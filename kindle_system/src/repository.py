@@ -955,6 +955,30 @@ def get_book_marks() -> dict:
         }
 
 
+def get_seen_asins() -> set:
+    """
+    「見た」（画面の表示は「読んだ」）を取り込んだ paid_asin の集合を返す。これらの本は価格を取りに行かない（NIH-308）。
+    get_book_marks と同じく、テーブルが未作成なら作らずに空の集合を返す。
+    """
+    with get_session() as session:
+        if not _book_marks_table_exists(session):
+            return set()
+        return set(session.exec(select(BookMark.paid_asin).where(BookMark.tag == "seen")).all())
+
+
+def get_seen_titles() -> set:
+    """
+    「見た」を取り込んだ本の book_mappings 上の書名（前後の空白を除く）の集合を返す。
+    読書メーターの一覧の書名から、ASIN を探す前に「読んだ」本を見分けるために使う（NIH-308）。
+    """
+    seen_asins = get_seen_asins()
+    if not seen_asins:
+        return set()
+    with get_session() as session:
+        mappings = session.exec(select(BookMapping).where(BookMapping.paid_asin.in_(seen_asins))).all()
+        return {m.title.strip() for m in mappings if m.title and m.title.strip()}
+
+
 def get_kind_overrides() -> dict:
     """公開ページで手で切り替えた種別を {paid_asin: "manga" | "book"} で返す（切り替えていない本は含まない）。"""
     return {asin: mark["kind"] for asin, mark in get_book_marks().items() if mark["kind"]}

@@ -60,6 +60,7 @@ class RunIntegrationStartPromptTest(unittest.TestCase):
              patch.object(main, "get_session_processed_asins", return_value=set()), \
              patch.object(main, "extract_samples", return_value=list(self.SAMPLES)), \
              patch.object(main, "get_purchased_asins", return_value=set()), \
+             patch.object(main, "get_seen_asins", return_value=set()), \
              patch.object(main, "get_paid_asin", side_effect=lambda s: "P" + s[1:]), \
              patch.object(main, "crawl_price_info", new=AsyncMock(side_effect=fake_crawl)), \
              patch.object(main, "save_price_history"), \
