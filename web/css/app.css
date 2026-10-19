@@ -105,9 +105,13 @@ mark { background: var(--mark); color: inherit; border-radius: 2px; padding: 0 1
 .axis-switch a[aria-current="true"] { background: var(--surface); color: var(--accent); box-shadow: var(--shadow); }
 /* 幅の狭い端末では「本棚」の文字を隠し、分析中の表示（#status）の場所を空ける（印と aria-label は残す） */
 @media (max-width: 420px) { .brand-name { display: none; } }
-.topbar-memo { flex: none; display: inline-flex; align-items: center; gap: 4px; min-height: 36px; padding: 4px 12px; border-radius: 999px; border: 1px solid var(--line); background: var(--surface); color: var(--accent); font-weight: 600; font-size: 0.85rem; cursor: pointer; }
-.topbar-memo:hover { background: var(--accent-soft); }
-.topbar-memo svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.topbar-add, .topbar-memo { flex: none; display: inline-flex; align-items: center; gap: 4px; min-height: 36px; padding: 4px 12px; border-radius: 999px; border: 1px solid var(--line); background: var(--surface); color: var(--accent); font-weight: 600; font-size: 0.85rem; white-space: nowrap; cursor: pointer; position: relative; }
+.topbar-add::after, .topbar-memo::after { content: ""; position: absolute; inset: -5px; } /* 見た目は 36px のまま、押せる範囲を 44px にする（枠線の内側から測るので 5px） */
+.topbar-add:hover, .topbar-memo:hover { background: var(--accent-soft); }
+.topbar-add svg, .topbar-memo svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+/* スマホの幅では「本を足す」を印だけにし、分析中の表示（#status）の場所を残す（aria-label は残す） */
+@media (max-width: 560px) { .topbar-add { padding: 4px 8px; } .topbar-add span { display: none; } }
+@media (max-width: 400px) { .topbar-memo { padding: 4px 8px; } .topbar-memo span { display: none; } }
 .topbar-status.busy::before { content: ""; display: inline-block; width: 8px; height: 8px; margin-right: 6px; border-radius: 50%; background: var(--accent); animation: pulse 1.2s infinite; vertical-align: 1px; }
 @keyframes pulse { 50% { opacity: 0.25; } }
 
@@ -132,15 +136,14 @@ main { max-width: 760px; margin: 0 auto; padding: 16px max(16px, env(safe-area-i
 /* 下部タブ */
 .tabbar {
   position: fixed; left: 0; right: 0; bottom: 0; z-index: 20;
-  display: grid; grid-template-columns: repeat(7, 1fr);
+  display: grid; grid-template-columns: repeat(6, 1fr);
   height: calc(var(--tabbar-h) + env(safe-area-inset-bottom));
   padding-bottom: env(safe-area-inset-bottom);
   background: var(--surface);
   border-top: 1px solid var(--line);
 }
-.tabbar a span, .tabbar .tab-add span { white-space: nowrap; font-size: min(0.7rem, 3vw); }
-.tabbar a, .tabbar .tab-add { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; color: var(--ink-3); font-size: 0.7rem; }
-.tabbar .tab-add { background: none; border: 0; padding: 0; font: inherit; cursor: pointer; color: var(--accent); font-weight: 700; }
+.tabbar a span { white-space: nowrap; font-size: min(0.7rem, 3.3vw); }
+.tabbar a { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; color: var(--ink-3); font-size: 0.7rem; }
 .tabbar a:hover { text-decoration: none; }
 .tabbar svg { width: 24px; height: 24px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
 .tabbar a[aria-current="page"] { color: var(--accent); font-weight: 700; }
