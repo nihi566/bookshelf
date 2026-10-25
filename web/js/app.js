@@ -736,6 +736,8 @@ document.addEventListener('visibilitychange', () => {
 async function start() {
   await loadState();
   await detectCompanion();
+  // URL に画面の指定が無いとき（アプリを開いたとき）は、使っている価格の軸から始める。ホームは「本」の軸の「#/」で開ける
+  if (!location.hash) history.replaceState(null, '', AXIS_HOME.price);
   render();
   listenBookmarklet();
   requestPersistence();
