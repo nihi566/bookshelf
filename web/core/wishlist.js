@@ -286,6 +286,11 @@ export function shelfCounts(items) {
   return Object.fromEntries(['all', ...SOURCES, 'purchased'].map((shelf) => [shelf, items.filter((item) => inShelf(item, shelf)).length]));
 }
 
+/** 分類のチップを隠すか。0 冊の分類は押しても空になるだけなので隠す（「すべて」と、いま選んでいる分類は戻れなくならないよう残す） */
+export function shelfChipHidden(shelf, count, selected) {
+  return count === 0 && shelf !== 'all' && shelf !== selected;
+}
+
 /**
  * 本棚（model.js の listBooks の結果。線のある本だけ）から、欲しい本の読書の状況
  * { count, lastHighlightedAt } を引く関数を作る。ASIN で照合し、無ければ書名（titleKey）で照合する。線が無ければ null

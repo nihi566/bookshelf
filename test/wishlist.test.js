@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { applyImportedMarks, cleanupSyncedMarks, collectMarks, filterWishlist, findWishlistBook, formatPrice, inShelf, labelCounts, loadMarks, priceChange, priceTotal, shelfCounts, marksFile, memoryStore, parseMarksFile, openWishlistFilters, parseWishlist, saveMarks, searchWishlist, tagCounts, titleKey, toggleMark, wishlistLabel, wishlistSummary } from '../web/core/wishlist.js';
+import { applyImportedMarks, cleanupSyncedMarks, collectMarks, filterWishlist, findWishlistBook, formatPrice, inShelf, labelCounts, loadMarks, priceChange, priceTotal, shelfChipHidden, shelfCounts, marksFile, memoryStore, parseMarksFile, openWishlistFilters, parseWishlist, saveMarks, searchWishlist, tagCounts, titleKey, toggleMark, wishlistLabel, wishlistSummary } from '../web/core/wishlist.js';
 
 test('titleKey: 括弧のレーベル・版表記と記号・空白を落とす', () => {
   assert.equal(titleKey('731―石井四郎と細菌戦部隊の闇を暴く―（新潮文庫）'), titleKey('731 石井四郎と細菌戦部隊の闇を暴く'));
@@ -241,6 +241,14 @@ test('inShelf / shelfCounts: 「購入済み」タグを付けた本は購入済
   assert.deepEqual(shelfCounts(list), { all: 4, kindle: 1, bookmeter: 1, purchased: 2 });
   assert.deepEqual(shelfCounts(items()), { all: 4, kindle: 2, bookmeter: 2, purchased: 1 }, 'タグが無ければ公開データどおり');
   assert.equal(inShelf(list[0], 'all'), true);
+});
+
+test('shelfChipHidden: 0 冊の分類のチップは隠す（「すべて」と、いま選んでいる分類は 0 冊でも隠さない）', () => {
+  assert.equal(shelfChipHidden('purchased', 0, 'all'), true);
+  assert.equal(shelfChipHidden('kindle', 0, 'all'), true);
+  assert.equal(shelfChipHidden('purchased', 1, 'all'), false);
+  assert.equal(shelfChipHidden('all', 0, 'all'), false, '「すべて」は 0 冊でも出す');
+  assert.equal(shelfChipHidden('purchased', 0, 'purchased'), false, '選んだまま隠れて戻れなくならないように');
 });
 
 test('priceTotal: 表示中の本の合計金額（KU・価格なしは数えず、その冊数も返す）', () => {

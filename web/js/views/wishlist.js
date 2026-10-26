@@ -3,7 +3,7 @@
 import { html } from '../html.js';
 import { download } from '../services.js';
 import { bookSpine, toast } from '../ui.js';
-import { applyImportedMarks, bookmeterUrl, browserStore, cleanupSyncedMarks, collectMarks, filterWishlist, formatPrice, inShelf, KEYS, labelCounts, loadMarks, marksFile, memoryStore, openWishlistFilters, pageWishlist, parseMarksFile, priceChange, priceMarkCounts, PRICE_MARK_LABELS, priceSparkline, priceTotal, readingCounts, readingLookup, saveMarks, shelfCounts, TAG_FILTER_LABELS, TAG_LABELS, tagCounts, toggleMark, WISHLIST_PAGE_SIZE } from '../../core/wishlist.js';
+import { applyImportedMarks, bookmeterUrl, browserStore, cleanupSyncedMarks, collectMarks, filterWishlist, formatPrice, inShelf, KEYS, labelCounts, loadMarks, marksFile, memoryStore, openWishlistFilters, pageWishlist, parseMarksFile, priceChange, priceMarkCounts, PRICE_MARK_LABELS, priceSparkline, priceTotal, readingCounts, readingLookup, saveMarks, shelfChipHidden, shelfCounts, TAG_FILTER_LABELS, TAG_LABELS, tagCounts, toggleMark, WISHLIST_PAGE_SIZE } from '../../core/wishlist.js';
 import { listBooks } from '../../core/model.js';
 import { isoDate } from '../../core/text.js';
 import { cachedWishlist, FEED_URL, FEED_WANTED_URL, loadWishlist } from '../wishlist-data.js';
@@ -103,7 +103,7 @@ function mountList(root, body, items, store, lastScraped) {
   body.innerHTML = String(html`
     <p class="small muted">価格の最終取得: ${lastScrapedText(lastScraped)}</p>
     <p class="small muted">フィードで受け取る: <a href="${FEED_URL}" target="_blank" rel="noopener noreferrer" type="application/atom+xml">すべての知らせ</a> / <a href="${FEED_WANTED_URL}" target="_blank" rel="noopener noreferrer" type="application/atom+xml">読みたい本・希望価格・大きな値下がりだけ</a></p>
-    <div class="chips" role="group" aria-label="表示する分類">${Object.entries(SHELVES).map(([k, label]) => html`<button type="button" class="chip" data-wl-shelf="${k}" aria-pressed="${String(filters.shelf === k)}">${shelfLabel(k, shelfCount[k])}</button>`)}</div>
+    <div class="chips" role="group" aria-label="表示する分類">${Object.entries(SHELVES).map(([k, label]) => html`<button type="button" class="chip" data-wl-shelf="${k}" aria-pressed="${String(filters.shelf === k)}" ${shelfChipHidden(k, shelfCount[k], filters.shelf) ? 'hidden' : ''}>${shelfLabel(k, shelfCount[k])}</button>`)}</div>
     <div class="chips" role="group" aria-label="購入済みの内訳" id="wl-reading" ${filters.shelf === 'purchased' ? '' : 'hidden'}>${Object.keys(READINGS).map((k) => html`<button type="button" class="chip" data-wl-reading="${k}" aria-pressed="${String(filters.reading === k)}"></button>`)}</div>
     <div class="search-box wl-search" role="search"><input type="search" id="wl-q" value="${filters.q}" placeholder="書名・出版社（レーベル）・ASIN で絞り込む" aria-label="書名・出版社（レーベル）・ASIN で絞り込む（空白で区切ると全部を含むもの）" autocomplete="off"></div>
     <div class="wl-controls">
@@ -158,9 +158,12 @@ function mountList(root, body, items, store, lastScraped) {
     for (const option of $('wl-price-mark').options) option.textContent = `${PRICE_MARK_LABELS[option.value]}（${priceMarks[option.value]}）`;
     const perLabel = new Map(labelCounts(inCurrentShelf));
     for (const option of $('wl-label').options) option.textContent = option.value ? `${option.value}（${perLabel.get(option.value) || 0}）` : `すべて（${inCurrentShelf.length}）`;
-    // 「購入済み」タグの付け外しで分類の件数が変わる
+    // 「購入済み」タグの付け外しで分類の件数が変わる（0 冊になった分類は隠し、1 冊以上になれば出す）
     const shelves = shelfCounts(items);
-    for (const b of body.querySelectorAll('[data-wl-shelf]')) b.textContent = shelfLabel(b.dataset.wlShelf, shelves[b.dataset.wlShelf]);
+    for (const b of body.querySelectorAll('[data-wl-shelf]')) {
+      b.textContent = shelfLabel(b.dataset.wlShelf, shelves[b.dataset.wlShelf]);
+      b.hidden = shelfChipHidden(b.dataset.wlShelf, shelves[b.dataset.wlShelf], filters.shelf);
+    }
     const readings = readingCounts(items);
     for (const b of body.querySelectorAll('[data-wl-reading]')) b.textContent = readingLabel(b.dataset.wlReading, readings[b.dataset.wlReading]);
     $('wl-reading').hidden = filters.shelf !== 'purchased';
