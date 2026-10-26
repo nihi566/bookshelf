@@ -552,6 +552,28 @@ export function marksFile(items, now = new Date()) {
   return { name, data: { format: 'kindle-marks', version: 1, exported_at: now.toISOString(), items } };
 }
 
+// PC へ送る印の上限（欲しい本は 800 冊ほど。本文の大きさを抑える）
+export const MARKS_FOR_PC_MAX = 2000;
+
+/**
+ * PC（bh serve → kindle_system の受け箱）へ送る印を、書き出しファイルの items と同じ形にそろえる（NIH-367）。
+ * 画面は collectMarks の items をそのまま送り、bh serve は送られてきた値を信用せずこれを通す。
+ * tag を持つ項目は★も一緒に持つ（★は「読んだ」のときだけ。それ以外は null）。反映する項目の無いもの・形の違うものは捨てる
+ */
+export function marksForPc(list) {
+  if (!Array.isArray(list)) return [];
+  return list.slice(0, MARKS_FOR_PC_MAX).flatMap((it) => {
+    if (!isAsin(it?.asin)) return [];
+    const item = { asin: it.asin, title: typeof it.title === 'string' ? it.title.trim().slice(0, 300) : '' };
+    if (it.tag === '' || isTag(it.tag)) {
+      item.tag = it.tag;
+      item.rating = it.tag === 'seen' && Number.isInteger(it.rating) && it.rating >= 1 && it.rating <= 5 ? it.rating : null;
+    }
+    if (isKind(it.kind)) item.kind = it.kind;
+    return 'tag' in item || 'kind' in item ? [item] : [];
+  });
+}
+
 /**
  * 書き出しファイル（kindle-marks v1）を確かめ、ブラウザに読み込める項目だけ返す（別の端末への移し替え・バックアップからの戻し）。
  * { exportedAt（書き出した時刻のミリ秒。不明なら 0）, entries: [{ asin, tag?, rating?, kind? }] } を返す。
