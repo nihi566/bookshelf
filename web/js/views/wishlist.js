@@ -190,10 +190,10 @@ function mountList(root, body, items, store, lastScraped) {
     sending = true;
     let sent = false;
     try {
-      await companion.sendWishlistMarks(s.items);
+      await companion.sendWishlistMarks(s.unexportedItems);
       store.set(KEYS.exportedAt, String(sentAt));
       sent = true;
-      if (body.isConnected) $('wl-export-status').textContent = `PC に送りました（${s.items.length}件）。次の価格の取得から反映され、「読んだ」の本は価格を取りに行かなくなります。`;
+      if (body.isConnected) $('wl-export-status').textContent = `PC に送りました（${s.unexportedItems.length}件）。次の価格の取得から反映され、「読んだ」の本は価格を取りに行かなくなります。`;
     } catch (e) {
       if (body.isConnected) $('wl-export-status').textContent = `PC に送れませんでした（${e.message}）。次に印を付けたとき・この画面を開いたときに、もう一度送ります。`;
     } finally {

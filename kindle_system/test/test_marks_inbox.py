@@ -18,7 +18,7 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.exc import OperationalError
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, BASE_DIR)
@@ -90,8 +90,21 @@ class ImportMarksInboxTest(unittest.TestCase):
         self.assertEqual(sorted(os.listdir(self.inbox)), ["kindle-marks-0000000000001-a.json.broken"])
 
     @patch("run.import_marks")
+    def test_data_error_is_moved_aside_and_others_continue(self, mock_import):
+        # 中身が原因の失敗（壊れた文字で DB に書けない等）は、受け箱を詰まらせないよう脇へ退ける
+        mock_import.side_effect = [UnicodeEncodeError("utf-8", "\ud83d", 0, 1, "surrogates not allowed"), {"updated": 1, "deleted": 0, "skipped": []}]
+        _write(self.inbox, "kindle-marks-0000000000001-a.json", [{"asin": "B000000001", "tag": "seen"}])
+        _write(self.inbox, "kindle-marks-0000000000002-b.json", [{"asin": "B000000002", "tag": "seen"}])
+
+        result, _ = self._run()
+
+        self.assertEqual(result["files"], 1)
+        self.assertEqual(result["failed"], 1)
+        self.assertEqual(os.listdir(self.inbox), ["kindle-marks-0000000000001-a.json.broken"])
+
+    @patch("run.import_marks")
     def test_db_error_keeps_the_file_for_next_time_and_stops(self, mock_import):
-        mock_import.side_effect = SQLAlchemyError("locked")
+        mock_import.side_effect = OperationalError("UPDATE book_marks", {}, Exception("database is locked"))
         _write(self.inbox, "kindle-marks-0000000000001-a.json", [{"asin": "B000000001", "tag": "seen"}])
         _write(self.inbox, "kindle-marks-0000000000002-b.json", [{"asin": "B000000002", "tag": "seen"}])
 

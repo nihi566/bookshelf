@@ -1,13 +1,13 @@
 // 欲しい本の画面で付けた印（読んだ・★・種別）を、書き出し・import-marks の手作業なしで PC（kindle_system の受け箱）へ届ける（NIH-367）
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, readdirSync, readFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createStore } from '../cli/store.js';
 import { createCompanionServer } from '../cli/server.js';
-import { marksForPc, MARKS_FOR_PC_MAX } from '../web/core/wishlist.js';
+import { collectMarks, KEYS, marksForPc, MARKS_FOR_PC_MAX, memoryStore, saveMarks } from '../web/core/wishlist.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const tmp = (p) => mkdtempSync(path.join(tmpdir(), p));
@@ -33,6 +33,10 @@ test('marksForPc: 書き出しファイルと同じ形の項目だけを通す�
     { asin: 'B000000008', title: '', tag: 'seen', rating: null },
   ]);
   assert.deepEqual(marksForPc('x'), []);
+  // 題名は文字単位で 300 字に切り、壊れた文字（片方だけのサロゲート）を落とす（kindle_system の DB に書けなくなるため）
+  const [long] = marksForPc([{ asin: 'B000000009', title: `${'a'.repeat(299)}😀b`, tag: 'seen' }]);
+  assert.equal(long.title, `${'a'.repeat(299)}😀`);
+  assert.equal(marksForPc([{ asin: 'B000000009', title: 'x\ud83dy', tag: 'seen' }])[0].title, 'xy');
   assert.equal(marksForPc(Array.from({ length: MARKS_FOR_PC_MAX + 5 }, (_, i) => ({ asin: `B${String(i).padStart(9, '0')}`, tag: 'seen' }))).length, MARKS_FOR_PC_MAX);
 });
 
@@ -82,6 +86,29 @@ test('POST /api/wishlist/marks: 反映する項目が無ければ 400 で、フ�
     assert.equal((await post(base, {})).status, 400);
     assert.deepEqual(readdirSync(path.dirname(marksInbox)), []);
   });
+});
+
+test('POST /api/wishlist/marks: 受け箱に取り込み待ちがたまりすぎたら 429 で、それ以上置かない', async () => {
+  await withServer(async ({ base, marksInbox }) => {
+    mkdirSync(marksInbox, { recursive: true });
+    for (let i = 0; i < 500; i++) writeFileSync(path.join(marksInbox, `kindle-marks-${String(i).padStart(13, '0')}-00000000.json${i % 2 ? '.broken' : ''}`), '{}');
+    const res = await post(base, { items: [{ asin: 'B000000001', tag: 'seen' }] });
+    assert.equal(res.status, 429);
+    assert.match((await res.json()).error, /run\.py sync/);
+    assert.equal(readdirSync(marksInbox).length, 500);
+  });
+});
+
+test('collectMarks: PC へ送るのは、書き出し・送った後に変えた本だけ（別の端末で変えた印を古い値で上書きしない）', () => {
+  const store = memoryStore();
+  const book = (asin) => ({ asin, title: asin, saved: { tag: '', rating: '', kind: 'book' } });
+  const items = [book('B000000001'), book('B000000002')].map((b) => ({ book: b, marks: { tag: 'seen', rating: '', kind: 'book' } }));
+  saveMarks(store, 'B000000001', items[0].marks, 'tag', 1000);
+  store.set(KEYS.exportedAt, '2000');
+  saveMarks(store, 'B000000002', items[1].marks, 'tag', 3000);
+  const s = collectMarks(items, store);
+  assert.equal(s.items.length, 2);
+  assert.deepEqual(s.unexportedItems.map((it) => it.asin), ['B000000002']);
 });
 
 test('POST /api/wishlist/marks: 許可していないオリジンからは受けない', async () => {

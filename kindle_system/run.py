@@ -34,7 +34,7 @@ if sys.stdout.encoding and sys.stdout.encoding.lower() not in ("utf-8", "utf_8")
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, BASE_DIR)
 
-from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.exc import OperationalError, SQLAlchemyError
 
 import report
 from report import _load_env_file
@@ -394,10 +394,17 @@ def import_marks_inbox(inbox_dir: str = MARKS_INBOX_DIR) -> dict:
             continue
         try:
             imported = import_marks(data["items"])
-        except SQLAlchemyError as e:
+        except OperationalError as e:
+            # DB がロック中・書き込み不可など、ファイルの中身によらない失敗。残して次の sync で取り込み直す
             print(f"[警告] 受け箱の印を DB に書けませんでした。次の sync で取り込み直します: {name}（{e}）", file=sys.stderr)
             result["failed"] += 1
             break
+        except Exception as e:  # noqa: BLE001 中身が原因の失敗（壊れた文字など）で受け箱を詰まらせない
+            print(f"[警告] 受け箱の印を取り込めないため脇へ退けました: {name}（{e}）", file=sys.stderr)
+            result["failed"] += 1
+            with contextlib.suppress(OSError):
+                os.replace(path, path + MARKS_BROKEN_SUFFIX)
+            continue
         for reason in imported["skipped"]:
             print(f"[スキップ] {name}: {reason}")
         result["files"] += 1

@@ -9,7 +9,7 @@
 import { createServer } from 'node:http';
 import { readFileSync } from 'node:fs';
 import { randomBytes } from 'node:crypto';
-import { mkdir, readFile, rename, stat, writeFile } from 'node:fs/promises';
+import { mkdir, readdir, readFile, rename, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { HISTORY_PIN_MAX, REPO_ROOT } from './store.js';
 import { libraryStats, mergeLibraries } from '../web/core/model.js';
@@ -71,6 +71,8 @@ const AI_CONCURRENCY = 2;
 const MARKS_INBOX = path.join(REPO_ROOT, 'kindle_system', 'data', 'marks-inbox');
 // 印の本文の上限（2,000 冊分でも 300 KB ほど）
 const MARKS_BODY_MAX = 1024 * 1024;
+// 受け箱に溜めておくファイルの上限（取り込むのは 1 日 1 回の run.py sync。それまでに送り続けて PC のディスクを埋めさせない）
+const MARKS_INBOX_MAX = 500;
 
 // catalogFetch: おすすめの本を探す書誌 DB への fetch（テストで差し替える）
 // auto: { intervalMs } を渡すと、その間隔で自動の分析を始めるかを確かめる（bh serve。テストでは渡さず checkAutoAnalyze を呼ぶ）
@@ -299,7 +301,10 @@ export function createCompanionServer({ store, log = console.log, catalogFetch, 
         const file = path.join(marksInbox, `kindle-marks-${String(now.getTime()).padStart(13, '0')}-${randomBytes(4).toString('hex')}.json`);
         try {
           await mkdir(marksInbox, { recursive: true });
-          await writeFile(`${file}.tmp`, JSON.stringify({ format: 'kindle-marks', version: 1, exported_at: now.toISOString(), items }, null, 2));
+          // 読めずに退けたファイル（.broken）も数える
+          const waiting = (await readdir(marksInbox)).filter((f) => f.startsWith('kindle-marks-')).length;
+          if (waiting >= MARKS_INBOX_MAX) return send(res, 429, { error: `PC の受け箱に取り込み待ちの印が ${waiting} 件たまっています。PC で python run.py sync を実行してから、もう一度送ってください` });
+          await writeFile(`${file}.tmp`, JSON.stringify({ format: 'kindle-marks', version: 1, exported_at: now.toISOString(), items }));
           await rename(`${file}.tmp`, file);
         } catch (e) {
           log(`欲しい本の印を受け箱に置けませんでした: ${e.message}`);
