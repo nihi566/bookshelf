@@ -523,7 +523,9 @@ export function formatPrice(book) {
  * 保存できないブラウザでは、画面上の状態と公開データの差を書き出す。
  */
 export function collectMarks(items, store, { canStore = store.canStore } = {}) {
-  const summary = { seen: 0, rated: 0, items: [], unexported: 0 };
+  // unexportedItems: items のうち、書き出し・PC へ送った後に変えた本だけ（PC へはこれだけ送る。
+  // 送った後の印まで送り直すと、別の端末で変えた印を古い値で上書きしてしまう）
+  const summary = { seen: 0, rated: 0, items: [], unexported: 0, unexportedItems: [] };
   const exported = exportedAt(store);
   const seenAsins = new Set();
   for (const { book, marks } of items) {
@@ -544,7 +546,10 @@ export function collectMarks(items, store, { canStore = store.canStore } = {}) {
     }
     if (touched.includes('kind')) item.kind = marks.kind;
     summary.items.push(item);
-    if (!canStore || storedAt(store, book.asin) > exported) summary.unexported++;
+    if (!canStore || storedAt(store, book.asin) > exported) {
+      summary.unexported++;
+      summary.unexportedItems.push(item);
+    }
   }
   return summary;
 }
@@ -555,6 +560,33 @@ const pad2 = (n) => String(n).padStart(2, '0');
 export function marksFile(items, now = new Date()) {
   const name = `kindle-marks-${now.getFullYear()}${pad2(now.getMonth() + 1)}${pad2(now.getDate())}-${pad2(now.getHours())}${pad2(now.getMinutes())}.json`;
   return { name, data: { format: 'kindle-marks', version: 1, exported_at: now.toISOString(), items } };
+}
+
+// PC へ送る印の上限（欲しい本は 800 冊ほど。本文の大きさを抑える）
+export const MARKS_FOR_PC_MAX = 2000;
+const MARK_TITLE_MAX = 300;
+// 片方だけのサロゲート（壊れた文字）。kindle_system の DB に書けず、受け箱の取り込みが止まるので落とす
+const LONE_SURROGATE = /^[\ud800-\udfff]$/;
+// 文字（コードポイント）単位で切る（UTF-16 の単位で切ると、絵文字などを半分に切って壊れた文字ができる）
+const wellFormedTitle = (title) => [...title.trim()].filter((ch) => !LONE_SURROGATE.test(ch)).slice(0, MARK_TITLE_MAX).join('');
+
+/**
+ * PC（bh serve → kindle_system の受け箱）へ送る印を、書き出しファイルの items と同じ形にそろえる（NIH-367）。
+ * 画面は collectMarks の items をそのまま送り、bh serve は送られてきた値を信用せずこれを通す。
+ * tag を持つ項目は★も一緒に持つ（★は「読んだ」のときだけ。それ以外は null）。反映する項目の無いもの・形の違うものは捨てる
+ */
+export function marksForPc(list) {
+  if (!Array.isArray(list)) return [];
+  return list.slice(0, MARKS_FOR_PC_MAX).flatMap((it) => {
+    if (!isAsin(it?.asin)) return [];
+    const item = { asin: it.asin, title: typeof it.title === 'string' ? wellFormedTitle(it.title) : '' };
+    if (it.tag === '' || isTag(it.tag)) {
+      item.tag = it.tag;
+      item.rating = it.tag === 'seen' && Number.isInteger(it.rating) && it.rating >= 1 && it.rating <= 5 ? it.rating : null;
+    }
+    if (isKind(it.kind)) item.kind = it.kind;
+    return 'tag' in item || 'kind' in item ? [item] : [];
+  });
 }
 
 /**

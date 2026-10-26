@@ -168,6 +168,7 @@ node cli/bh.js serve  # http://localhost:8787 で Web アプリを開発
 - `cli/` … `bh` コマンドとコンパニオンサーバ
 - `kindle_system/` … 欲しい本の価格チェック（Python。Amazon・読書メーターの「読みたい本」を集めて価格を記録する）。
   使い方は `kindle_system/README.md`。テストは `cd kindle_system && python -m unittest discover -s test`。
+  価格チェックで付けた「読んだ」・★・種別は、画面を PC（`bh serve`）とつないでいれば自動で PC に送られ（`kindle_system/data/marks-inbox/`）、次の `python run.py sync` が取り込むので、「読んだ」の本はそれ以後の価格の取得から外れる（書き出し・`import-marks` は要らない。PC に届いていない変更の件数は画面の下の欄に出て、画面を開いたとき・次に印を付けたときに送り直す）。
   集めた本は Web アプリの上のバーの「本 | 価格」の「価格」（`#/wishlist`）で見られ〔切り替えると、その側で最後に見ていた画面に戻る〕、書名・出版社・ASIN の検索、出版社（Amazon の商品ページの「出版社」。まだ読めていない本は書名の末尾の「(光文社新書)」のようなレーベル。出版社は価格を取るときに同じページから読むので、次の定期取得から少しずつ埋まる）・タグ・価格・価格の印（値下がりした・記録上の最安値・取得できず）・Kindle Unlimited・種別で絞り込める（件数と合計金額は絞り込んだ本で出る）。ホームの欲しい本の欄の「値下がりした N 冊を見る」を押すと、価格の印「値下がりした」だけで絞った状態で開く（普通に開き直すと、それまでの条件に戻る）
 - `web/wishlist-site/` … `kindle_system/` が書き出す欲しい本のデータ（`wishlist.json` / `feed.xml` / `feed-wanted.xml`。生成物なので直接編集しない）。
   `python run.py sync` がこれらだけを main に commit・push し、Pages に公開される

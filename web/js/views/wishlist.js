@@ -1,7 +1,7 @@
 // 価格チェックの画面（スクレイピングした欲しい本の価格と、その履歴）。データは kindle_system が web/wishlist-site/ に書き出す wishlist.json を読むだけで、
 // タグ・★・種別はブラウザ（localStorage）に旧画面と同じキーで保存する（core/wishlist.js）。
 import { html } from '../html.js';
-import { download } from '../services.js';
+import { canSendMarks, companion, download } from '../services.js';
 import { bookSpine, toast } from '../ui.js';
 import { applyImportedMarks, bookmeterUrl, browserStore, cleanupSyncedMarks, collectMarks, filterWishlist, formatPrice, inShelf, KEYS, labelCounts, loadMarks, marksFile, memoryStore, openWishlistFilters, pageWishlist, parseMarksFile, priceChange, priceMarkCounts, PRICE_MARK_LABELS, priceSparkline, priceTotal, readingCounts, readingLookup, saveMarks, shelfChipHidden, shelfCounts, TAG_FILTER_LABELS, TAG_LABELS, tagCounts, toggleMark, WISHLIST_PAGE_SIZE } from '../../core/wishlist.js';
 import { listBooks } from '../../core/model.js';
@@ -124,7 +124,7 @@ function mountList(root, body, items, store, lastScraped) {
       <p class="small" id="wl-marks-summary"></p>
       <div class="row"><button type="button" class="btn small" id="wl-export">読んだ・評価を書き出す</button><button type="button" class="btn small" id="wl-import">書き出したファイルを読み込む</button></div>
       <input type="file" id="wl-import-file" accept=".json,application/json" hidden>
-      <p class="small muted">書き出したファイルは、別の端末やブラウザのデータを消した後に「読み込む」で戻せます。</p>
+      <p class="small muted">PC とつながっていれば、付けた印は自動で PC に送られ、次の価格の取得から反映されます（「読んだ」の本は価格を取りに行かなくなります）。書き出したファイルは、別の端末やブラウザのデータを消した後に「読み込む」で戻せます。</p>
       <p class="small muted" id="wl-export-status" role="status"></p>
     </div>`);
 
@@ -171,8 +171,44 @@ function mountList(root, body, items, store, lastScraped) {
     $('wl-reset').hidden = !((filters.shelf === 'purchased' && filters.reading !== 'all') || filters.q.trim() || filters.ku || filters.min !== '' || filters.max !== '' || filters.tag !== 'all' || filters.kind !== 'all' || filters.label || filters.price !== 'all' || filters.sort !== 'default');
     $('wl-empty').hidden = r.items.length !== 0;
     list.innerHTML = String(html`${showPaging(inCurrentShelf.length).visible.map(itemRow)}`);
+    renderSummary();
+  };
+
+  const renderSummary = () => {
     const s = collectMarks(items, store);
-    $('wl-marks-summary').textContent = `読んだ ${s.seen}件（★評価 ${s.rated}件）・まだ書き出していない変更 ${s.unexported}件${store.canStore ? '' : '（このブラウザには保存できないため、画面を閉じる前に書き出してください）'}`;
+    const unsent = canSendMarks() ? 'まだ PC に送っていない変更' : 'まだ書き出していない変更';
+    $('wl-marks-summary').textContent = `読んだ ${s.seen}件（★評価 ${s.rated}件）・${unsent} ${s.unexported}件${store.canStore ? '' : '（このブラウザには保存できないため、画面を閉じる前に書き出してください）'}`;
+  };
+
+  // 付けた印を PC へ送る（NIH-367）。PC は kindle_system の受け箱に置き、次の価格の取得（run.py sync）で取り込む。
+  // 送れたら「書き出し済み」にする（公開データが追いついたら、ブラウザの保存値を片付ける cleanupSyncedMarks がそのまま効く）
+  let sendTimer;
+  let sending = false;
+  const sendMarks = async () => {
+    if (sending || !canSendMarks()) return;
+    const s = collectMarks(items, store);
+    if (!s.unexported) return;
+    // 送る直前の時刻を書き出し済みにする（送っている間に付けた印は、まだ送っていない変更として残す）
+    const sentAt = Date.now();
+    sending = true;
+    let sent = false;
+    try {
+      await companion.sendWishlistMarks(s.unexportedItems);
+      store.set(KEYS.exportedAt, String(sentAt));
+      sent = true;
+      if (body.isConnected) $('wl-export-status').textContent = `PC に送りました（${s.unexportedItems.length}件）。次の価格の取得から反映され、「読んだ」の本は価格を取りに行かなくなります。`;
+    } catch (e) {
+      if (body.isConnected) $('wl-export-status').textContent = `PC に送れませんでした（${e.message}）。次に印を付けたとき・この画面を開いたときに、もう一度送ります。`;
+    } finally {
+      sending = false;
+    }
+    if (body.isConnected) renderSummary();
+    if (sent && collectMarks(items, store).unexported) sendSoon();
+  };
+  // 続けて押した印は 1 回にまとめて送る
+  const sendSoon = () => {
+    clearTimeout(sendTimer);
+    sendTimer = setTimeout(sendMarks, 1500);
   };
 
   // 条件を変えたら 1 ページ目から描き直す
@@ -243,6 +279,7 @@ function mountList(root, body, items, store, lastScraped) {
     const selector = btn.dataset.tag ? `[data-tag="${btn.dataset.tag}"]` : `[data-rating="${btn.dataset.rating}"]`;
     renderItems();
     list.querySelector(`li[data-asin="${item.book.asin}"] ${selector}`)?.focus();
+    sendSoon();
   });
 
   const onInput = (id, key, transform = (el) => el.value) => {
@@ -302,9 +339,12 @@ function mountList(root, body, items, store, lastScraped) {
     status.textContent = `${file.name} から ${r.applied}件のタグ・★・種別を読み込みました${notes.length ? `（${notes.join('。')}）` : ''}。${store.canStore ? '' : 'このブラウザには保存できないため、画面を閉じると元に戻ります。'}`;
     toast('読み込みました');
     renderItems();
+    sendSoon();
   }
 
   renderItems();
+  // 前に PC へ届かなかった印（PC とつながっていなかった間に付けたもの）を、画面を開いたときに送り直す
+  sendMarks();
 }
 
 // 「まとめて買ったらいくらか」。KU・価格なしの本は数えず、混ざっていればその冊数を添える

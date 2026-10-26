@@ -74,7 +74,12 @@ export const companion = {
   pinHistory: (id, pinned) => call(`/api/history/${encodeURIComponent(id)}/pin`, { method: 'POST', body: { pinned } }),
   // 自動の分析の入切・条件を変える（NIH-162。送った項目だけ変わり、/api/info と同じ形の autoAnalysis が返る）
   setAutoAnalysis: (patch) => call('/api/config/auto', { method: 'PUT', body: patch }),
+  // 価格チェックで付けた読んだ・★・種別を送る（書き出しファイルと同じ items。kindle_system が次の価格の取得で取り込む。NIH-367）
+  sendWishlistMarks: (items) => call('/api/wishlist/marks', { method: 'POST', body: { items } }),
 };
+
+/** PC の場所が分かっているか（GitHub Pages で開いただけの画面が、既定の localhost の PC に送らないように） */
+export const canSendMarks = () => state.settings.ai.mode === 'companion' && Boolean(state.servedByCompanion || state.settings.ai.companionUrl.trim());
 
 /**
  * 同一オリジンでコンパニオンサーバが動いているか（http://localhost:8787 や Tailscale の URL で開いた場合など）。

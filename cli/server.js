@@ -8,7 +8,8 @@
 
 import { createServer } from 'node:http';
 import { readFileSync } from 'node:fs';
-import { readFile, stat } from 'node:fs/promises';
+import { randomBytes } from 'node:crypto';
+import { mkdir, readdir, readFile, rename, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { HISTORY_PIN_MAX, REPO_ROOT } from './store.js';
 import { libraryStats, mergeLibraries } from '../web/core/model.js';
@@ -21,7 +22,7 @@ import { autoAnalyzeDue, autoConfig, dismissalsChanged, notesChanged, parseAutoS
 import { analysisShapeError } from '../web/core/analysis/shape.js';
 import { swVersion } from '../web/core/serve-version.js';
 import { restoreAnalysis } from '../web/core/analysis/restore.js';
-import { wishlistForRecommend } from '../web/core/wishlist.js';
+import { marksForPc, wishlistForRecommend } from '../web/core/wishlist.js';
 import { parseFiles } from '../web/core/parsers/index.js';
 import { createNotesSync } from './notes-sync.js';
 // 画面に出すエラーの文から、URL に書いたパスワード（http://user:pass@…）を伏せる
@@ -66,10 +67,17 @@ const MAX_BODY = 50 * 1024 * 1024;
 // 意味で探す・問いかける・骨組みを作るの本文（質問は 300 字まで）と、同時に受ける数（PC の AI を使い切らせない。分析も同じ AI を使う）
 const AI_BODY_MAX = 64 * 1024;
 const AI_CONCURRENCY = 2;
+// 欲しい本の画面で付けた印を置く kindle_system の受け箱（run.py sync がクロールの前に取り込む。NIH-367）
+const MARKS_INBOX = path.join(REPO_ROOT, 'kindle_system', 'data', 'marks-inbox');
+// 印の本文の上限（2,000 冊分でも 300 KB ほど）
+const MARKS_BODY_MAX = 1024 * 1024;
+// 受け箱に溜めておくファイルの上限（取り込むのは 1 日 1 回の run.py sync。それまでに送り続けて PC のディスクを埋めさせない）
+const MARKS_INBOX_MAX = 500;
 
 // catalogFetch: おすすめの本を探す書誌 DB への fetch（テストで差し替える）
 // auto: { intervalMs } を渡すと、その間隔で自動の分析を始めるかを確かめる（bh serve。テストでは渡さず checkAutoAnalyze を呼ぶ）
-export function createCompanionServer({ store, log = console.log, catalogFetch, auto = null, notesSync = null }) {
+// marksInbox: 欲しい本の印を置く場所（テストで差し替える）
+export function createCompanionServer({ store, log = console.log, catalogFetch, auto = null, notesSync = null, marksInbox = MARKS_INBOX }) {
   // trigger: 'manual'（画面のボタン・bh）/ 'auto'（点が増えたので PC が自分で始めた）
   // bh update が「止めた後に起動したプロセス（= 新しいコード）か」を確かめるのに使う
   const serverStartedAt = new Date().toISOString();
@@ -278,6 +286,31 @@ export function createCompanionServer({ store, log = console.log, catalogFetch, 
         } finally {
           activeImports--;
         }
+      }
+      case 'POST /api/wishlist/marks': {
+        // 欲しい本の画面で付けた読んだ・★・種別（書き出しファイルと同じ kindle-marks v1）を kindle_system の受け箱に置く。
+        // 1 送信 1 ファイルで、名前の順 = 置いた順（kindle_system は古い順に取り込む）。書きかけを読ませないよう一時ファイルから rename する
+        let items;
+        try {
+          items = marksForPc((await readBody(req, MARKS_BODY_MAX)).items);
+        } catch (e) {
+          return send(res, e.status || 400, { error: e.message });
+        }
+        if (!items.length) return send(res, 400, { error: '送る印がありません' });
+        const now = new Date();
+        const file = path.join(marksInbox, `kindle-marks-${String(now.getTime()).padStart(13, '0')}-${randomBytes(4).toString('hex')}.json`);
+        try {
+          await mkdir(marksInbox, { recursive: true });
+          // 読めずに退けたファイル（.broken）も数える
+          const waiting = (await readdir(marksInbox)).filter((f) => f.startsWith('kindle-marks-')).length;
+          if (waiting >= MARKS_INBOX_MAX) return send(res, 429, { error: `PC の受け箱に取り込み待ちの印が ${waiting} 件たまっています。PC で python run.py sync を実行してから、もう一度送ってください` });
+          await writeFile(`${file}.tmp`, JSON.stringify({ format: 'kindle-marks', version: 1, exported_at: now.toISOString(), items }));
+          await rename(`${file}.tmp`, file);
+        } catch (e) {
+          log(`欲しい本の印を受け箱に置けませんでした: ${e.message}`);
+          return send(res, 500, { error: 'PC に印を保存できませんでした' });
+        }
+        return send(res, 200, { ok: true, count: items.length });
       }
       case 'POST /api/kindle-status': {
         // ブラウザ拡張の確認結果（正常 / ログイン切れ / 失敗など）を state.json に残す。本文はログに出さない

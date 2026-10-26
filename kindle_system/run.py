@@ -16,6 +16,7 @@ run.py
 
 import argparse
 import asyncio
+import contextlib
 import glob
 import json
 import os
@@ -33,7 +34,7 @@ if sys.stdout.encoding and sys.stdout.encoding.lower() not in ("utf-8", "utf_8")
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, BASE_DIR)
 
-from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.exc import OperationalError, SQLAlchemyError
 
 import report
 from report import _load_env_file
@@ -46,6 +47,11 @@ from src.repository import get_book_marks, get_books, import_marks, init_db, set
 # 欲しい本の画面（bookshelf の web/core/wishlist.js の marksFile）の「見た・評価を書き出す」が作るファイル
 MARKS_FILE_FORMAT = "kindle-marks"
 MARKS_FILE_GLOB = "kindle-marks-*.json"
+# bookshelf の bh serve が、欲しい本の画面で付けた印（書き出しファイルと同じ kindle-marks v1）を置く受け箱（NIH-367）。
+# run.py sync がクロールの前に古い順に取り込み、取り込めたファイルを消す
+MARKS_INBOX_DIR = os.path.join(BASE_DIR, "data", "marks-inbox")
+# 読めないファイルに付ける接尾辞（毎回失敗しないよう脇へ退ける。中身を確かめられるよう消さない）
+MARKS_BROKEN_SUFFIX = ".broken"
 
 # report.main() が PUBLIC_SITE_DIR に書き出し、publish() が公開するファイル。
 # 公開先は bookshelf の web/wishlist-site/。これら以外は commit しない（他の作業中の変更を巻き込まない）。
@@ -232,6 +238,8 @@ async def _run_sync(
     タスクスケジューラの「前回の実行結果」が 0 以外かで判断するため。README 参照）。
     """
     _prepare_publish()
+    # 欲しい本の画面で付けた「読んだ」を先に入れる（その本の価格を取りに行かない。NIH-308・NIH-367）
+    import_marks_inbox()
     failed_stages = []
     if target in ("kindle", "both"):
         kindle_ok = await main_module.run_integration(
@@ -355,6 +363,60 @@ def _find_latest_marks_file(directory: str):
     """directory 直下の書き出しファイル（kindle-marks-*.json）のうち最も新しいものを返す。無ければ None。"""
     files = glob.glob(os.path.join(directory, MARKS_FILE_GLOB))
     return max(files, key=os.path.getmtime) if files else None
+
+
+def import_marks_inbox(inbox_dir: str = MARKS_INBOX_DIR) -> dict:
+    """
+    受け箱（bh serve が置いた kindle-marks-*.json）を名前の順（= 置いた順）に book_marks へ取り込み、取り込めたファイルを消す。
+
+    - 書いている途中の一時ファイル（.tmp）は名前が合わないので読まない
+    - 形式の違う・読めないファイルは .broken を付けて脇へ退け、ほかのファイルは続ける
+    - DB に書けなかったら、そのファイルとそれより新しいファイルを残して止める（次の sync で取り込む。
+      新しい方だけ先に入れると、後から付けた印が古い印で上書きされる）
+
+    戻り値: {"files": 取り込んだファイル数, "updated": 反映した件数, "deleted": 解除した件数, "failed": 失敗したファイル数}
+    """
+    result = {"files": 0, "updated": 0, "deleted": 0, "failed": 0}
+    if not os.path.isdir(inbox_dir):
+        return result
+    for path in sorted(glob.glob(os.path.join(inbox_dir, MARKS_FILE_GLOB))):
+        name = os.path.basename(path)
+        try:
+            with open(path, encoding="utf-8-sig") as f:
+                data = json.load(f)
+            if not isinstance(data, dict) or data.get("format") != MARKS_FILE_FORMAT or not isinstance(data.get("items"), list):
+                raise ValueError("kindle-marks の形式ではありません")
+        except (OSError, ValueError) as e:
+            print(f"[警告] 受け箱の印を読めないため脇へ退けました: {name}（{e}）", file=sys.stderr)
+            result["failed"] += 1
+            with contextlib.suppress(OSError):
+                os.replace(path, path + MARKS_BROKEN_SUFFIX)
+            continue
+        try:
+            imported = import_marks(data["items"])
+        except OperationalError as e:
+            # DB がロック中・書き込み不可など、ファイルの中身によらない失敗。残して次の sync で取り込み直す
+            print(f"[警告] 受け箱の印を DB に書けませんでした。次の sync で取り込み直します: {name}（{e}）", file=sys.stderr)
+            result["failed"] += 1
+            break
+        except Exception as e:  # noqa: BLE001 中身が原因の失敗（壊れた文字など）で受け箱を詰まらせない
+            print(f"[警告] 受け箱の印を取り込めないため脇へ退けました: {name}（{e}）", file=sys.stderr)
+            result["failed"] += 1
+            with contextlib.suppress(OSError):
+                os.replace(path, path + MARKS_BROKEN_SUFFIX)
+            continue
+        for reason in imported["skipped"]:
+            print(f"[スキップ] {name}: {reason}")
+        result["files"] += 1
+        result["updated"] += imported["updated"]
+        result["deleted"] += imported["deleted"]
+        with contextlib.suppress(OSError):
+            os.remove(path)
+    if result["files"]:
+        print(
+            f"[OK] 欲しい本の画面で付けた印を取り込みました（ファイル {result['files']} 件・反映 {result['updated']} 件 / 解除 {result['deleted']} 件）。"
+        )
+    return result
 
 
 def cmd_import_marks(args: argparse.Namespace) -> None:
