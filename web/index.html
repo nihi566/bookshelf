@@ -23,8 +23,8 @@
       <a href="#/wishlist" data-axis="price">価格</a>
     </nav>
     <span id="status" class="topbar-status" aria-live="polite"></span>
-    <!-- どの画面からも紙の本を登録する入口（NIH-310 で下のタブから移した） -->
-    <button type="button" class="topbar-add" data-action="register-book" aria-label="読んだ本を足す"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg><span>本を足す</span></button>
+    <!-- どの画面からも紙の本を登録する入口（NIH-310 で下のタブから移した）。狭い幅では文字が消えるので、印は本の形＋「＋」にして隣のメモと見分ける（NIH-364） -->
+    <button type="button" class="topbar-add" data-action="register-book" aria-label="読んだ本を足す"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 5.5C5 4.5 7.5 4.5 9.5 6c2-1.5 4.5-1.5 6.5-.5V16c-2-1-4.5-1-6.5.5C7.5 15 5 15 3 16z M9.5 6v10.5 M19.5 15v6M16.5 18h6"/></svg><span>本を足す</span></button>
     <!-- どの画面からも思いつきを書き留める入口（押す → 書く → 保存） -->
     <button type="button" class="topbar-memo" data-action="new-thought" aria-label="思いつきをメモする"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16z M13.5 6.5l4 4"/></svg><span>メモ</span></button>
   </header>
