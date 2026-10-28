@@ -118,7 +118,7 @@ function mountList(root, body, items, store, lastScraped) {
     <div class="chips" role="group" aria-label="種別">${[['all', 'すべて'], ['manga', 'マンガ'], ['book', '本']].map(([k, label]) => html`<button type="button" class="chip" data-wl-kind-filter="${k}" aria-pressed="${String(filters.kind === k)}">${label}</button>`)}</div>
     </details>
     <p class="notice err wl-price-error" id="wl-price-error" role="alert" hidden>価格の下限が上限より大きいため、価格の条件は使っていません。</p>
-    <div class="row spread wl-count-row"><p class="small muted" id="wl-count" aria-live="polite"></p><button type="button" class="btn small" id="wl-reset" hidden>条件をクリア</button></div>
+    <div class="row spread wl-count-row"><p id="wl-count" aria-live="polite"></p><button type="button" class="btn small" id="wl-reset" hidden>条件をクリア</button></div>
     <ul class="wl-list" id="wl-list"></ul>
     <div class="row" style="margin-top:12px"><button type="button" class="btn" id="wl-more" hidden></button><button type="button" class="btn" id="wl-more-all" hidden></button></div>
     <p class="empty" id="wl-empty" hidden>条件に一致する本がありません。検索語・種別・タグ・出版社・価格・価格の印の条件を見直してください。</p>
