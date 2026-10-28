@@ -111,6 +111,7 @@ function mountList(root, body, items, store, lastScraped) {
     <div class="chips" role="group" aria-label="表示する分類">${Object.entries(SHELVES).map(([k, label]) => html`<button type="button" class="chip" data-wl-shelf="${k}" aria-pressed="${String(filters.shelf === k)}" ${shelfChipHidden(k, shelfCount[k], filters.shelf) ? 'hidden' : ''}>${shelfLabel(k, shelfCount[k])}</button>`)}</div>
     <div class="chips" role="group" aria-label="購入済みの内訳" id="wl-reading" ${filters.shelf === 'purchased' ? '' : 'hidden'}>${Object.keys(READINGS).map((k) => html`<button type="button" class="chip" data-wl-reading="${k}" aria-pressed="${String(filters.reading === k)}"></button>`)}</div>
     <div class="search-box wl-search" role="search"><input type="search" id="wl-q" value="${filters.q}" placeholder="書名・出版社（レーベル）・ASIN で絞り込む" aria-label="書名・出版社（レーベル）・ASIN で絞り込む（空白で区切ると全部を含むもの）" autocomplete="off"></div>
+    <div class="chips wl-quick"><button type="button" class="chip" id="wl-drop" aria-pressed="${String(filters.price === 'drop')}">値下がりした</button></div>
     <details class="wl-filters" id="wl-filters"><summary id="wl-filters-summary">詳しい条件</summary>
     <div class="wl-controls">
       <label class="wl-field"><span>並べ替え</span><select id="wl-sort">${Object.entries(SORTS).map(([k, label]) => html`<option value="${k}" ${filters.sort === k ? 'selected' : ''}>${label}</option>`)}</select></label>
@@ -176,6 +177,9 @@ function mountList(root, body, items, store, lastScraped) {
     for (const option of $('wl-tag').options) option.textContent = `${TAG_FILTER_LABELS[option.value]}（${counts[option.value]}）`;
     const priceMarks = priceMarkCounts(inCurrentShelf);
     for (const option of $('wl-price-mark').options) option.textContent = `${PRICE_MARK_LABELS[option.value]}（${priceMarks[option.value]}）`;
+    // 最初の画面から 1 回で値下がりした本だけに絞れる入口（「価格の印」の「値下がりした」と同じ条件。NIH-420）
+    $('wl-drop').textContent = `値下がりした（${priceMarks.drop}）`;
+    $('wl-drop').setAttribute('aria-pressed', String(filters.price === 'drop'));
     const perLabel = new Map(labelCounts(inCurrentShelf));
     for (const option of $('wl-label').options) option.textContent = option.value ? `${option.value}（${perLabel.get(option.value) || 0}）` : `すべて（${inCurrentShelf.length}）`;
     // 「購入済み」タグの付け外しで分類の件数が変わる（0 冊になった分類は隠し、1 冊以上になれば出す）
@@ -256,6 +260,11 @@ function mountList(root, body, items, store, lastScraped) {
   body.addEventListener('click', (e) => {
     const btn = e.target.closest('button');
     if (!btn) return;
+    if (btn.id === 'wl-drop') {
+      filters.price = filters.price === 'drop' ? 'all' : 'drop';
+      $('wl-price-mark').value = filters.price;
+      return refilter();
+    }
     if (btn.dataset.wlShelf) {
       filters.shelf = btn.dataset.wlShelf;
       setPressed('data-wl-shelf', filters.shelf);

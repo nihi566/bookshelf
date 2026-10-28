@@ -349,6 +349,9 @@ ul.card.plain.far-wrong { padding-left: 16px; } /* 箇条の点を出さない�
 /* 価格チェック（欲しい本） */
 #wl-body [hidden] { display: none !important; } /* .btn などの display 指定より hidden を優先する */
 .wl-search { margin-top: 8px; }
+/* 最初の画面から値下がりした本だけに絞る切り替え（NIH-420） */
+.wl-quick { margin-top: 8px; }
+@media (pointer: coarse) { .wl-quick .chip { min-height: 44px; } }
 /* 並べ替え・タグ・価格の印などは「詳しい条件」に折りたたみ、開いたときに一覧が近く見えるようにする（NIH-406） */
 .wl-filters { margin: 4px 0; }
 .wl-filters > summary { min-height: 44px; font-size: 0.9rem; color: var(--ink-2); }
