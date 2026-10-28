@@ -10,6 +10,8 @@ import { cachedWishlist, FEED_URL, FEED_WANTED_URL, loadWishlist } from '../wish
 
 const SORTS = { default: '標準（書名）', 'price-asc': '価格が安い順', 'price-desc': '価格が高い順', 'price-drop': '値下がり額が大きい順', 'scraped-desc': 'スクレイピングの最新順', rating: '評価が高い順' };
 const SHELVES = { all: 'すべて', kindle: 'Kindle', bookmeter: '読書メーター', purchased: '購入済み' };
+// 検索・価格の欄の入力が止まってから描き直すまでの時間（ミリ秒）
+const TYPING_DEBOUNCE_MS = 180;
 // 読み込み中は一覧の行の骨組みを出し、文字だけの表示から一覧に変わるときの画面のずれを小さくする（NIH-415）。
 // 文字は読み上げ向けに残し、骨組みは読み上げない
 const LOADING_HTML = `<p class="loading wl-loading" role="status">欲しい本を読み込み中…</p><ul class="wl-list wl-skeleton" aria-hidden="true">${'<li class="wl-item"><span class="wl-cover"></span><span class="wl-skel-lines"><span></span><span></span><span></span></span></li>'.repeat(4)}</ul>`;
@@ -272,6 +274,7 @@ function mountList(root, body, items, store, lastScraped) {
     }
     // 件数の行と、0 冊のときの空のメッセージの中の「条件をクリア」（NIH-414）は同じ動き
     if (btn.id === 'wl-reset' || btn.id === 'wl-empty-reset') {
+      clearTimeout(typingTimer); // 入力の待ちが残っていると、クリアの後にもう一度描き直してフォーカスが外れる
       Object.assign(filters, { reading: 'all', q: '', sort: 'default', ku: false, min: '', max: '', tag: 'all', kind: 'all', label: '', price: 'all' });
       setPressed('data-wl-reading', 'all');
       saveFilter(KEYS.tagFilter, null);
@@ -307,12 +310,20 @@ function mountList(root, body, items, store, lastScraped) {
     sendSoon();
   });
 
+  // 検索・価格の欄は、入力が落ち着いてから描き直す（1 文字ごとに一覧を描き直さない。日本語の変換中は待ち、確定したら描く。NIH-410）
+  let typingTimer;
   const onInput = (id, key, transform = (el) => el.value) => {
-    $(id).addEventListener(id === 'wl-ku' || id === 'wl-sort' || id === 'wl-tag' || id === 'wl-label' || id === 'wl-price-mark' ? 'change' : 'input', (e) => {
+    const typed = !(id === 'wl-ku' || id === 'wl-sort' || id === 'wl-tag' || id === 'wl-label' || id === 'wl-price-mark');
+    const apply = (e) => {
+      if (e.isComposing) return;
       filters[key] = transform(e.target);
       if (key === 'tag') saveFilter(KEYS.tagFilter, filters.tag === 'all' ? null : filters.tag);
-      refilter();
-    });
+      if (!typed) return refilter();
+      clearTimeout(typingTimer);
+      typingTimer = setTimeout(refilter, TYPING_DEBOUNCE_MS);
+    };
+    $(id).addEventListener(typed ? 'input' : 'change', apply);
+    if (typed) $(id).addEventListener('compositionend', apply);
   };
   onInput('wl-q', 'q');
   onInput('wl-sort', 'sort');
