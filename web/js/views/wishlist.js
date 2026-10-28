@@ -3,7 +3,7 @@
 import { html } from '../html.js';
 import { canSendMarks, companion, download } from '../services.js';
 import { bookSpine, toast } from '../ui.js';
-import { applyImportedMarks, bookmeterUrl, browserStore, cleanupSyncedMarks, collectMarks, filterWishlist, formatPrice, inShelf, KEYS, labelCounts, loadMarks, marksFile, memoryStore, openWishlistFilters, pageWishlist, parseMarksFile, priceChange, priceMarkCounts, PRICE_MARK_LABELS, priceStopReason, priceSparkline, priceTotal, readingCounts, readingLookup, saveMarks, shelfChipHidden, shelfCounts, TAG_FILTER_LABELS, TAG_LABELS, tagCounts, toggleMark, WISHLIST_PAGE_SIZE } from '../../core/wishlist.js';
+import { applyImportedMarks, bookmeterUrl, browserStore, cleanupSyncedMarks, collectMarks, detailFilterCount, filterWishlist, formatPrice, inShelf, KEYS, labelCounts, loadMarks, marksFile, memoryStore, openWishlistFilters, pageWishlist, parseMarksFile, priceChange, priceMarkCounts, PRICE_MARK_LABELS, priceStopReason, priceSparkline, priceTotal, readingCounts, readingLookup, saveMarks, shelfChipHidden, shelfCounts, TAG_FILTER_LABELS, TAG_LABELS, tagCounts, toggleMark, WISHLIST_PAGE_SIZE } from '../../core/wishlist.js';
 import { listBooks } from '../../core/model.js';
 import { isoDate } from '../../core/text.js';
 import { cachedWishlist, FEED_URL, FEED_WANTED_URL, loadWishlist } from '../wishlist-data.js';
@@ -107,6 +107,7 @@ function mountList(root, body, items, store, lastScraped) {
     <div class="chips" role="group" aria-label="表示する分類">${Object.entries(SHELVES).map(([k, label]) => html`<button type="button" class="chip" data-wl-shelf="${k}" aria-pressed="${String(filters.shelf === k)}" ${shelfChipHidden(k, shelfCount[k], filters.shelf) ? 'hidden' : ''}>${shelfLabel(k, shelfCount[k])}</button>`)}</div>
     <div class="chips" role="group" aria-label="購入済みの内訳" id="wl-reading" ${filters.shelf === 'purchased' ? '' : 'hidden'}>${Object.keys(READINGS).map((k) => html`<button type="button" class="chip" data-wl-reading="${k}" aria-pressed="${String(filters.reading === k)}"></button>`)}</div>
     <div class="search-box wl-search" role="search"><input type="search" id="wl-q" value="${filters.q}" placeholder="書名・出版社（レーベル）・ASIN で絞り込む" aria-label="書名・出版社（レーベル）・ASIN で絞り込む（空白で区切ると全部を含むもの）" autocomplete="off"></div>
+    <details class="wl-filters" id="wl-filters"><summary id="wl-filters-summary">詳しい条件</summary>
     <div class="wl-controls">
       <label class="wl-field"><span>並べ替え</span><select id="wl-sort">${Object.entries(SORTS).map(([k, label]) => html`<option value="${k}" ${filters.sort === k ? 'selected' : ''}>${label}</option>`)}</select></label>
       <label class="wl-field"><span>タグ</span><select id="wl-tag">${Object.entries(TAG_FILTER_LABELS).map(([k, label]) => html`<option value="${k}" ${filters.tag === k ? 'selected' : ''}>${label}</option>`)}</select></label>
@@ -116,6 +117,7 @@ function mountList(root, body, items, store, lastScraped) {
       <label class="wl-check"><input type="checkbox" id="wl-ku" ${filters.ku ? 'checked' : ''}> Kindle Unlimited のみ</label>
     </div>
     <div class="chips" role="group" aria-label="種別">${[['all', 'すべて'], ['manga', 'マンガ'], ['book', '本']].map(([k, label]) => html`<button type="button" class="chip" data-wl-kind-filter="${k}" aria-pressed="${String(filters.kind === k)}">${label}</button>`)}</div>
+    </details>
     <p class="notice err wl-price-error" id="wl-price-error" role="alert" hidden>価格の下限が上限より大きいため、価格の条件は使っていません。</p>
     <div class="row spread wl-count-row"><p class="small muted" id="wl-count" aria-live="polite"></p><button type="button" class="btn small" id="wl-reset" hidden>条件をクリア</button></div>
     <ul class="wl-list" id="wl-list"></ul>
@@ -181,6 +183,9 @@ function mountList(root, body, items, store, lastScraped) {
     for (const b of body.querySelectorAll('[data-wl-reading]')) b.textContent = readingLabel(b.dataset.wlReading, readings[b.dataset.wlReading]);
     $('wl-reading').hidden = filters.shelf !== 'purchased';
     $('wl-price-error').hidden = !r.priceRangeInvalid;
+    // 折りたたんでいても、効いている「詳しい条件」があると分かるように見出しに数を出す（NIH-406）
+    const detail = detailFilterCount(filters);
+    $('wl-filters-summary').textContent = detail ? `詳しい条件（${detail} 件を指定中）` : '詳しい条件';
     $('wl-reset').hidden = !((filters.shelf === 'purchased' && filters.reading !== 'all') || filters.q.trim() || filters.ku || filters.min !== '' || filters.max !== '' || filters.tag !== 'all' || filters.kind !== 'all' || filters.label || filters.price !== 'all' || filters.sort !== 'default');
     $('wl-empty').hidden = r.items.length !== 0;
     list.innerHTML = String(html`${showPaging(inCurrentShelf.length).visible.map(row)}`);

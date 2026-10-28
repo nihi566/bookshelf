@@ -349,6 +349,10 @@ ul.card.plain.far-wrong { padding-left: 16px; } /* 箇条の点を出さない�
 /* 価格チェック（欲しい本） */
 #wl-body [hidden] { display: none !important; } /* .btn などの display 指定より hidden を優先する */
 .wl-search { margin-top: 8px; }
+/* 並べ替え・タグ・価格の印などは「詳しい条件」に折りたたみ、開いたときに一覧が近く見えるようにする（NIH-406） */
+.wl-filters { margin: 4px 0; }
+.wl-filters > summary { min-height: 44px; font-size: 0.9rem; color: var(--ink-2); }
+.wl-filters[open] > summary { margin-bottom: 4px; }
 .wl-controls { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 12px; margin: 4px 0 8px; }
 @media (max-width: 359px) { .wl-controls { grid-template-columns: minmax(0, 1fr); } }
 .wl-field > span:first-child { display: block; font-size: 0.8rem; color: var(--ink-2); font-weight: 600; margin-bottom: 2px; }

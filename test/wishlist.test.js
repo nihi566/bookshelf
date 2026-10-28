@@ -797,3 +797,13 @@ test('priceStopReason: 価格を取りに行かなくなった本（マンガ・
   const local = { ...list[0], marks: { ...list[0].marks, kind: 'manga' } };
   assert.equal(priceStopReason(local), 'manga', 'この端末で切り替えた種別でも止まったとみなす');
 });
+
+test('detailFilterCount: 「詳しい条件」に入れた条件のうち、効いているものの数（NIH-406）', async () => {
+  const { detailFilterCount } = await import('../web/core/wishlist.js');
+  const base = { shelf: 'all', reading: 'all', q: '', sort: 'default', ku: false, min: '', max: '', tag: 'all', kind: 'all', label: '', price: 'all' };
+  assert.equal(detailFilterCount(base), 0);
+  assert.equal(detailFilterCount({ ...base, q: '本', shelf: 'kindle' }), 0, '検索と分類は常に見えるので数えない');
+  assert.equal(detailFilterCount({ ...base, sort: 'title', tag: 'seen', price: 'drop', label: '新潮文庫', ku: true, kind: 'manga' }), 6);
+  assert.equal(detailFilterCount({ ...base, min: '100', max: '500' }), 1, '価格の範囲は下限・上限で 1 つ');
+  assert.equal(detailFilterCount({ ...base, max: '500' }), 1);
+});

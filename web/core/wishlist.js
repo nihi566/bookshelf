@@ -267,6 +267,14 @@ export function matchesPriceMark(book, mark = 'all', marks = null) {
   return Boolean(c && (mark === 'drop' ? c.diff < 0 : c.lowest));
 }
 
+/**
+ * 価格チェックの「詳しい条件」（並べ替え・タグ・価格の印・出版社・価格・KU・種別）のうち、効いているものの数（NIH-406）。
+ * 常に見えている検索・分類は数えない。価格の範囲は下限・上限で 1 つ
+ */
+export function detailFilterCount(f) {
+  return [f.sort !== 'default', f.tag !== 'all', f.price !== 'all', Boolean(f.label), f.min !== '' || f.max !== '', Boolean(f.ku), f.kind !== 'all'].filter(Boolean).length;
+}
+
 /** 価格の印の選択肢ごとに、選ぶと残る件数。items: [{ book, marks }] */
 export function priceMarkCounts(items) {
   return Object.fromEntries(Object.keys(PRICE_MARK_LABELS).map((k) => [k, items.filter(({ book, marks }) => matchesPriceMark(book, k, marks)).length]));
