@@ -5,7 +5,7 @@ import { bookHighlights, bookJoinCandidateCounts, dailyPicks, guessTechnical, is
 import { searchPoints } from '../../core/points.js';
 import { THOUGHT_LABEL, liveThoughts } from '../../core/thoughts.js';
 import { normalizeText } from '../../core/text.js';
-import { browserStore, formatPrice, loadMarks, searchWishlist, wishlistSummary } from '../../core/wishlist.js';
+import { browserStore, formatPrice, inShelf, loadMarks, searchWishlist, wishlistSummary } from '../../core/wishlist.js';
 import { loadWishlist } from '../wishlist-data.js';
 import { bookRow, bookSpine, emptyBooksBlock, highlightCard, homeAlertBlock, lineIndex, pendingNudge, pointCard } from '../ui.js';
 import { inboxBlock } from './thoughts.js';
@@ -384,7 +384,9 @@ function renderWishlistHits(root, q) {
   loadWishlist()
     .then((w) => {
       if (token !== wishlistToken || !box.isConnected) return;
-      const hits = searchWishlist(w.books, words);
+      // 購入済み（このブラウザのタグも）は価格チェックの「すべて」に出ないので、ここでも出さない（リンク先の件数と合わせる。NIH-425）
+      const store = browserStore();
+      const hits = searchWishlist(w.books, words).filter((book) => inShelf({ book, marks: loadMarks(book, store) }, 'all'));
       box.innerHTML = hits.length
         ? String(html`<section class="wishlist-hits"><div class="section"><h2>欲しい本</h2><a class="small" href="#/wishlist?q=${encodeURIComponent(words)}">欲しい本で見る（${hits.length} 件）</a></div>
             <ul class="book-list">${hits.slice(0, 5).map(wishlistHitRow)}</ul></section>`)

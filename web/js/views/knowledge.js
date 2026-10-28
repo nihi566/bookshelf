@@ -11,7 +11,7 @@ import { pendingPointList } from '../../core/auto-analysis.js';
 import { assignedThoughtIds } from '../../core/line-assignments.js';
 import { isLineStarred } from '../../core/line-stars.js';
 import { lineIndex, pendingNudge, pointCard } from '../ui.js';
-import { amazonKindleUrl, findWishlistBook, formatPrice } from '../../core/wishlist.js';
+import { amazonKindleUrl, browserStore, findWishlistBook, formatPrice, inShelf, loadMarks } from '../../core/wishlist.js';
 import { loadWishlist } from '../wishlist-data.js';
 import { companion } from '../services.js';
 import { farBlock } from './far.js';
@@ -249,14 +249,18 @@ export const knowledge = {
     if (!cards.length) return;
     loadWishlist()
       .then((w) => {
+        const store = browserStore();
         for (const card of cards) {
           const found = findWishlistBook(w.books, [card.dataset.title, card.dataset.vtitle]);
           const slot = card.querySelector('.rec-wish');
           if (!found || !slot?.isConnected) continue;
           const b = found.book;
+          // 購入済み（この端末のタグも）の本は価格チェックの「すべて」に出ないので、分類「購入済み」で開く（NIH-425）
+          const purchased = inShelf({ book: b, marks: loadMarks(b, store) }, 'purchased');
           // 前方一致は続編・派生本のこともあるので言い切らず、欲しい本側の書名を見せる
-          const label = found.exact ? (b.purchased ? '購入済み' : '欲しい本に登録済み') : `欲しい本に似た書名: ${b.title}`;
-          slot.innerHTML = String(html`<a class="badge wish ${found.exact ? '' : 'similar'}" href="#/wishlist?q=${encodeURIComponent(b.asin || b.title)}">${label}</a>`);
+          const label = found.exact ? (purchased ? '購入済み' : '欲しい本に登録済み') : `欲しい本に似た書名: ${b.title}`;
+          const shelf = purchased ? '&shelf=purchased' : '';
+          slot.innerHTML = String(html`<a class="badge wish ${found.exact ? '' : 'similar'}" href="#/wishlist?q=${encodeURIComponent(b.asin || b.title)}${shelf}">${label}</a>`);
           // 書名が一致した欲しい本の ASIN が分かれば、検索ではなく商品ページを開く
           const amazon = card.querySelector('.rec-amazon');
           const dp = found.exact && b.asin ? amazonKindleUrl({ asin: b.asin }) : '';
