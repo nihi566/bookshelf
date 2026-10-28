@@ -375,6 +375,9 @@ ul.card.plain.far-wrong { padding-left: 16px; } /* 箇条の点を出さない�
 .wl-skel-lines > span:nth-child(2) { width: 70%; }
 .wl-skel-lines > span:last-child { width: 35%; height: 18px; }
 .wl-item { padding: 12px 4px; border-bottom: 1px solid var(--line); }
+/* 「残りをすべて表示」で最大 775 行を描いても、画面の外の行は描画を後回しにする（ページ内検索では引き続き見つかる。NIH-410）。
+   読み込み中の骨組みには使わない */
+.wl-list:not(.wl-skeleton) > .wl-item { content-visibility: auto; contain-intrinsic-size: auto 140px; }
 .wl-main { display: flex; align-items: center; gap: 12px; color: var(--ink); min-width: 0; }
 a.wl-main:hover { text-decoration: none; }
 a.wl-main:hover .title { text-decoration: underline; }
