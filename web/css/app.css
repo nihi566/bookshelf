@@ -379,6 +379,16 @@ a.wl-main:hover .title { text-decoration: underline; }
 .wl-history, .wl-history-none, .wl-bookmeter, .wl-stopped { margin: 6px 0 0 56px; }
 .wl-bookmeter a { display: inline-flex; align-items: center; min-height: 32px; }
 .wl-history summary { display: flex; align-items: center; min-height: 36px; font-size: 0.82rem; color: var(--ink-2); cursor: pointer; }
+/* 行ごとの折りたたみ「タグ・履歴」（NIH-408）。開くボタンは行の右上に重ね、閉じた行は書名・価格・推移の高さだけにする。
+   中の部品は折りたたみの字下げにそろえる */
+.wl-item { position: relative; }
+.wl-item:has(> .wl-more) .wl-main { padding-right: 44px; }
+.wl-more { margin: 0 0 0 56px; }
+.wl-more[open] { margin-top: 8px; }
+.wl-more > summary { position: absolute; top: 8px; right: 0; justify-content: center; width: 44px; min-height: 44px; border-radius: 10px; font-weight: normal; font-size: 1.1rem; color: var(--ink-2); }
+.wl-more > summary::after { content: none; }
+.wl-more[open] > summary { background: var(--surface-2); color: var(--ink); }
+.wl-more .wl-marks, .wl-more .wl-history, .wl-more .wl-history-none, .wl-more .wl-bookmeter { margin-left: 0; }
 /* 指で操作する端末では、行ごとの操作の押せる範囲を 44px 以上・隣との間隔を 8px 以上にする（NIH-405）。
    枠のあるチップは見た目の大きさを変えず、押せる範囲だけを上下に広げる（行の高さを 44px にして、広げた範囲が隣の操作に重ならないようにする） */
 @media (pointer: coarse) {
@@ -387,7 +397,7 @@ a.wl-main:hover .title { text-decoration: underline; }
   .wl-marks .chip::before { content: ''; position: absolute; inset: -6px 0; }
   .wl-star { width: 44px; height: 44px; }
   .wl-history, .wl-history-none, .wl-bookmeter, .wl-stopped { margin-top: 8px; }
-  .wl-bookmeter a, .wl-history summary { min-height: 44px; }
+  .wl-bookmeter a, .wl-history summary, .wl-more > summary { min-height: 44px; }
 }
 .wl-history table { width: 100%; border-collapse: collapse; font-size: 0.82rem; font-variant-numeric: tabular-nums; }
 .wl-history th, .wl-history td { padding: 4px 8px 4px 0; border-bottom: 1px solid var(--line); text-align: left; }

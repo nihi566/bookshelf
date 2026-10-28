@@ -134,6 +134,18 @@ function mountList(root, body, items, store, lastScraped) {
   // 一覧は先頭から shown 件だけ描く（絞り込み・並べ替えのたびに 1 ページ目に戻し、タグ・★の付け外しでは今の件数を保つ）
   let current = []; // いまの条件で絞り込んだ全件（「さらに表示」で続きを足すときに使う）
   let shelfTotal = 0; // いまの分類（すべて/Kindle/…）の冊数
+  // 「タグ・履歴」を開いている行の ASIN（タグ・★を押すと一覧を描き直すので、開いたまま戻す）
+  const openRows = new Set();
+  const row = (item) => itemRow(item, openRows.has(item.book.asin));
+  // toggle は親へ伝わらないので、捕捉の段階で受け取る（行の中の履歴の開閉は数えない）
+  list.addEventListener(
+    'toggle',
+    (e) => {
+      const asin = e.target.classList?.contains('wl-more') && e.target.closest('li[data-asin]')?.dataset.asin;
+      if (asin) e.target.open ? openRows.add(asin) : openRows.delete(asin);
+    },
+    true
+  );
 
   // 件数・合計は絞り込んだ全件で出し、描いていない分があれば表示中の件数と「さらに表示」「残りをすべて表示」を添える
   //（残りをすべて描けば、ブラウザのページ内検索で全件を探せる）
@@ -171,7 +183,7 @@ function mountList(root, body, items, store, lastScraped) {
     $('wl-price-error').hidden = !r.priceRangeInvalid;
     $('wl-reset').hidden = !((filters.shelf === 'purchased' && filters.reading !== 'all') || filters.q.trim() || filters.ku || filters.min !== '' || filters.max !== '' || filters.tag !== 'all' || filters.kind !== 'all' || filters.label || filters.price !== 'all' || filters.sort !== 'default');
     $('wl-empty').hidden = r.items.length !== 0;
-    list.innerHTML = String(html`${showPaging(inCurrentShelf.length).visible.map(itemRow)}`);
+    list.innerHTML = String(html`${showPaging(inCurrentShelf.length).visible.map(row)}`);
     renderSummary();
   };
 
@@ -223,7 +235,7 @@ function mountList(root, body, items, store, lastScraped) {
     const from = list.children.length;
     shown = from + count;
     const added = showPaging(shelfTotal).visible.slice(from);
-    list.insertAdjacentHTML('beforeend', String(html`${added.map(itemRow)}`));
+    list.insertAdjacentHTML('beforeend', String(html`${added.map(row)}`));
     list.children[from]?.querySelector('a, button')?.focus();
   };
 
@@ -416,20 +428,28 @@ function bookmeterLink(book) {
   return url ? html`<p class="small wl-bookmeter"><a href="${url}" target="_blank" rel="noopener noreferrer" aria-label="${book.title}（読書メーターで見る）">読書メーターで見る</a></p>` : '';
 }
 
-function itemRow({ book, marks, reading }) {
+// 付けたタグを、折りたたんだ行でも分かるように 1 つのバッジで出す（読んだは★も）
+function tagBadge(marks, value) {
+  const label = TAG_LABELS[marks.tag];
+  return label ? html` <span class="badge">${label}${marks.tag === 'seen' && value ? ` ★${value}` : ''}</span>` : '';
+}
+
+// 1 行の既定の表示は書名・価格・推移・主な印だけにし、タグの付け外し・★・読書メーター・履歴は行ごとの折りたたみに入れる（NIH-408）。
+// open: 描き直しの前に開いていた行か（タグを押すと一覧を描き直すため、開いたまま戻す）
+function itemRow({ book, marks, reading }, open = false) {
   const cover = bookSpine(book, 'wl-cover');
-  const text = html`<span class="grow"><span class="title">${book.title}</span><span class="meta">${formatPrice(book)}${changeBadges(book, marks)}${book.ku ? html` <span class="badge ku">KU</span>` : ''}${readingBadge({ book, marks, reading })}</span>${sparkline(book)}</span>`;
   const value = parseInt(marks.rating, 10) || 0;
+  const text = html`<span class="grow"><span class="title">${book.title}</span><span class="meta">${formatPrice(book)}${changeBadges(book, marks)}${book.ku ? html` <span class="badge ku">KU</span>` : ''}${tagBadge(marks, value)}${readingBadge({ book, marks, reading })}</span>${sparkline(book)}</span>`;
+  const marksBlock = book.asin
+    ? html`<div class="wl-marks">
+        <span class="chips" role="group" aria-label="タグ">${Object.entries(TAG_LABELS).map(([k, label]) => html`<button type="button" class="chip wl-tag" data-tag="${k}" aria-pressed="${String(marks.tag === k)}">${label}</button>`)}</span>
+        ${marks.tag === 'seen' ? html`<span class="wl-stars" role="group" aria-label="★評価（同じ★をもう一度押すと取り消し）">${[1, 2, 3, 4, 5].map((n) => html`<button type="button" class="icon-btn wl-star ${n <= value ? 'on' : ''}" data-rating="${n}" aria-pressed="${String(n === value)}" aria-label="★${n}">${n <= value ? '★' : '☆'}</button>`)}</span>` : ''}
+      </div>`
+    : '';
+  const inner = html`${marksBlock}${bookmeterLink(book)}${historyBlock(book)}`;
   return html`<li class="wl-item" data-asin="${book.asin}">
     ${book.asin ? html`<a class="wl-main" href="https://www.amazon.co.jp/dp/${book.asin}" target="_blank" rel="noopener noreferrer" aria-label="${book.title}（Amazon で開く）">${cover}${text}</a>` : html`<div class="wl-main">${cover}${text}</div>`}
-    ${book.asin
-      ? html`<div class="wl-marks">
-          <span class="chips" role="group" aria-label="タグ">${Object.entries(TAG_LABELS).map(([k, label]) => html`<button type="button" class="chip wl-tag" data-tag="${k}" aria-pressed="${String(marks.tag === k)}">${label}</button>`)}</span>
-          ${marks.tag === 'seen' ? html`<span class="wl-stars" role="group" aria-label="★評価（同じ★をもう一度押すと取り消し）">${[1, 2, 3, 4, 5].map((n) => html`<button type="button" class="icon-btn wl-star ${n <= value ? 'on' : ''}" data-rating="${n}" aria-pressed="${String(n === value)}" aria-label="★${n}">${n <= value ? '★' : '☆'}</button>`)}</span>` : ''}
-        </div>`
-      : ''}
     ${stoppedNote({ book, marks })}
-    ${bookmeterLink(book)}
-    ${historyBlock(book)}
+    ${String(inner).trim() ? html`<details class="wl-more" ${open ? 'open' : ''}><summary aria-label="${book.title} のタグ・履歴" title="タグ・履歴">…</summary>${inner}</details>` : ''}
   </li>`;
 }
