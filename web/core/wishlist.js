@@ -227,13 +227,14 @@ export function cleanupSyncedMarks(store, book) {
  * 欲しい本の画面を開いたときの絞り込み。filters: いまの条件、normal: リンクから開く前の条件（普通に開いているときは null）。
  * 検索・おすすめ・ホームのリンク（q / ku / price: 価格の印。all と知らない値はリンクとして扱わない）から来たときは
  * その条件だけで開き（リンクに出した件数と合わせる）、それまでの条件を取っておく。
- * 普通に開き直したら取っておいた条件に戻す。同じ画面の描き直し（refresh: 同期のあとなど）では、利用者がリンク先で変えた条件を残す
+ * 普通に開き直したら取っておいた条件に戻す。同じ画面の描き直し（refresh: 同期のあとなど）では、利用者がリンク先で変えた条件を残す。
+ * shelf: 'purchased' は購入済みの本へのリンク（「すべて」には購入済みが出ないため。NIH-425）。それ以外の値は「すべて」で開く
  */
-export function openWishlistFilters(filters, normal, { q = '', ku = false, price = 'all', refresh = false } = {}) {
+export function openWishlistFilters(filters, normal, { q = '', ku = false, price = 'all', shelf = 'all', refresh = false } = {}) {
   const mark = price !== 'all' && Object.hasOwn(PRICE_MARK_LABELS, price) ? price : 'all';
   if (q || ku || mark !== 'all') {
     if (refresh && normal) return { filters, normal };
-    return { filters: { ...filters, q, ku, shelf: 'all', reading: 'all', sort: 'default', min: '', max: '', tag: 'all', kind: 'all', label: '', price: mark }, normal: normal ?? filters };
+    return { filters: { ...filters, q, ku, shelf: shelf === 'purchased' ? 'purchased' : 'all', reading: 'all', sort: 'default', min: '', max: '', tag: 'all', kind: 'all', label: '', price: mark }, normal: normal ?? filters };
   }
   return { filters: normal ?? filters, normal: null };
 }
@@ -273,13 +274,14 @@ export function priceMarkCounts(items) {
 
 /**
  * 分類（すべて/Kindle/読書メーター/購入済み）に入るか。Kindle・読書メーターは来た先で分け、両方から来た本は両方に入る。
- * 「購入済み」タグを付けた本は、公開データの更新を待たずに購入済みへ移し、Kindle・読書メーターから外す（買った本を残さない）
+ * 購入済みの本（「購入済み」タグも。公開データの更新を待たない）は「購入済み」にだけ入れ、すべて・Kindle・読書メーターから外す
+ *（買った本を価格チェックの一覧に残さない。NIH-425）
  */
 export function inShelf({ book, marks }, shelf = 'all') {
   const purchased = book.purchased || marks.tag === 'purchased';
   if (shelf === 'purchased') return purchased;
   if (SOURCES.includes(shelf)) return book.sources.includes(shelf) && !purchased;
-  return true;
+  return !purchased;
 }
 
 export function shelfCounts(items) {
@@ -477,19 +479,20 @@ export function searchWishlist(books, q) {
 const SKIP_IN_PICKS = new Set(['purchased', 'seen']);
 
 /**
- * ホーム用の要約。items: [{ book, marks }]。
+ * ホーム用の要約。items: [{ book, marks }]。購入済みの本は数えない（分類「すべて」と同じ。NIH-425）。
  * kuCount は「Kindle Unlimited のみ」、dropCount は価格の印「値下がりした」で絞り込んだ欲しい本の画面と同じ数（リンク先の件数と食い違わないように）。
- * picks は今すぐ読める候補: KU で、購入済み・読んだを除き、読みたいを先頭に最大 3 冊。
+ * picks は今すぐ読める候補: KU で、読んだを除き、読みたいを先頭に最大 3 冊。
  */
 export function wishlistSummary(items, limit = 3) {
-  const ku = items.filter(({ book }) => book.ku);
+  const unbought = items.filter((item) => inShelf(item, 'all'));
+  const ku = unbought.filter(({ book }) => book.ku);
   const wanted = ({ book, marks }) => book.wanted || marks.tag === 'wanted';
   const picks = ku
-    .filter(({ book, marks }) => !book.purchased && !SKIP_IN_PICKS.has(marks.tag))
+    .filter(({ marks }) => !SKIP_IN_PICKS.has(marks.tag))
     .sort((a, b) => wanted(b) - wanted(a) || a.book.index - b.book.index)
     .slice(0, limit)
     .map(({ book }) => book);
-  return { total: items.length, kuCount: ku.length, dropCount: items.filter(({ book, marks }) => matchesPriceMark(book, 'drop', marks)).length, picks };
+  return { total: unbought.length, kuCount: ku.length, dropCount: unbought.filter(({ book, marks }) => matchesPriceMark(book, 'drop', marks)).length, picks };
 }
 
 // おすすめに渡す欲しい本の上限（PC へ送る本文の大きさを抑える。公開データは 300 冊ほど）

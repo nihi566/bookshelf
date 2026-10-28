@@ -49,7 +49,8 @@ export const wishlist = {
     const q = ctx?.query?.get('q') || '';
     const ku = ctx?.query?.get('ku') === '1';
     const price = ctx?.query?.get('price') || 'all';
-    ({ filters, normal: normalFilters } = openWishlistFilters(filters, normalFilters, { q, ku, price, refresh: Boolean(ctx?.refresh) }));
+    const shelf = ctx?.query?.get('shelf') || 'all'; // おすすめの「購入済み」からは shelf=purchased
+    ({ filters, normal: normalFilters } = openWishlistFilters(filters, normalFilters, { q, ku, price, shelf, refresh: Boolean(ctx?.refresh) }));
     if (!ctx?.refresh) shown = WISHLIST_PAGE_SIZE;
     const show = (w) => {
       // 購入済みの本を読み始めたか（本棚に線があるか）を引く
@@ -417,7 +418,7 @@ function bookmeterLink(book) {
 
 function itemRow({ book, marks, reading }) {
   const cover = bookSpine(book, 'wl-cover');
-  const text = html`<span class="grow"><span class="title">${book.title}</span><span class="meta">${formatPrice(book)}${changeBadges(book, marks)}${book.ku ? html` <span class="badge ku">KU</span>` : ''}${inShelf({ book, marks }, 'purchased') ? html` <span class="badge">購入済み</span>` : ''}${readingBadge({ book, marks, reading })}</span>${sparkline(book)}</span>`;
+  const text = html`<span class="grow"><span class="title">${book.title}</span><span class="meta">${formatPrice(book)}${changeBadges(book, marks)}${book.ku ? html` <span class="badge ku">KU</span>` : ''}${readingBadge({ book, marks, reading })}</span>${sparkline(book)}</span>`;
   const value = parseInt(marks.rating, 10) || 0;
   return html`<li class="wl-item" data-asin="${book.asin}">
     ${book.asin ? html`<a class="wl-main" href="https://www.amazon.co.jp/dp/${book.asin}" target="_blank" rel="noopener noreferrer" aria-label="${book.title}（Amazon で開く）">${cover}${text}</a>` : html`<div class="wl-main">${cover}${text}</div>`}

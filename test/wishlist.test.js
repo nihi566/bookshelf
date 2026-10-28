@@ -155,40 +155,42 @@ function items(store = memoryStore()) {
 const asins = (r) => r.items.map((i) => i.book.asin.slice(-1)).join('');
 
 test('filterWishlist: 分類・検索（空白で AND・ASIN も対象）', () => {
-  assert.equal(asins(filterWishlist(items(), {})), '1234');
+  assert.equal(asins(filterWishlist(items(), {})), '124', '購入済みは「すべて」に入れない（NIH-425）');
   assert.equal(asins(filterWishlist(items(), { shelf: 'kindle' })), '12', '購入済みは Kindle に入れない');
   assert.equal(asins(filterWishlist(items(), { shelf: 'bookmeter' })), '14', '両方から来た本は両方に入る');
   assert.equal(asins(filterWishlist(items(), { shelf: 'purchased' })), '3');
-  assert.equal(asins(filterWishlist(items(), { shelf: 'wanted' })), '1234', '廃止した「読みたい」の分類は「すべて」と同じ');
+  assert.equal(asins(filterWishlist(items(), { shelf: 'wanted' })), '124', '廃止した「読みたい」の分類は「すべて」と同じ');
   assert.equal(asins(filterWishlist(items(), { q: 'すごい 上' })), '1');
   assert.equal(asins(filterWishlist(items(), { q: 'すごい 下' })), '');
-  assert.equal(asins(filterWishlist(items(), { q: 'b0aaaaaaa3' })), '3');
+  assert.equal(asins(filterWishlist(items(), { shelf: 'purchased', q: 'b0aaaaaaa3' })), '3');
 });
 
 test('filterWishlist: KU・価格帯（価格なしは除外）・逆転した価格帯は無視して知らせる', () => {
   assert.equal(asins(filterWishlist(items(), { ku: true })), '2');
   assert.equal(asins(filterWishlist(items(), { min: '600' })), '1');
-  assert.equal(asins(filterWishlist(items(), { max: '600' })), '3');
+  assert.equal(asins(filterWishlist(items(), { shelf: 'purchased', max: '600' })), '3');
   const r = filterWishlist(items(), { min: '1000', max: '100' });
   assert.equal(r.priceRangeInvalid, true);
-  assert.equal(asins(r), '1234');
+  assert.equal(asins(r), '124');
 });
 
 test('filterWishlist: タグ・種別の絞り込み（廃止した「読みたくない」はタグなしとして扱う）', () => {
-  const store = memoryStore({ 'book-tag:B0AAAAAAA1': 'unwanted', 'book-tag:B0AAAAAAA3': 'seen', 'book-rating:B0AAAAAAA3': '5' });
-  assert.equal(asins(filterWishlist(items(store), { tag: 'seen' })), '3');
-  assert.equal(asins(filterWishlist(items(store), { tag: 'hide-unwanted' })), '1234', '廃止した選択肢は「すべて」と同じ');
-  assert.equal(asins(filterWishlist(items(store), { tag: 'untagged' })), '124');
+  const store = memoryStore({ 'book-tag:B0AAAAAAA1': 'unwanted', 'book-tag:B0AAAAAAA4': 'seen', 'book-rating:B0AAAAAAA4': '5' });
+  assert.equal(asins(filterWishlist(items(store), { tag: 'seen' })), '4');
+  assert.equal(asins(filterWishlist(items(store), { tag: 'hide-unwanted' })), '124', '廃止した選択肢は「すべて」と同じ');
+  assert.equal(asins(filterWishlist(items(store), { tag: 'untagged' })), '12');
   assert.equal(asins(filterWishlist(items(store), { kind: 'manga' })), '2');
-  assert.equal(asins(filterWishlist(items(store), { kind: 'book' })), '134');
+  assert.equal(asins(filterWishlist(items(store), { kind: 'book' })), '14');
 });
 
 test('filterWishlist: 並べ替え（価格なしは常に後ろ・評価は★→見た→その他）', () => {
-  assert.equal(asins(filterWishlist(items(), { sort: 'price-asc' })), '3124');
-  assert.equal(asins(filterWishlist(items(), { sort: 'price-desc' })), '1324');
-  assert.equal(asins(filterWishlist(items(), { sort: 'title' })), '3124');
+  // 購入済みは「すべて」に出ないので、3 を購入済みでない本にして 4 冊で並べる
+  const unbought = (store) => items(store).map((i) => (i.book.asin === 'B0AAAAAAA3' ? { ...i, book: { ...i.book, purchased: false } } : i));
+  assert.equal(asins(filterWishlist(unbought(), { sort: 'price-asc' })), '3124');
+  assert.equal(asins(filterWishlist(unbought(), { sort: 'price-desc' })), '1324');
+  assert.equal(asins(filterWishlist(unbought(), { sort: 'title' })), '3124');
   const store = memoryStore({ 'book-tag:B0AAAAAAA2': 'seen', 'book-tag:B0AAAAAAA4': 'seen', 'book-rating:B0AAAAAAA4': '3' });
-  assert.equal(asins(filterWishlist(items(store), { sort: 'rating' })), '4213');
+  assert.equal(asins(filterWishlist(unbought(store), { sort: 'rating' })), '4213');
 });
 
 test('filterWishlist: スクレイピングの最新順（取得日時が新しい順・日時なしは後ろ）', () => {
@@ -238,9 +240,16 @@ test('inShelf / shelfCounts: 「購入済み」タグを付けた本は購入済
   assert.equal(asins(filterWishlist(list, { shelf: 'purchased' })), '13');
   assert.equal(asins(filterWishlist(list, { shelf: 'kindle' })), '2');
   assert.equal(asins(filterWishlist(list, { shelf: 'bookmeter' })), '4');
-  assert.deepEqual(shelfCounts(list), { all: 4, kindle: 1, bookmeter: 1, purchased: 2 });
-  assert.deepEqual(shelfCounts(items()), { all: 4, kindle: 2, bookmeter: 2, purchased: 1 }, 'タグが無ければ公開データどおり');
-  assert.equal(inShelf(list[0], 'all'), true);
+  assert.deepEqual(shelfCounts(list), { all: 2, kindle: 1, bookmeter: 1, purchased: 2 });
+  assert.deepEqual(shelfCounts(items()), { all: 3, kindle: 2, bookmeter: 2, purchased: 1 }, 'タグが無ければ公開データどおり');
+  assert.equal(inShelf(list[0], 'all'), false);
+});
+
+test('inShelf: 購入済み（公開データ・このブラウザのタグ）の本は「すべて」に出さず、「購入済み」でだけ見る（NIH-425）', () => {
+  const list = items(memoryStore({ 'book-tag:B0AAAAAAA1': 'purchased' }));
+  assert.equal(asins(filterWishlist(list, {})), '24');
+  assert.equal(asins(filterWishlist(list, { shelf: 'all' })), '24');
+  assert.equal(asins(filterWishlist(list, { shelf: 'purchased' })), '13');
 });
 
 test('shelfChipHidden: 0 冊の分類のチップは隠す（「すべて」と、いま選んでいる分類は 0 冊でも隠さない）', () => {
@@ -300,10 +309,10 @@ test('wishlistSummary: ホームに出す件数と Kindle Unlimited で読める
   const store = memoryStore({ 'book-tag:B0AAAAAAA4': 'unwanted', 'book-tag:B0AAAAAAA9': 'purchased', 'book-tag:B0AAAAAAA8': 'wanted' });
   const items = books.map((book) => ({ book, marks: loadMarks(book, store) }));
   const s = wishlistSummary(items);
-  assert.equal(s.total, 9);
+  assert.equal(s.total, 7, '購入済み（公開データ・このブラウザのタグ）は数えない（NIH-425）');
   // 件数は「KU のみ」で絞り込んだ欲しい本の画面（#/wishlist?ku=1）と同じ数にする
   assert.equal(s.kuCount, filterWishlist(items, { ku: true }).items.length);
-  assert.equal(s.kuCount, 8);
+  assert.equal(s.kuCount, 6);
   assert.deepEqual(s.picks.map((b) => b.asin), ['B0AAAAAAA7', 'B0AAAAAAA8', 'B0AAAAAAA1']);
   assert.deepEqual(wishlistSummary([]), { total: 0, kuCount: 0, dropCount: 0, picks: [] });
 });
@@ -318,8 +327,9 @@ const TAGGED = { format: 'kindle-wishlist', version: 1, books: [
 test('tagCounts: タグの絞り込みの選択肢ごとに、選ぶと出る件数を返す', () => {
   const { books } = parseWishlist(TAGGED);
   const items = books.map((book) => ({ book, marks: loadMarks(book, memoryStore({ 'book-tag:B0CNT00003': 'purchased' })) }));
-  const counts = tagCounts(items);
-  assert.deepEqual(counts, { all: 4, wanted: 1, purchased: 1, seen: 1, untagged: 1 }, '廃止した「読みたくない」の本はタグなし');
+  // 画面と同じく、いまの分類（すべて）に入る本で数える。「購入済み」タグの本は分類「購入済み」へ移る
+  const counts = tagCounts(items.filter((item) => inShelf(item, 'all')));
+  assert.deepEqual(counts, { all: 3, wanted: 1, purchased: 0, seen: 1, untagged: 1 }, '廃止した「読みたくない」の本はタグなし');
   for (const [filter, n] of Object.entries(counts)) {
     assert.equal(filterWishlist(items, { tag: filter }).items.length, n, `絞り込みの結果と件数が一致する: ${filter}`);
   }
@@ -390,6 +400,15 @@ test('applyImportedMarks: ファイルを書き出した後にこの端末で変
   assert.deepEqual(loadMarks(books[2], store), { tag: 'seen', rating: '5', kind: 'book' }, '新しい方（端末）が残る');
   assert.equal(items[2].marks.tag, 'seen');
   assert.equal(loadMarks(books[3], store).tag, 'wanted', '古い方（端末）はファイルで戻す');
+});
+
+test('openWishlistFilters: おすすめの「購入済み」から来たリンク（shelf=purchased）は分類「購入済み」で開く。知らない分類は「すべて」（NIH-425）', () => {
+  const list = items();
+  const opened = openWishlistFilters({}, null, { q: 'B0AAAAAAA3', shelf: 'purchased' }).filters;
+  assert.equal(opened.shelf, 'purchased');
+  assert.equal(asins(filterWishlist(list, opened)), '3', '購入済みの本がリンク先に出る');
+  assert.equal(openWishlistFilters({}, null, { q: 'x', shelf: 'nope' }).filters.shelf, 'all');
+  assert.equal(openWishlistFilters({}, null, { q: 'x' }).filters.shelf, 'all');
 });
 
 test('openWishlistFilters: リンクから開いた条件は描き直しで戻さず、普通に開き直したらリンク前の条件に戻す', () => {
@@ -484,7 +503,7 @@ test('wishlistSummary: dropCount は価格の印「値下がりした」で絞�
   ]));
   const items = w.books.map((b) => ({ book: b, marks: loadMarks(b, memoryStore()) }));
   const s = wishlistSummary(items);
-  assert.equal(s.dropCount, 1, '購入済みの本は価格を取りに行かないので、値下がりに数えない（NIH-355）');
+  assert.equal(s.dropCount, 1, '購入済みの本の値下がりは数えない（価格を取りに行かない。NIH-355 / 一覧にも出さない。NIH-425）');
   const opened = openWishlistFilters({}, null, { price: 'drop' }).filters;
   assert.equal(filterWishlist(items, opened).items.length, s.dropCount, 'リンクに出した件数と開いた件数が一致する');
 });
@@ -516,7 +535,7 @@ test('積読: 購入済みの本を本棚と ASIN（無ければ書名）で照�
   const titles = (f) => filterWishlist(its, f).items.map((i) => i.book.title);
   assert.deepEqual(titles({ shelf: 'purchased', reading: 'unread' }), ['積んだ本']);
   assert.deepEqual(titles({ shelf: 'purchased', reading: 'reading' }), ['線を引いた本', '書名で一致する本（新潮文庫）']);
-  assert.equal(titles({ shelf: 'all', reading: 'unread' }).length, 4, '購入済み以外の分類では使わない');
+  assert.equal(titles({ shelf: 'all', reading: 'unread' }).length, 1, '購入済み以外の分類では使わない（「すべて」には購入済みが入らない）');
 });
 
 test('Amazon の URL: おすすめの書名で Kindle ストアを検索する URL を作り、ASIN があれば商品ページにする', async () => {
