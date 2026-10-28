@@ -3,7 +3,7 @@
 import { html } from '../html.js';
 import { canSendMarks, companion, download } from '../services.js';
 import { bookSpine, toast } from '../ui.js';
-import { applyImportedMarks, bookmeterUrl, browserStore, cleanupSyncedMarks, collectMarks, filterWishlist, formatPrice, inShelf, KEYS, labelCounts, loadMarks, marksFile, memoryStore, openWishlistFilters, pageWishlist, parseMarksFile, priceChange, priceMarkCounts, PRICE_MARK_LABELS, priceSparkline, priceTotal, readingCounts, readingLookup, saveMarks, shelfChipHidden, shelfCounts, TAG_FILTER_LABELS, TAG_LABELS, tagCounts, toggleMark, WISHLIST_PAGE_SIZE } from '../../core/wishlist.js';
+import { applyImportedMarks, bookmeterUrl, browserStore, cleanupSyncedMarks, collectMarks, filterWishlist, formatPrice, inShelf, KEYS, labelCounts, loadMarks, marksFile, memoryStore, openWishlistFilters, pageWishlist, parseMarksFile, priceChange, priceMarkCounts, PRICE_MARK_LABELS, priceStopReason, priceSparkline, priceTotal, readingCounts, readingLookup, saveMarks, shelfChipHidden, shelfCounts, TAG_FILTER_LABELS, TAG_LABELS, tagCounts, toggleMark, WISHLIST_PAGE_SIZE } from '../../core/wishlist.js';
 import { listBooks } from '../../core/model.js';
 import { isoDate } from '../../core/text.js';
 import { cachedWishlist, FEED_URL, FEED_WANTED_URL, loadWishlist } from '../wishlist-data.js';
@@ -354,8 +354,8 @@ function totalText(visible) {
   return `・合計 ¥${t.total.toLocaleString('ja-JP')}${t.unpriced ? `（価格なし ${t.unpriced}冊は除く）` : ''}`;
 }
 
-function changeBadges(book) {
-  const c = priceChange(book);
+function changeBadges(book, marks) {
+  const c = priceChange(book, marks);
   if (!c) return '';
   const d = new Date(c.changedAt ?? NaN); // null を渡すと 1970/1/1 になる
   const when = Number.isNaN(d.getTime()) ? '' : `（${d.getMonth() + 1}/${d.getDate()}）`;
@@ -400,6 +400,15 @@ function readingBadge(item) {
   return html` <span class="badge">線 ${r.count} 本${r.lastHighlightedAt ? `・最終 ${isoDate(r.lastHighlightedAt)}` : ''}</span>`;
 }
 
+// 価格を取りに行かなくなった本（マンガ・購入済み・読んだ）は、表示中の価格が古いままだと分かるように理由と最終取得日を出す
+const STOP_LABELS = { manga: 'マンガ', purchased: '購入済み', seen: '読んだ本' };
+function stoppedNote(item) {
+  const reason = priceStopReason(item);
+  if (!reason) return '';
+  const at = isoDate(item.book.scrapedAt);
+  return html`<p class="small muted wl-stopped">${STOP_LABELS[reason]}のため、価格の更新を止めています${at ? `（最終取得: ${at}）` : ''}</p>`;
+}
+
 // 読書メーターから来た本は、読書メーターの本のページ（他の人の感想・登録数）を開ける
 function bookmeterLink(book) {
   const url = bookmeterUrl(book);
@@ -408,7 +417,7 @@ function bookmeterLink(book) {
 
 function itemRow({ book, marks, reading }) {
   const cover = bookSpine(book, 'wl-cover');
-  const text = html`<span class="grow"><span class="title">${book.title}</span><span class="meta">${formatPrice(book)}${changeBadges(book)}${book.ku ? html` <span class="badge ku">KU</span>` : ''}${inShelf({ book, marks }, 'purchased') ? html` <span class="badge">購入済み</span>` : ''}${readingBadge({ book, marks, reading })}</span>${sparkline(book)}</span>`;
+  const text = html`<span class="grow"><span class="title">${book.title}</span><span class="meta">${formatPrice(book)}${changeBadges(book, marks)}${book.ku ? html` <span class="badge ku">KU</span>` : ''}${inShelf({ book, marks }, 'purchased') ? html` <span class="badge">購入済み</span>` : ''}${readingBadge({ book, marks, reading })}</span>${sparkline(book)}</span>`;
   const value = parseInt(marks.rating, 10) || 0;
   return html`<li class="wl-item" data-asin="${book.asin}">
     ${book.asin ? html`<a class="wl-main" href="https://www.amazon.co.jp/dp/${book.asin}" target="_blank" rel="noopener noreferrer" aria-label="${book.title}（Amazon で開く）">${cover}${text}</a>` : html`<div class="wl-main">${cover}${text}</div>`}
@@ -418,6 +427,7 @@ function itemRow({ book, marks, reading }) {
           ${marks.tag === 'seen' ? html`<span class="wl-stars" role="group" aria-label="★評価（同じ★をもう一度押すと取り消し）">${[1, 2, 3, 4, 5].map((n) => html`<button type="button" class="icon-btn wl-star ${n <= value ? 'on' : ''}" data-rating="${n}" aria-pressed="${String(n === value)}" aria-label="★${n}">${n <= value ? '★' : '☆'}</button>`)}</span>` : ''}
         </div>`
       : ''}
+    ${stoppedNote({ book, marks })}
     ${bookmeterLink(book)}
     ${historyBlock(book)}
   </li>`;
