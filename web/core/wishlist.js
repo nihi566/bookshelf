@@ -258,17 +258,17 @@ export function tagCounts(items) {
   return counts;
 }
 
-/** 価格の印（PRICE_MARK_LABELS のキー）に当たるか。知らない値は絞り込まない */
-export function matchesPriceMark(book, mark = 'all') {
+/** 価格の印（PRICE_MARK_LABELS のキー）に当たるか。知らない値は絞り込まない。marks は priceChange と同じ */
+export function matchesPriceMark(book, mark = 'all', marks = null) {
   if (mark === 'missing') return book.price === null && !book.ku;
   if (mark !== 'drop' && mark !== 'lowest') return true;
-  const c = priceChange(book);
+  const c = priceChange(book, marks);
   return Boolean(c && (mark === 'drop' ? c.diff < 0 : c.lowest));
 }
 
-/** 価格の印の選択肢ごとに、選ぶと残る件数。items: [{ book }] */
+/** 価格の印の選択肢ごとに、選ぶと残る件数。items: [{ book, marks }] */
 export function priceMarkCounts(items) {
-  return Object.fromEntries(Object.keys(PRICE_MARK_LABELS).map((k) => [k, items.filter(({ book }) => matchesPriceMark(book, k)).length]));
+  return Object.fromEntries(Object.keys(PRICE_MARK_LABELS).map((k) => [k, items.filter(({ book, marks }) => matchesPriceMark(book, k, marks)).length]));
 }
 
 /**
@@ -339,10 +339,25 @@ export function pageWishlist(items, shown) {
   return { visible, rest, next: Math.min(rest, WISHLIST_PAGE_SIZE) };
 }
 
-/** 前回の価格からの差（diff。負なら値下がり）と、記録上の最安値か。一度も変わっていなければ null */
-export function priceChange(book) {
+/**
+ * 価格を取りに行かなくなった理由（kindle_system/main.py の Manga-Skip / Purchased-Skip / Seen-Skip と同じ条件）。
+ * manga / purchased / seen。取りに行く本は null。item: { book, marks }
+ */
+export function priceStopReason({ book, marks }) {
+  if (marks.kind === 'manga') return 'manga';
+  if (book.purchased) return 'purchased';
+  if (marks.tag === 'seen') return 'seen';
+  return null;
+}
+
+/**
+ * 前回の価格からの差（diff。負なら値下がり）と、記録上の最安値か。一度も変わっていなければ null。
+ * marks を渡すと、価格を取りに行かなくなった本（priceStopReason）も null にする（古い差分で知らせない）
+ */
+export function priceChange(book, marks = null) {
   const t = book.trend;
   if (book.price === null || !t || t.prev === null) return null;
+  if (marks && priceStopReason({ book, marks })) return null;
   return { diff: book.price - t.prev, changedAt: t.changedAt, lowest: t.low !== null && book.price <= t.low };
 }
 
@@ -388,7 +403,7 @@ export function filterWishlist(items, f = {}) {
     if (f.label && book.label !== f.label) return false;
     if (!matchesTag(marks.tag, f.tag || 'all')) return false;
     if (kind !== 'all' && marks.kind !== kind) return false;
-    if (!matchesPriceMark(book, f.price)) return false;
+    if (!matchesPriceMark(book, f.price, marks)) return false;
     if (!Number.isNaN(min) && (book.price === null || book.price < min)) return false;
     if (!Number.isNaN(max) && (book.price === null || book.price > max)) return false;
     return true;
@@ -415,8 +430,8 @@ function comparePrice(a, b, dir) {
 }
 
 // 前回の価格からの値下がり額。値上がり・変化なし・値動きの記録が無い本は 0（並べ替えで後ろに回す）
-function dropAmount({ book }) {
-  const c = priceChange(book);
+function dropAmount({ book, marks }) {
+  const c = priceChange(book, marks);
   return c && c.diff < 0 ? -c.diff : 0;
 }
 
@@ -474,7 +489,7 @@ export function wishlistSummary(items, limit = 3) {
     .sort((a, b) => wanted(b) - wanted(a) || a.book.index - b.book.index)
     .slice(0, limit)
     .map(({ book }) => book);
-  return { total: items.length, kuCount: ku.length, dropCount: items.filter(({ book }) => matchesPriceMark(book, 'drop')).length, picks };
+  return { total: items.length, kuCount: ku.length, dropCount: items.filter(({ book, marks }) => matchesPriceMark(book, 'drop', marks)).length, picks };
 }
 
 // おすすめに渡す欲しい本の上限（PC へ送る本文の大きさを抑える。公開データは 300 冊ほど）

@@ -484,7 +484,7 @@ test('wishlistSummary: dropCount は価格の印「値下がりした」で絞�
   ]));
   const items = w.books.map((b) => ({ book: b, marks: loadMarks(b, memoryStore()) }));
   const s = wishlistSummary(items);
-  assert.equal(s.dropCount, 2);
+  assert.equal(s.dropCount, 1, '購入済みの本は価格を取りに行かないので、値下がりに数えない（NIH-355）');
   const opened = openWishlistFilters({}, null, { price: 'drop' }).filters;
   assert.equal(filterWishlist(items, opened).items.length, s.dropCount, 'リンクに出した件数と開いた件数が一致する');
 });
@@ -754,4 +754,27 @@ test('価格チェックの画面: 同期・編集のあとの描き直し（ref
   assert.match(src, /if \(!ctx\?\.refresh\) shown = WISHLIST_PAGE_SIZE;/);
   // 行頭の字下げは [ \t] で見る（\s だと Windows の作業ツリーの CRLF の \n に当たり、字下げの無い行まで拾う）
   assert.doesNotMatch(src, /^[ \t]+let shown =/m, 'mountList の中で毎回 100 に戻さない');
+});
+
+test('priceStopReason: 価格を取りに行かなくなった本（マンガ・購入済み・読んだ）を見分け、値下がり・最安値の印を付けない（NIH-355）', async () => {
+  const { priceStopReason, priceMarkCounts } = await import('../web/core/wishlist.js');
+  const moved = { price: 500, price_prev: 800, price_low: 500 };
+  const w = parseWishlist(data([
+    book({ asin: 'B0AAAAAAA1', title: '取りに行く本', ...moved }),
+    book({ asin: 'B0AAAAAAA2', title: 'マンガ', kind: 'manga', ...moved }),
+    book({ asin: 'B0AAAAAAA3', title: '購入済み', purchased: true, ...moved }),
+    book({ asin: 'B0AAAAAAA4', title: '読んだ', tag: 'seen', rating: 4, ...moved }),
+    book({ asin: 'B0AAAAAAA5', title: '読みたい', tag: 'wanted', ...moved }),
+  ]));
+  const list = w.books.map((b) => ({ book: b, marks: loadMarks(b, memoryStore()) }));
+  assert.deepEqual(list.map(priceStopReason), [null, 'manga', 'purchased', 'seen', null]);
+  assert.deepEqual(priceChange(list[0].book, list[0].marks), { diff: -300, changedAt: null, lowest: true });
+  assert.equal(priceChange(list[1].book, list[1].marks), null, '止めた本には古い差分の印を付けない');
+  assert.deepEqual(priceChange(list[1].book), { diff: -300, changedAt: null, lowest: true }, '印を渡さなければ従来どおり');
+  assert.equal(asins(filterWishlist(list, { price: 'drop' })), '15', '「値下がりした」の絞り込みにも止めた本を出さない');
+  assert.equal(asins(filterWishlist(list, { price: 'lowest' })), '15');
+  assert.deepEqual(priceMarkCounts(list), { all: 5, drop: 2, lowest: 2, missing: 0 });
+  assert.equal(wishlistSummary(list).dropCount, 2, 'ホームの値下がりの件数も同じ');
+  const local = { ...list[0], marks: { ...list[0].marks, kind: 'manga' } };
+  assert.equal(priceStopReason(local), 'manga', 'この端末で切り替えた種別でも止まったとみなす');
 });
