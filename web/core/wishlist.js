@@ -61,7 +61,7 @@ export function parseWishlist(data) {
     const price = b?.ku === true ? null : yen(b?.price);
     return {
       asin: isAsin(b?.asin) ? b.asin : '',
-      title: String(b?.title ?? ''),
+      title: wishlistTitle(b?.title),
       price,
       ku: b?.ku === true,
       wanted: b?.wanted === true,
@@ -84,6 +84,20 @@ export function parseWishlist(data) {
     };
   });
   return { lastScraped: typeof data.last_scraped === 'string' ? data.last_scraped : null, books };
+}
+
+// 書名と副題の区切り（Amazon の「書名: 副題」）。最後の区切りで分ける
+const SUBTITLE_SEPARATOR = /(?:: |：)(?!.*(?:: |：))/;
+const squash = (s) => s.normalize('NFKC').replace(/\s+/g, '');
+
+/** 書名の後ろの副題が、区切りの前にもう入っていれば落とす（Amazon が「書名 副題: 副題」で返す本がある。NIH-418） */
+export function wishlistTitle(title) {
+  const text = String(title ?? '');
+  const m = SUBTITLE_SEPARATOR.exec(text);
+  if (!m) return text;
+  const head = text.slice(0, m.index).trimEnd();
+  const tail = squash(text.slice(m.index + m[0].length));
+  return tail && squash(head).includes(tail) ? head : text;
 }
 
 // 書名の末尾の括弧（NFKC で（）［］は半角になる）。【】は NFKC で変わらないので別に書く
