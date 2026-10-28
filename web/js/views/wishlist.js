@@ -121,7 +121,7 @@ function mountList(root, body, items, store, lastScraped) {
     <div class="row spread wl-count-row"><p id="wl-count" aria-live="polite"></p><button type="button" class="btn small" id="wl-reset" hidden>条件をクリア</button></div>
     <ul class="wl-list" id="wl-list"></ul>
     <div class="row" style="margin-top:12px"><button type="button" class="btn" id="wl-more" hidden></button><button type="button" class="btn" id="wl-more-all" hidden></button></div>
-    <p class="empty" id="wl-empty" hidden>条件に一致する本がありません。検索語・種別・タグ・出版社・価格・価格の印の条件を見直してください。</p>
+    <div class="empty" id="wl-empty" hidden><p>条件に一致する本がありません。検索語・種別・タグ・出版社・価格・価格の印の条件を見直してください。</p><button type="button" class="btn small" id="wl-empty-reset">条件をクリア</button></div>
     <p class="small muted wl-feed">フィードで受け取る: <a href="${FEED_URL}" target="_blank" rel="noopener noreferrer" type="application/atom+xml">すべての知らせ</a> / <a href="${FEED_WANTED_URL}" target="_blank" rel="noopener noreferrer" type="application/atom+xml">読みたい本・希望価格・大きな値下がりだけ</a></p>
     <div class="card wl-export">
       <p class="small" id="wl-marks-summary"></p>
@@ -267,7 +267,8 @@ function mountList(root, body, items, store, lastScraped) {
       setPressed('data-wl-kind-filter', filters.kind);
       return refilter();
     }
-    if (btn.id === 'wl-reset') {
+    // 件数の行と、0 冊のときの空のメッセージの中の「条件をクリア」（NIH-414）は同じ動き
+    if (btn.id === 'wl-reset' || btn.id === 'wl-empty-reset') {
       Object.assign(filters, { reading: 'all', q: '', sort: 'default', ku: false, min: '', max: '', tag: 'all', kind: 'all', label: '', price: 'all' });
       setPressed('data-wl-reading', 'all');
       saveFilter(KEYS.tagFilter, null);
@@ -279,7 +280,10 @@ function mountList(root, body, items, store, lastScraped) {
       $('wl-price-mark').value = 'all';
       $('wl-ku').checked = false;
       setPressed('data-wl-kind-filter', 'all');
-      return refilter();
+      refilter();
+      // 空のメッセージのボタンは押すと隠れるので、戻った一覧の先頭へフォーカスを移す（キーボード操作で迷わないように）
+      if (btn.id === 'wl-empty-reset') list.querySelector('a, button')?.focus();
+      return;
     }
     if (btn.id === 'wl-more') return showMore(WISHLIST_PAGE_SIZE);
     if (btn.id === 'wl-more-all') return showMore(current.length);
