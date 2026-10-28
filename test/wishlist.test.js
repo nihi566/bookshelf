@@ -1,6 +1,22 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { applyImportedMarks, cleanupSyncedMarks, collectMarks, filterWishlist, findWishlistBook, formatPrice, inShelf, labelCounts, loadMarks, priceChange, priceTotal, shelfChipHidden, shelfCounts, marksFile, memoryStore, parseMarksFile, openWishlistFilters, parseWishlist, saveMarks, searchWishlist, tagCounts, titleKey, toggleMark, wishlistLabel, wishlistSummary } from '../web/core/wishlist.js';
+import { applyImportedMarks, cleanupSyncedMarks, collectMarks, filterWishlist, findWishlistBook, formatPrice, inShelf, labelCounts, loadMarks, priceChange, priceTotal, shelfChipHidden, shelfCounts, marksFile, memoryStore, parseMarksFile, openWishlistFilters, parseWishlist, saveMarks, searchWishlist, tagCounts, titleKey, toggleMark, wishlistLabel, wishlistSummary, wishlistTitle } from '../web/core/wishlist.js';
+
+test('wishlistTitle: 区切りの後ろが前半にもう入っている副題なら落とす（全角半角・空白の差は無視）', () => {
+  assert.equal(
+    wishlistTitle('AWS運用入門 改訂第2版　押さえておきたいAWSの基本と運用ノウハウ ［AWS深掘りガイド］: 押さえておきたいAWSの基本と運用ノウハウ [AWS深掘りガイド]'),
+    'AWS運用入門 改訂第2版　押さえておきたいAWSの基本と運用ノウハウ ［AWS深掘りガイド］',
+  );
+  assert.equal(wishlistTitle('書名 副題：副題'), '書名 副題', '全角の区切りも同じ');
+  assert.equal(wishlistTitle('忘却の効用: 「忘れること」で脳は何を得るのか'), '忘却の効用: 「忘れること」で脳は何を得るのか', '普通の副題は変えない');
+  assert.equal(wishlistTitle('思考の整理学'), '思考の整理学', '区切りの無い書名は変えない');
+  assert.equal(wishlistTitle('書名: '), '書名: ', '後ろが空なら変えない');
+});
+
+test('parseWishlist: 同じ副題が 2 回続く書名は重複を除いて読む', () => {
+  const { books } = parseWishlist({ format: 'kindle-wishlist', version: 1, books: [{ asin: 'B0AAAAAAA1', title: '書名 副題: 副題' }] });
+  assert.equal(books[0].title, '書名 副題');
+});
 
 test('titleKey: 括弧のレーベル・版表記と記号・空白を落とす', () => {
   assert.equal(titleKey('731―石井四郎と細菌戦部隊の闇を暴く―（新潮文庫）'), titleKey('731 石井四郎と細菌戦部隊の闇を暴く'));
