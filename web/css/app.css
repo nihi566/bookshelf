@@ -184,7 +184,7 @@ main { max-width: 760px; margin: 0 auto; padding: 16px max(16px, env(safe-area-i
 .chip { display: inline-flex; align-items: center; gap: 4px; max-width: 100%; overflow-wrap: anywhere; padding: 4px 12px; min-height: 32px; border-radius: 16px; border: 1px solid var(--line); background: var(--surface); color: var(--ink-2); font-size: 0.85rem; cursor: pointer; }
 .chip:hover { text-decoration: none; }
 .chip[aria-pressed="true"], .chip.on { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
-.badge { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 0.72rem; font-weight: 600; background: var(--surface-2); color: var(--ink-2); vertical-align: 1px; }
+.badge { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 0.75rem; font-weight: 600; background: var(--surface-2); color: var(--ink-2); vertical-align: 1px; }
 .badge.tech { background: #e3e7ea; color: #3c4a55; }
 /* 文の途中で切れていそうな点の「次の点とくっつける?」（押すと編集シート） */
 .badge.join-hint { border: 1px dashed #b7791f; background: #fff7e6; color: #8a5a00; font-family: inherit; cursor: pointer; }
