@@ -103,7 +103,6 @@ function mountList(root, body, items, store, lastScraped) {
   root.querySelector('#wl-sub').textContent = `スクレイピングした本の価格 ${items.length} 冊`;
   body.innerHTML = String(html`
     <p class="small muted">価格の最終取得: ${lastScrapedText(lastScraped)}</p>
-    <p class="small muted">フィードで受け取る: <a href="${FEED_URL}" target="_blank" rel="noopener noreferrer" type="application/atom+xml">すべての知らせ</a> / <a href="${FEED_WANTED_URL}" target="_blank" rel="noopener noreferrer" type="application/atom+xml">読みたい本・希望価格・大きな値下がりだけ</a></p>
     <div class="chips" role="group" aria-label="表示する分類">${Object.entries(SHELVES).map(([k, label]) => html`<button type="button" class="chip" data-wl-shelf="${k}" aria-pressed="${String(filters.shelf === k)}" ${shelfChipHidden(k, shelfCount[k], filters.shelf) ? 'hidden' : ''}>${shelfLabel(k, shelfCount[k])}</button>`)}</div>
     <div class="chips" role="group" aria-label="購入済みの内訳" id="wl-reading" ${filters.shelf === 'purchased' ? '' : 'hidden'}>${Object.keys(READINGS).map((k) => html`<button type="button" class="chip" data-wl-reading="${k}" aria-pressed="${String(filters.reading === k)}"></button>`)}</div>
     <div class="search-box wl-search" role="search"><input type="search" id="wl-q" value="${filters.q}" placeholder="書名・出版社（レーベル）・ASIN で絞り込む" aria-label="書名・出版社（レーベル）・ASIN で絞り込む（空白で区切ると全部を含むもの）" autocomplete="off"></div>
@@ -123,6 +122,7 @@ function mountList(root, body, items, store, lastScraped) {
     <ul class="wl-list" id="wl-list"></ul>
     <div class="row" style="margin-top:12px"><button type="button" class="btn" id="wl-more" hidden></button><button type="button" class="btn" id="wl-more-all" hidden></button></div>
     <p class="empty" id="wl-empty" hidden>条件に一致する本がありません。検索語・種別・タグ・出版社・価格・価格の印の条件を見直してください。</p>
+    <p class="small muted wl-feed">フィードで受け取る: <a href="${FEED_URL}" target="_blank" rel="noopener noreferrer" type="application/atom+xml">すべての知らせ</a> / <a href="${FEED_WANTED_URL}" target="_blank" rel="noopener noreferrer" type="application/atom+xml">読みたい本・希望価格・大きな値下がりだけ</a></p>
     <div class="card wl-export">
       <p class="small" id="wl-marks-summary"></p>
       <div class="row"><button type="button" class="btn small" id="wl-export">読んだ・評価を書き出す</button><button type="button" class="btn small" id="wl-import">書き出したファイルを読み込む</button></div>
