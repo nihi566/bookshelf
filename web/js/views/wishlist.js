@@ -373,7 +373,8 @@ function changeBadges(book, marks) {
   const d = new Date(c.changedAt ?? NaN); // null を渡すと 1970/1/1 になる
   const when = Number.isNaN(d.getTime()) ? '' : `（${d.getMonth() + 1}/${d.getDate()}）`;
   const amount = `¥${Math.abs(c.diff).toLocaleString('ja-JP')}`;
-  const moved = c.diff === 0 ? '' : html` <span class="badge ${c.diff < 0 ? 'down' : 'up'}">${amount} ${c.diff < 0 ? '値下がり' : '値上がり'}${when}</span>`;
+  // 色だけで区別しないよう、矢印と文字でも上げ下げを示す（NIH-407）
+  const moved = c.diff === 0 ? '' : html` <span class="badge ${c.diff < 0 ? 'down' : 'up'}">${c.diff < 0 ? '↓' : '↑'} ${amount} ${c.diff < 0 ? '値下がり' : '値上がり'}${when}</span>`;
   return html`${moved}${c.lowest ? html` <span class="badge down">最安値</span>` : ''}`;
 }
 
@@ -439,7 +440,7 @@ function tagBadge(marks, value) {
 function itemRow({ book, marks, reading }, open = false) {
   const cover = bookSpine(book, 'wl-cover');
   const value = parseInt(marks.rating, 10) || 0;
-  const text = html`<span class="grow"><span class="title">${book.title}</span><span class="meta">${formatPrice(book)}${changeBadges(book, marks)}${book.ku ? html` <span class="badge ku">KU</span>` : ''}${tagBadge(marks, value)}${readingBadge({ book, marks, reading })}</span>${sparkline(book)}</span>`;
+  const text = html`<span class="grow"><span class="title">${book.title}</span><span class="meta"><span class="${book.price === null ? '' : 'wl-now'}">${formatPrice(book)}</span>${changeBadges(book, marks)}${book.ku ? html` <span class="badge ku">KU</span>` : ''}${tagBadge(marks, value)}${readingBadge({ book, marks, reading })}</span>${sparkline(book)}</span>`;
   const marksBlock = book.asin
     ? html`<div class="wl-marks">
         <span class="chips" role="group" aria-label="タグ">${Object.entries(TAG_LABELS).map(([k, label]) => html`<button type="button" class="chip wl-tag" data-tag="${k}" aria-pressed="${String(marks.tag === k)}">${label}</button>`)}</span>
