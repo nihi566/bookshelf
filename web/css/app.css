@@ -379,6 +379,16 @@ a.wl-main:hover .title { text-decoration: underline; }
 .wl-history, .wl-history-none, .wl-bookmeter, .wl-stopped { margin: 6px 0 0 56px; }
 .wl-bookmeter a { display: inline-flex; align-items: center; min-height: 32px; }
 .wl-history summary { display: flex; align-items: center; min-height: 36px; font-size: 0.82rem; color: var(--ink-2); cursor: pointer; }
+/* 指で操作する端末では、行ごとの操作の押せる範囲を 44px 以上・隣との間隔を 8px 以上にする（NIH-405）。
+   枠のあるチップは見た目の大きさを変えず、押せる範囲だけを上下に広げる（行の高さを 44px にして、広げた範囲が隣の操作に重ならないようにする） */
+@media (pointer: coarse) {
+  .wl-marks { gap: 8px; min-height: 44px; }
+  .wl-marks .chip { position: relative; }
+  .wl-marks .chip::before { content: ''; position: absolute; inset: -6px 0; }
+  .wl-star { width: 44px; height: 44px; }
+  .wl-history, .wl-history-none, .wl-bookmeter, .wl-stopped { margin-top: 8px; }
+  .wl-bookmeter a, .wl-history summary { min-height: 44px; }
+}
 .wl-history table { width: 100%; border-collapse: collapse; font-size: 0.82rem; font-variant-numeric: tabular-nums; }
 .wl-history th, .wl-history td { padding: 4px 8px 4px 0; border-bottom: 1px solid var(--line); text-align: left; }
 .wl-spark { display: block; margin-top: 4px; color: var(--ink-3); overflow: visible; }
