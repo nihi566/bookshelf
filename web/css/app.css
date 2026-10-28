@@ -366,6 +366,14 @@ ul.card.plain.far-wrong { padding-left: 16px; } /* 箇条の点を出さない�
 /* 件数と合計金額は一覧の要約なので、本文の大きさ・濃さで読めるようにする（NIH-417） */
 .wl-count-row #wl-count { margin: 0; font-size: 0.95rem; font-weight: 600; color: var(--ink); font-variant-numeric: tabular-nums; }
 .wl-list { list-style: none; margin: 0; padding: 0; }
+/* 読み込み中の行の骨組み（NIH-415）。高さは折りたたんだ 1 行に合わせる。動きを減らす設定では下の prefers-reduced-motion で止まる */
+.wl-loading { padding: 8px 0; }
+.wl-skeleton .wl-item { display: flex; align-items: center; gap: 12px; min-height: 120px; }
+.wl-skeleton .wl-cover, .wl-skel-lines > span { background: var(--surface-2); animation: pulse 1.6s infinite; }
+.wl-skel-lines { flex: 1; display: grid; gap: 8px; }
+.wl-skel-lines > span { display: block; height: 14px; border-radius: 6px; }
+.wl-skel-lines > span:nth-child(2) { width: 70%; }
+.wl-skel-lines > span:last-child { width: 35%; height: 18px; }
 .wl-item { padding: 12px 4px; border-bottom: 1px solid var(--line); }
 .wl-main { display: flex; align-items: center; gap: 12px; color: var(--ink); min-width: 0; }
 a.wl-main:hover { text-decoration: none; }

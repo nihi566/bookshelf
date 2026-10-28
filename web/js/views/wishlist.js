@@ -1,6 +1,6 @@
 // 価格チェックの画面（スクレイピングした欲しい本の価格と、その履歴）。データは kindle_system が web/wishlist-site/ に書き出す wishlist.json を読むだけで、
 // タグ・★・種別はブラウザ（localStorage）に旧画面と同じキーで保存する（core/wishlist.js）。
-import { html } from '../html.js';
+import { html, raw } from '../html.js';
 import { canSendMarks, companion, download } from '../services.js';
 import { bookSpine, toast } from '../ui.js';
 import { applyImportedMarks, bookmeterUrl, browserStore, cleanupSyncedMarks, collectMarks, detailFilterCount, filterWishlist, formatPrice, inShelf, KEYS, labelCounts, loadMarks, marksFile, memoryStore, openWishlistFilters, pageWishlist, parseMarksFile, priceChange, priceMarkCounts, PRICE_MARK_LABELS, priceStopReason, priceSparkline, priceTotal, readingCounts, readingLookup, saveMarks, shelfChipHidden, shelfCounts, TAG_FILTER_LABELS, TAG_LABELS, tagCounts, toggleMark, WISHLIST_PAGE_SIZE } from '../../core/wishlist.js';
@@ -10,6 +10,9 @@ import { cachedWishlist, FEED_URL, FEED_WANTED_URL, loadWishlist } from '../wish
 
 const SORTS = { default: '標準（書名）', 'price-asc': '価格が安い順', 'price-desc': '価格が高い順', 'price-drop': '値下がり額が大きい順', 'scraped-desc': 'スクレイピングの最新順', rating: '評価が高い順' };
 const SHELVES = { all: 'すべて', kindle: 'Kindle', bookmeter: '読書メーター', purchased: '購入済み' };
+// 読み込み中は一覧の行の骨組みを出し、文字だけの表示から一覧に変わるときの画面のずれを小さくする（NIH-415）。
+// 文字は読み上げ向けに残し、骨組みは読み上げない
+const LOADING_HTML = `<p class="loading wl-loading" role="status">欲しい本を読み込み中…</p><ul class="wl-list wl-skeleton" aria-hidden="true">${'<li class="wl-item"><span class="wl-cover"></span><span class="wl-skel-lines"><span></span><span></span><span></span></span></li>'.repeat(4)}</ul>`;
 const shelfLabel = (shelf, n) => `${SHELVES[shelf]} ${n}`;
 // 購入済みの内訳（本棚の線の有無で分ける）
 const READINGS = { all: 'すべて', unread: 'まだ線が無い', reading: '読書中' };
@@ -37,7 +40,7 @@ function dateTimeText(iso) {
 export const wishlist = {
   render() {
     return html`<div class="page-head"><div><h1>価格チェック</h1><div class="sub" id="wl-sub">スクレイピングした本の価格</div></div></div>
-      <div id="wl-body"><p class="loading">欲しい本を読み込み中…</p></div>`;
+      <div id="wl-body">${raw(LOADING_HTML)}</div>`;
   },
   mount(root, ctx) {
     const body = root.querySelector('#wl-body');
@@ -74,7 +77,7 @@ export const wishlist = {
           <div class="row" style="margin-top:12px"><button class="btn" type="button" data-wl="retry">もう一度読み込む</button></div>`);
         body.querySelector('[data-wl="retry"]').addEventListener('click', () => {
           // ボタンを消してから読み直す（連打で一覧の処理が二重に付かないように）
-          body.innerHTML = '<p class="loading">欲しい本を読み込み中…</p>';
+          body.innerHTML = LOADING_HTML;
           wishlist.mount(root, ctx);
         });
       });
