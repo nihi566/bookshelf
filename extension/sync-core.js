@@ -76,6 +76,11 @@ export function syncOutcome({ failed = [], fetched = 0, withHighlights = 0 }) {
   return { ok: !errors.length, error: errors.join(' ') };
 }
 
+/** onInstalled は更新・ブラウザの更新でも起きる。設定画面を開くのは新規インストールのときだけ */
+export function shouldOpenOptionsOnInstalled(details) {
+  return details?.reason === 'install';
+}
+
 export function chunk(list, size) {
   const out = [];
   for (let i = 0; i < list.length; i += size) out.push(list.slice(i, i + size));

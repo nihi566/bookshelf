@@ -30,7 +30,7 @@ import {
   wishlistSummary,
 } from '../web/core/wishlist.js';
 import { esc, html, mark, raw, safeUrl } from '../web/js/html.js';
-import { chunk, importBody, isReachableCompanionUrl, pickBooksToFetch, statusReport, toBase64Utf8 } from '../extension/sync-core.js';
+import { chunk, importBody, isReachableCompanionUrl, pickBooksToFetch, shouldOpenOptionsOnInstalled, statusReport, toBase64Utf8 } from '../extension/sync-core.js';
 import { createStore, historyId } from '../cli/store.js';
 import { createCompanionServer } from '../cli/server.js';
 
@@ -305,6 +305,12 @@ test('edge sync-core: 取り込む本の選択・本文・URL・報告の境界'
   assert.deepEqual(statusReport({ added: 2.5, fetched: 3, error: null }, { intervalMin: '30' }), { ok: false, needLogin: false, added: 0, fetched: 3, intervalMin: 30, error: '' });
   assert.deepEqual(chunk([], 3), []);
   assert.deepEqual(chunk([1, 2, 3, 4, 5], 2), [[1, 2], [3, 4], [5]]);
+});
+
+test('edge sync-core: 設定画面を開くのは新規インストールのときだけ（更新・ブラウザ更新では開かない）', () => {
+  assert.equal(shouldOpenOptionsOnInstalled({ reason: 'install' }), true);
+  for (const reason of ['update', 'chrome_update', 'shared_module_update']) assert.equal(shouldOpenOptionsOnInstalled({ reason }), false, reason);
+  for (const bad of [undefined, null, {}]) assert.equal(shouldOpenOptionsOnInstalled(bad), false, String(bad));
 });
 
 // ---------------------------------------------------------------- cli/store.js

@@ -1,5 +1,5 @@
 // 定期的に Kindle ノートブックを確認し、新しいハイライトを PC の bh serve へ送る
-import { DEFAULTS, chunk, importBody, isReachableCompanionUrl, pickBooksToFetch, statusReport, syncOutcome } from './sync-core.js';
+import { DEFAULTS, chunk, importBody, isReachableCompanionUrl, pickBooksToFetch, shouldOpenOptionsOnInstalled, statusReport, syncOutcome } from './sync-core.js';
 
 const ALARM = 'kindle-sync';
 const BATCH = 20; // この冊数ごとに送る（途中で止まっても、送り終えた分は次回に読み直さない）
@@ -127,9 +127,9 @@ async function resetAndSync() {
   return syncNow();
 }
 
-chrome.runtime.onInstalled.addListener(() => {
+chrome.runtime.onInstalled.addListener((details) => {
   schedule();
-  chrome.runtime.openOptionsPage();
+  if (shouldOpenOptionsOnInstalled(details)) chrome.runtime.openOptionsPage();
 });
 chrome.runtime.onStartup.addListener(schedule);
 chrome.alarms.onAlarm.addListener((a) => a.name === ALARM && syncNow());
